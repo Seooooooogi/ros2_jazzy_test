@@ -1,0 +1,40 @@
+# Environment
+.env
+.env.local
+
+# Installer state / checkpoint (Hard Rule #3)
+.install_state
+*.state
+/state/
+
+# Logs (append-only, but not committed)
+*.log
+install.log
+*.jsonl
+
+# Downloaded artifacts / intermediate
+*.deb
+*.run
+*.tar.gz
+*.tgz
+*.zip
+
+# Python (Voice 단계 잔여물)
+__pycache__/
+*.pyc
+*.pyo
+venv/
+.venv/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*~
+
+# Jupyter checkpoint shadow
+.ipynb_checkpoints/
+
+# OS
+.DS_Store
+Thumbs.db
