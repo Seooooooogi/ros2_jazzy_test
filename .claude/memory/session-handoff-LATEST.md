@@ -4,7 +4,7 @@
 > Forward-looking only — 본 세션에서 한 일이 아니라 다음 세션이 할 일.
 
 ## Last updated
-2026-05-27 — Phase 1 완료. M1 완료 (헬퍼 5개, shellcheck PASS). ADR-008 (host venv 폐기, ADR-004 supersede). **ADR-007 (Docker Hub public publish + secret hygiene 3중 차단)**. Phase 4 신설 (yolo/voice 컨테이너화). 노션 페이지 1-1 (humble baseline) + 3-1 (jazzy 최종) 다이어그램 작성. 다음 = **M2 진입**.
+2026-05-27 — Phase 1 완료. M1 완료 (헬퍼 5개, shellcheck PASS). ADR-008 (host venv 폐기, ADR-004 supersede). **ADR-007 (Docker Hub public publish + secret hygiene 3중 차단)**. **ADR-010 (로컬 git 도입, remote 금지, 외부 친화 commit/tag)**. Phase 4 신설 (yolo/voice 컨테이너화). 노션 페이지 1-1 (humble baseline) + 3-1 (jazzy 최종) 다이어그램 작성. **git baseline `v0.1.0` 부착 (6 분할 commit + 1 annotated tag)**. 다음 = **M2 진입**.
 
 ---
 
@@ -83,6 +83,13 @@
 - `resources/env-load.sh` — `_load_env <file>` (source 안 함, 안전 파싱), `_require_env`
 - `resources/activate.sh` — non-interactive 셸용 ROS2 source 만 (venv 라인 제거됨, ADR-008)
 - shellcheck `-x` exit 0 검증 완료. shellcheck 시스템 설치됨 (apt).
+
+### git 운영 (2026-05-27 시작, ADR-010)
+
+- `git init -b main` 완료. remote 없음 (`git remote -v` = 빈 출력, 유지 필수).
+- baseline annotated tag `v0.1.0` 부착 — 6 분할 commit 위에. M2 작업 시 destructive 동작 전 안전망 commit 활용 가능.
+- commit/tag 메시지 정책: 외부 사람이 봐도 이해 가능. 내부 마일스톤 (M1/M2…) / 결정 기록 번호 (ADR-NNN) / 단계 (Phase N) / 룰 ID (Hard Rule #N) 미사용. 한국어 회화 + 영어 식별자 혼용.
+- 실험적 변경은 short-lived feature branch (`migrate-system-layer` 등) → fast-forward merge.
 
 ### 함정 (다시 발생하면 다음 세션 피하기)
 

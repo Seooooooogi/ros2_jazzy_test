@@ -28,7 +28,8 @@
 - **ADR-002**: numpy<2 핀 — ultralytics 호환 (`docs/decisions/README.md`)
 - **ADR-003**: Phase 2 사전 검증 4건 모두 GO. NVIDIA CUDA Noble `cuda-keyring_1.1-1_all.deb` modernize 후보 (Phase 2-6).
 - **ADR-004**: ~~PEP 668 venv~~ — **superseded by ADR-008** (2026-05-27). historical record.
-- **ADR-005**: 본 레포는 GitHub publish 의도 없음. `.gitignore` 추가 권유 / commit / lock 파일 git 처리 등 모든 git artifact 결정 보류. AI 가 자동 권유 금지.
+- **ADR-005**: 본 레포는 **외부(GitHub) publish 의도 없음** — push / 외부 협업 / PR 워크플로 차단. 단 **로컬 git 운영은 별개 결정 (ADR-010 으로 허용)**. AI 가 외부 publish 관련 자동 권유 금지.
+- **ADR-010 (2026-05-27)**: **로컬 git 도입** (rollback / bisect 안전망 목적). remote 추가 금지. commit 메시지 외부 친화 (내부 마일스톤 코드 / 결정 기록 번호 / 룰 ID 미사용, 기능 단위 분할). tag = semver. 기본 branch = `main`, 실험은 short-lived feature branch. 첫 baseline tag `v0.1.0` 부착 (2026-05-27).
 - **ADR-007 (2026-05-27)**: Phase 4 컨테이너 (yolo / voice) 를 **Docker Hub public** 으로 publish. `latest` 금지 + semver/SHA 태그. Secret 차단 3중 layer (`.dockerignore` + runtime env injection only + multi-stage build) + publish 전 `docker history` grep 수동 검증 mandatory. `install.sh` (M5) 는 pull-first 분기 (`docker manifest inspect` 성공 시 `compose pull`, 실패 시 `compose build`).
 - **ADR-008**: host venv 폐기. application Python (PyTorch / ultralytics / langchain / openai 등) 은 모두 Phase 4 yolo/voice 컨테이너 image 안에서만 존재. host 는 system Python (apt) + colcon 워크스페이스만 책임.
 
