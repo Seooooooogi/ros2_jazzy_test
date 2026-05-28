@@ -22,9 +22,11 @@ sudo apt-get install -y build-essential gcc ubuntu-drivers-common dkms nvidia-mo
 
 # 설치된 nvidia-driver-NNN 메타패키지명 해소. ubuntu-drivers 가 -open / -server
 # 변형을 고를 수 있으므로 접미사 허용 (예: nvidia-driver-595-open).
+# Status-Abbrev 2번째 글자가 'i' = 현재 설치됨. hold 된 패키지는 'hi' 라 'ii' 만
+# 보면 놓친다 (이 스크립트가 직접 hold 를 걸므로 재실행 시 'hi' 가 됨) → '^.i' 로 매칭.
 _resolve_driver_pkg() {
     dpkg-query -W -f='${db:Status-Abbrev}|${Package}\n' 'nvidia-driver-*' 2>/dev/null \
-        | awk -F'|' '$1 ~ /^ii/ {print $2}' \
+        | awk -F'|' '$1 ~ /^.i/ {print $2}' \
         | grep -E '^nvidia-driver-[0-9]+(-open|-server|-server-open)?$' | sort -V | tail -n1 || true
 }
 
