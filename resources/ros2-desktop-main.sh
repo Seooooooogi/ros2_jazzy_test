@@ -58,7 +58,7 @@ fi
 sudo apt-get update
 
 # --- ROS2 desktop + dev 도구 --------------------------------------------
-sudo apt-get install -y python3-ament-package python3-pyqt5 "ros-${ROS_DISTRO}-ament-cmake" libzmq3-dev
+sudo apt-get install -y "ros-${ROS_DISTRO}-ament-package" python3-pyqt5 "ros-${ROS_DISTRO}-ament-cmake" libzmq3-dev
 sudo apt-get install -y "ros-${ROS_DISTRO}-desktop"
 sudo apt-get install -y python3-argcomplete python3-colcon-clean
 sudo apt-get install -y python3-colcon-common-extensions
