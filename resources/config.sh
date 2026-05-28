@@ -27,13 +27,20 @@ export UBUNTU_CODENAME=noble
 : "${DSR_WORKSPACE:=${HOME}/cobot_ws}"
 
 # --- NVIDIA / CUDA -------------------------------------------------------
-# M2 진입 시 ubuntu-drivers devices 결과 따라 확정. 현재는 humble 의 570 placeholder.
-: "${NVIDIA_DRIVER_VERSION:=570}"
+# 빈 문자열 = nvidia-driver-install.sh 가 `ubuntu-drivers install` 로 noble 권장
+# 드라이버를 자동 선택 (RTX 4060 에서 ≈580) 후 apt-mark hold. 사용자 결정 2026-05-28.
+# 숫자 (예: 580) 를 명시하면 그 버전을 force-pin 설치 (override, CI/특수 GPU 용).
+# 하드핀을 기본값으로 두지 않는 이유: 추후 CUDA 메이저 (ADR-006) 가 요구하는 최소
+# 드라이버를 자동으로 만족시키기 위함.
+: "${NVIDIA_DRIVER_VERSION:=}"
 # M3 진입 전 ADR-006 으로 결정 (Noble repo 에 12-4 부재, 12-6/12-8/13-x 가용).
 # 빈 문자열 = 미결정. 자식 스크립트가 사용 시 비어 있으면 에러.
 : "${CUDA_VERSION:=}"
 
-# --- Docker (M2 진입 시 apt-cache madison docker-ce 로 확정) ------------
+# --- Docker --------------------------------------------------------------
+# 빈 문자열 = docker-install.sh 가 noble 용 latest stable 설치 후 apt-mark hold.
+# 설치 시점에 해소된 버전은 docs/COMPATIBILITY.md 에 기록 (설치 시 핀하지 않음).
+# 사용자 결정 2026-05-28. M2 에서 이 변수를 읽는 코드는 없음.
 : "${DOCKER_VERSION_STRING:=}"
 
 # --- State file (Hard Rule #3: resumable, 구조화 포맷 ADR 2026-05-27) ----
