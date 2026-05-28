@@ -20,19 +20,27 @@ config_assert_set
 sudo apt-get update
 sudo apt-get install -y build-essential gcc ubuntu-drivers-common dkms nvidia-modprobe
 
-# 드라이버 설치: 핀 지정 시 그 버전, 아니면 권장 자동.
-if [[ -n "${NVIDIA_DRIVER_VERSION}" ]]; then
+# 설치된 nvidia-driver-NNN 메타패키지명 해소. ubuntu-drivers 가 -open / -server
+# 변형을 고를 수 있으므로 접미사 허용 (예: nvidia-driver-595-open).
+_resolve_driver_pkg() {
+    dpkg-query -W -f='${db:Status-Abbrev}|${Package}\n' 'nvidia-driver-*' 2>/dev/null \
+        | awk -F'|' '$1 ~ /^ii/ {print $2}' \
+        | grep -E '^nvidia-driver-[0-9]+(-open|-server|-server-open)?$' | sort -V | tail -n1 || true
+}
+
+# 드라이버 설치: 이미 설치돼 있으면 생략(재실행 idempotency) / 핀 지정 시 그 버전 / 아니면 권장 자동.
+driver_pkg="$(_resolve_driver_pkg)"
+if [[ -n "${driver_pkg}" ]]; then
+    echo "nvidia: 이미 설치됨 (${driver_pkg}) — 설치 단계 생략"
+elif [[ -n "${NVIDIA_DRIVER_VERSION}" ]]; then
     echo "nvidia: force-pin nvidia-driver-${NVIDIA_DRIVER_VERSION}"
     sudo apt-get install -y "nvidia-driver-${NVIDIA_DRIVER_VERSION}"
+    driver_pkg="$(_resolve_driver_pkg)"
 else
     echo "nvidia: ubuntu-drivers install (noble 권장 드라이버 자동 선택)"
     sudo ubuntu-drivers install
+    driver_pkg="$(_resolve_driver_pkg)"
 fi
-
-# 설치된 실제 nvidia-driver-NNN 메타패키지명을 해소 (자동 선택이라 번호를 모름).
-driver_pkg="$(dpkg-query -W -f='${db:Status-Abbrev}|${Package}\n' 'nvidia-driver-*' 2>/dev/null \
-    | awk -F'|' '$1 ~ /^ii/ {print $2}' \
-    | grep -E '^nvidia-driver-[0-9]+$' | sort -V | tail -n1 || true)"
 
 if [[ -z "${driver_pkg}" ]]; then
     echo "nvidia: 설치된 nvidia-driver-NNN 패키지를 찾지 못함" >&2
