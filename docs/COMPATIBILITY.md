@@ -72,19 +72,27 @@
 | Python 빌드 도구 (실측 노후) | `pip 22.0.2`, `setuptools 59.6.0`, `wheel 0.37.1` | Ubuntu 22.04 기본 (apt `python3-pip`) | **모두 2022년 빌드, 4년 이상 노후**. Py3.12 호환성에서 일부 wheel 빌드 실패 가능성. Phase 2-3 에서 `python3 -m pip install --upgrade pip setuptools wheel` 단계 권장 |
 | ROS2 Python bindings (transitive, pip list 등록) | rclpy 3.3.21, ros2cli/pkg/topic/... 0.18.18, launch 1.0.14, launch-ros 0.19.13, tf2-*-py 0.25.20, rosidl-generator-py 0.14.6, ament-* 0.12.15, colcon-core 0.20.1 외 다수, rqt-* GUI 도구 일체 | apt `ros-humble-desktop` 가 `/opt/ros/humble/lib/python3.10/site-packages` 에 배치 → 셸 source 후 pip list 에 노출 | jazzy 전환 시 자동으로 해당 distro 의 동등 버전이 잡힘. 별도 핀 불필요. realsense2-camera-msgs 4.57.7 도 같은 경로로 등록 |
 
-## Jazzy target (Phase 2 종료 시 작성)
+## Jazzy target (noble) — System layer 확정 (2026-05-28)
 
-> 본 섹션은 Phase 2-1 ~ 2-14 종료 후 채움. 현재 비어 있음.
+> System layer (a01: NVIDIA / Docker / ROS2 / Gazebo) 확정. Compute(CUDA/PyTorch — ADR-006 대기)
+> / Robot(DSR) / Camera(RealSense) / Voice 레이어는 후속 마일스톤에서 추가.
+> 드라이버·도커 실측 버전 숫자는 **핀하지 않고 설치 시점에 해소** → `bash a01-prerequirements.sh`
+> 실행 후 "_(a01 실행 후 기입)_" 칸을 실제 값으로 갱신할 것.
 
-```
 | Layer | Version | Source citation | Notes |
 |-------|---------|-----------------|-------|
-| Ubuntu | 24.04 LTS (noble) | (Phase 2-4) | |
-| Python | 3.12 (Ubuntu 24.04 기본) | implicit | numpy 1.26.4 필수 (Py3.10용 1.24.x 호환 안 됨) |
-| ROS2 | jazzy | (Phase 2-1 config.sh) | `/opt/ros/jazzy/` |
-| numpy | 1.26.4 (`<2`, ultralytics 호환) | (Phase 2-10) | ADR-002 |
-| ... | | | |
-```
+| Ubuntu | 24.04 LTS (noble) | `resources/config.sh` (`UBUNTU_CODENAME=noble`); `resources/ros2-desktop-main.sh` OS 체크 | 다른 codename 이면 abort |
+| Python | 3.12 (noble 기본) | implicit (apt 기본 python3) | host 는 system Python 만 (ADR-008). application Python 은 Phase 4 컨테이너 |
+| ROS2 | jazzy | `resources/config.sh` (`ROS_DISTRO=jazzy`) | `/opt/ros/jazzy/` |
+| ROS apt key | `/etc/apt/keyrings/ros.gpg` (signed-by) | `resources/ros2-desktop-main.sh` | humble 의 `/usr/share/keyrings/` 에서 이전 (Hard Rule #7 통일) |
+| ros-jazzy-desktop | jazzy desktop 메타 | `resources/ros2-desktop-main.sh` | + ament-cmake, colcon-common-extensions/clean, rosdep, vcstool |
+| ros-jazzy-* (robot/control) | control-msgs, realtime-tools, xacro, joint-state-publisher-gui, ros2-control, ros2-controllers, moveit-msgs, ament-lint-common, yaml-cpp-vendor, ros2launch, ament-pep257 | `resources/ros2-install.sh` | humble 의 `gazebo-msgs` 제거 (Classic 메시지는 `ros_gz_interfaces` 로 대체) |
+| Gazebo | Harmonic (`ros-jazzy-ros-gz`) | `resources/ros2-install.sh` | packages.ros.org vendor 패키지. **별도 OSRF repo·apt-key 불필요**. humble 의 Classic 11 / Fortress 6 (`libignition-gazebo6-dev`) / `gazebo-ros-pkgs` 는 jazzy 빌드 없음(Classic EOL 2025-01) → 제거 |
+| NVIDIA driver | `ubuntu-drivers install` 권장 자동 + `apt-mark hold` (RTX4060 ≈ 580) | `resources/nvidia-driver-install.sh` | 핀 안 함 — 추후 CUDA 메이저(ADR-006) 최소 요구 자동 만족. 설치 해소 버전: _(a01 실행 후 기입)_ |
+| Docker CE | noble latest stable + `apt-mark hold docker-ce docker-ce-cli containerd.io` | `resources/docker-install.sh` | jammy 핀(`5:23.0.6`) 폐기. keyring `/etc/apt/keyrings/docker.asc`. 설치 해소 버전: _(a01 실행 후 기입)_ |
+| containerd.io / docker-buildx-plugin / docker-compose-plugin | latest (containerd 는 hold) | `resources/docker-install.sh` | 설치 해소 버전: _(a01 실행 후 기입)_ |
+| CUDA / CUDA toolkit | **미결정 (ADR-006, M3)** | `backup/cuda-pytorch-install.sh` (humble 참조) | Noble repo 에 12-4 부재; 12-6/12-8/13-x 가용. PyTorch wheel 가용성으로 결정 |
+| PyTorch / torchvision | **미결정 (M3 / Phase 4)** | — | CUDA 메이저 확정 후 cuXXX wheel 매칭 |
 
 ---
 
