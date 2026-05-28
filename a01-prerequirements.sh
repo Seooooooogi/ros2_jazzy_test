@@ -10,6 +10,16 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 RESOURCE_DIR="${SCRIPT_DIR}/resources"
+
+# root 로 직접 실행 금지 — 스크립트가 필요한 곳에서 내부적으로 sudo 를 호출한다.
+# `sudo bash a01...` 로 통째 실행하면 HOME=/root 가 되어 state / docker 그룹 / ~/.bashrc
+# 가 전부 /root 로 잘못 들어가 일반 사용자 환경에 반영되지 않는다.
+if [[ "$(id -u)" -eq 0 ]]; then
+    echo "a01: sudo 로 실행하지 마세요. 일반 사용자로 'bash a01-prerequirements.sh' 실행." >&2
+    echo "     (필요한 명령은 스크립트가 알아서 sudo 로 호출합니다.)" >&2
+    exit 1
+fi
+
 # shellcheck source=resources/config.sh
 source "${RESOURCE_DIR}/config.sh"
 # shellcheck source=resources/state.sh
