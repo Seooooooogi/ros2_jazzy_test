@@ -2,7 +2,7 @@
 .env
 .env.local
 
-# Installer state / checkpoint (Hard Rule #3)
+# Installer state / checkpoint — 머신별 진행 상태라 재생성 가능, 추적하지 않음
 .install_state
 *.state
 /state/
@@ -38,3 +38,8 @@ venv/
 # OS
 .DS_Store
 Thumbs.db
+
+# 설치 스크립트와 무관한 작업 데이터 — 추적/배포 대상 아님.
+# claude-migration: 세션 transcript(.jsonl) 등 민감 데이터 포함. corecode: 별도 튜토리얼.
+claude-migration/
+corecode/
