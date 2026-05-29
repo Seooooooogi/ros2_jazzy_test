@@ -1,0 +1,29 @@
+# build context 에서 제외할 항목 — secret 차단 + context 크기 최소화.
+# Dockerfile / entrypoint.sh 만 build context 로 보내면 충분.
+
+# secret 후보
+.env
+.env.*
+*.env
+secrets/
+*.pem
+*.key
+id_rsa*
+
+# VCS
+.git
+.gitignore
+.gitattributes
+
+# 본 디렉토리 외부 (혹시 context 가 상위로 잡혀도 차단되도록 보수적으로)
+backup/
+docs/
+resources/
+*.md
+
+# build artifact
+build/
+install/
+log/
+__pycache__/
+*.pyc
