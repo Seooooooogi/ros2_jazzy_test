@@ -358,3 +358,28 @@
 - 사용자가 외부 publish 의도를 명시적으로 결정 시 → branch / tag / commit 정책 재검토.
 - secret leak 사고 발생 시 → `.gitignore` 정책 강화 + pre-commit hook 도입 검토.
 - 단일 사용자 가정이 무너져 협업이 시작되면 → branch / PR 정책 추가 결정 기록 작성.
+
+---
+
+### ADR-011: 단일 진입점 install.sh 통합 + run_step 중앙화 (2026-05-29)
+
+**Context**:
+- host 시리즈 a01~a04 가 jazzy 패턴으로 정리됐으나 진입점이 4개로 분산 → "한 번에 워크스테이션 셋업" 진입점 부재.
+- `run_step` 함수가 4개 오케스트레이터에 동일 본문으로 중복 정의(분모 변수명 `A0N_STEPS` 만 차이) → 수정 시 4곳 동기화 부담.
+- state 파일은 이미 단일 경로(`~/.ros2_jazzy_test/state`)를 공유하고 step 이름이 `a01_`/`a02_` 등으로 네임스페이스됨 → 통합의 전제가 이미 충족.
+
+**Decision**:
+- **구조 A 채택**: 기존 a01~a04 는 "개별 스테이지 재실행용"으로 유지하고, 전체를 단일 연속 시퀀스(`[n/11]`)로 실행하는 `install.sh` 를 신규 추가. 두 경로가 같은 state 파일을 공유하므로 어느 쪽으로 실행하든 완료 step 은 자동 skip(재시작 가능 규칙 고수).
+- **run_step 중앙화**: 중복된 `run_step` 을 `resources/run-step.sh` 로 분리. 진행률 분모는 호출 시점에 `STEPS_TOTAL`(미설정 시 config 의 `TOTAL_STEPS`) 을 읽어 통합/단독 실행 모두 대응. state 마킹/조회는 state.sh 가 전담(책임 분리).
+- **reboot 경계**: a01 마지막 reboot 단계는 `run_step` 으로 감싸지 않고 install.sh 에 인라인. reboot 전에 완료를 디스크에 기록해 재부팅 후 재실행이 그 단계를 건너뛰고 다음부터 이어가게 함(무한 루프 방지).
+- **강건성 표준 세트**: preflight(OS codename 일치 + sudo 가용 확인) + ERR trap(실패 위치 보강) + `--status` / `--reset` / `--help`. 스테이지 선택 플래그(`--only`/`--from`)는 개별 스크립트 직접 실행과 기능이 겹쳐 보류.
+
+**Consequences**:
+- 신규 노트북 셋업이 `bash install.sh` 한 줄로 시작(완료분 skip, reboot 후 재실행으로 자연 이어짐).
+- `run_step` 수정이 한 파일로 수렴. 오케스트레이터는 `STEPS_TOTAL` 값만 설정.
+- 진입점이 5개(install.sh + a0N 4개)로 늘지만, 권장 진입점을 install.sh 로 문서에 명시해 혼란 해소.
+- 단계 추가 시 install.sh step 테이블과 config 의 `TOTAL_STEPS` 동시 갱신 필요(진행률 분모 일관성).
+
+**Reopen 조건**:
+- 스테이지 선택 실행 요구가 반복되면 → `--only`/`--from` 플래그 추가 재검토.
+- 단계 수가 크게 늘어 install.sh step 테이블이 비대해지면 → 스테이지 메타데이터 테이블 기반 루프로 리팩터 검토.
