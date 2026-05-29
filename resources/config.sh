@@ -4,7 +4,7 @@
 #
 # Usage (from any installer script):
 #   source "$(dirname "${BASH_SOURCE[0]}")/config.sh"   # resources/ 내부에서
-#   source "$(dirname "$0")/resources/config.sh"        # top-level (a01-a06 / install.sh)
+#   source "$(dirname "$0")/resources/config.sh"        # top-level (a01-a04 / install.sh)
 #
 # 본 파일은 직접 실행하지 않는다. set -u 환경에서도 안전하게 source 가능.
 # 변수별 정책:
@@ -51,7 +51,7 @@ export UBUNTU_CODENAME=noble
 : "${KEYRING_DIR:=/etc/apt/keyrings}"
 
 # --- Progress 표시 ([n/total] 시각화) ---------------------
-: "${TOTAL_STEPS:=6}"   # 단일 진입점 통합 시 a01..a06 총 6 단계
+: "${TOTAL_STEPS:=6}"   # 단일 진입점(install.sh) 통합 시 사용 — 실제 단계 수는 통합 때 확정
 
 # --- Self-check ----------------------------------------------------------
 # 자식 스크립트가 진입 직후 호출하면 필수 변수 누락 즉시 catch.

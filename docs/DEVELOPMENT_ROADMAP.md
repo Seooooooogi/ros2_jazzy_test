@@ -27,7 +27,7 @@ ROS2 Humble installer → ROS2 Jazzy installer 마이그레이션. 1–4주, sol
 
 **목표**: humble 스크립트를 jazzy 기준으로 마이그레이션 + 단일 진입점 통합. humble 스크립트는 삭제 금지 — `backup/` 로 보존.
 
-**진행 구조 (5 milestone, plan 승인 2026-05-27)**: M1 헬퍼 6종 → M2 시스템 레이어 (a01) → M3 컴퓨트/로봇/카메라 (a02) → M4 음성/Python 의존성 (a06) → M5 단일 진입점 `install.sh` 통합. 자세한 사항은 `/home/rokey/.claude/plans/phase-1-velvety-dove.md` 참조.
+**진행 구조 (5 milestone, plan 승인 2026-05-27)**: M1 헬퍼 6종 → M2 시스템 레이어 (a01) → M3 컴퓨트/로봇/카메라 (a02) → M4 음성 환경 점검 (a04) → M5 단일 진입점 `install.sh` 통합. 자세한 사항은 `/home/rokey/.claude/plans/phase-1-velvety-dove.md` 참조.
 
 - [ ] 2-1. 공통 config 도입 — `resources/config.sh` 생성, `ROS_DISTRO=jazzy`, `UBUNTU_CODENAME=noble` 등 1회 정의 (Hard Rule #1). venv 관련 변수는 ADR-008 로 폐기.
 - [ ] 2-2. 진행률 / 체크포인트 프레임워크 구현 (Hard Rule #3, #4)
@@ -44,7 +44,7 @@ ROS2 Humble installer → ROS2 Jazzy installer 마이그레이션. 1–4주, sol
 - [x] 2-8. `dsr-project-install.sh` 마이그레이션 (M3, 2026-05-29) — `resources/dsr-project-install.sh` 신규. doosan-robot2 `-b jazzy` clone (idempotent), DSR 전용 apt deps, emulator `3.0.1` 핀 pull. ws = `~/cobot2_ws`, host 패키지(robot_control/od_msg) symlink. 빌드는 `resources/colcon-build.sh`.
 - [x] 2-9. RealSense 마이그레이션 (M3, 2026-05-29) — `resources/realsense-sdk-install.sh` (librealsense2 Intel noble apt 정식, vendored 폴백 불필요) + `resources/realsense-ros-install.sh` (`ros-jazzy-realsense2-camera/-description`). `realsense-viewer` 자동실행/`libgtk-3-dev` purge 제거.
 - [x] a03. VS Code 마이그레이션 (2026-05-29) — `a03-vs-code-install.sh` 오케스트레이터 + `resources/vscode-install.sh`. 일회성 .deb 다운로드 → Microsoft apt repo + keyring(`packages.microsoft.gpg`, codename 무관 stable main). `code` GUI 자동 실행 제거.
-- [x] 2-10. **재정의 (ADR-008 + 사용자 결정 2026-05-27: install.sh = host only)** — 구현 완료 (2026-05-29): `a06-Voice.sh` 오케스트레이터 + `resources/voice-env-check.sh`. host pip install 단계 **전부 제거**, application Python (numpy, langchain, openai, PyAudio, ultralytics, cv2, …) 은 host 가 아닌 yolo/voice 컨테이너 Dockerfile 안에서 설치. a06 은 `.env` 존재·`OPENAI_API_KEY` 점검 + Docker Hub 로그인 안내만 수행 (host 설치 없음).
+- [x] 2-10. **재정의 (ADR-008 + 사용자 결정 2026-05-27: install.sh = host only)** — 구현 완료 (2026-05-29): `a04-voice-precheck.sh` 오케스트레이터 + `resources/voice-env-check.sh`. host pip install 단계 **전부 제거**, application Python (numpy, langchain, openai, PyAudio, ultralytics, cv2, …) 은 host 가 아닌 yolo/voice 컨테이너 Dockerfile 안에서 설치. a04 는 `.env` 존재·`OPENAI_API_KEY` 점검 + Docker Hub 로그인 안내만 수행 (host 설치 없음).
   - 사용자 결정 "`install.sh` 는 host 만 책임, application(컨테이너) layer 는 `docker compose` 가 책임" 으로 a06 잔여 결정이 **(b) 최소 wrapper 로 좁혀짐**: `.env` placeholder 존재 검증 + Docker Hub login 안내 (ADR-007 의 publish 채택 후 `docker compose pull` 전제 조건). (a) 완전 삭제는 `.env` 검증 손실 위험, (c) launcher 변환은 host/container layer 책임 경계를 다시 흐림 → 둘 다 채택 안 함.
   - ADR-002 (numpy<2 핀) 의 install 순서 원칙 (ultralytics → langchain → numpy 마지막) 은 그대로. 단 적용 위치가 host venv → 컨테이너 Dockerfile 의 마지막 RUN layer (Phase 4-1, 4-2).
 - [ ] 2-11. apt keyring 일관성 검사 (Hard Rule #7) — 모든 외부 repo가 `/etc/apt/keyrings/`로 통일됐는지
@@ -53,7 +53,7 @@ ROS2 Humble installer → ROS2 Jazzy installer 마이그레이션. 1–4주, sol
 - [ ] 2-14. 전체 스크립트 `shellcheck` 통과 확인
 - [ ] 2-15. **M5: 단일 진입점 `install.sh` 통합 (사용자 요청 2026-05-27)**
   - **책임 범위 = host PC layer 만** (사용자 결정 2026-05-27). NVIDIA driver / Docker CE / ROS2 jazzy desktop / DSR colcon 워크스페이스 / librealsense2 SDK + ROS2 wrapper / system Python (apt). **CUDA toolkit 은 host 미설치 (ADR-006/008) — Phase 4 컨테이너 책임**. application(컨테이너) layer 는 **포함하지 않음** — `docker compose pull && docker compose up -d` 는 사용자가 별도 명령으로 실행 (분리 유지).
-  - 6개 `a0X` 의 본문을 `install.sh` 안에 `step_a01_prerequirements`, ..., `step_a06_voice` 6 함수로 분리. a06 은 최소 wrapper (2-10 결정) — `.env` placeholder 검증 + Docker Hub login 안내만.
+  - `a0X` 스크립트 본문을 `install.sh` 안에 `step_a01_prerequirements`, ..., `step_a04_voice` 함수로 분리. a04 는 최소 wrapper (2-10 결정) — `.env` placeholder 검증 + Docker Hub login 안내만.
   - `main()` 이 state 헬퍼로 `step_should_skip` 체크 후 순차 호출. 진행률 `[n/total]` 출력
   - reboot 후 `bash install.sh` 재실행 시 state 보고 자동 재개 (Hard Rule #3 resumable 완성)
   - `resources/*.sh` 는 그대로 보존 — `install.sh` 내부에서 source/호출
@@ -122,7 +122,7 @@ ROS2 Humble installer → ROS2 Jazzy installer 마이그레이션. 1–4주, sol
   - Base: `ros:jazzy-ros-base-noble` 명시 핀 (Hard Rule #6)
   - **역할 = service server** `/get_3d_position` (`od_msg/SrvDepthPosition`). client 는 host 의 `robot_control` 노드. topic publish 아님 — request/response 구조.
   - **카메라 = 컨테이너 자체 포함** (구조 결정 2026-05-28, 기존 host-side 안에서 변경): `realsense2_camera` 노드를 yolo 컨테이너 안에서 실행 → USB 직접 열고 `/camera/camera/*` 를 컨테이너 안에서 publish, `object_detection` 의 ImgNode 가 같은 topic subscribe. 근거 = workflow 단순화 + 카메라/추론 한 이미지로 자기완결 배포.
-  - **USB device passthrough 필요**: 4-3 docker-compose 에 `--device /dev/bus/usb`. udev rule·커널 모듈은 host 책임 (컨테이너로 못 옮김 — a04 설치).
+  - **USB device passthrough 필요**: 4-3 docker-compose 에 `--device /dev/bus/usb`. udev rule·커널 모듈은 host 책임 (컨테이너로 못 옮김 — a02 설치).
   - 내부: ultralytics + PyTorch (cu${CUDA_VERSION}) + opencv-python + `cv_bridge` + `ros-jazzy-realsense2-camera` + librealsense2 runtime + `od_msg` (custom interface)
   - **GPU 패스스루**: NVIDIA Container Toolkit 의존 (host a01 에서 driver 설치되어 있다는 전제)
   - 모델 가중치 / 설정은 volume mount (image 안에 안 박음)
@@ -141,7 +141,7 @@ ROS2 Humble installer → ROS2 Jazzy installer 마이그레이션. 1–4주, sol
     environment:
       - PULSE_SERVER=unix:/run/user/1000/pulse/native
     ```
-  - host 측 사전 조건: Ubuntu 24.04 desktop 의 PipeWire 데몬이 user session 에 실행 중 (기본). 내장 마이크가 `pactl list sources short` 에 인식되는지 a06 (또는 Phase 4 진입 검증) 에서 확인.
+  - host 측 사전 조건: Ubuntu 24.04 desktop 의 PipeWire 데몬이 user session 에 실행 중 (기본). 내장 마이크가 `pactl list sources short` 에 인식되는지 a04 (또는 Phase 4 진입 검증) 에서 확인.
   - **API key 전달**: `.env` 를 docker-compose 의 `env_file:` 로 mount, image 안에 박지 않음 (Hard Rule #10)
 - [ ] 4-3. `containers/docker-compose.yml` — 두 서비스 동시 start/stop
   - 각 서비스의 image 태그 명시 (ADR-007): `docker.io/${DOCKERHUB_USER}/ros2-jazzy-yolo:${YOLO_TAG}`, `docker.io/${DOCKERHUB_USER}/ros2-jazzy-voice:${VOICE_TAG}`. `${DOCKERHUB_USER}`, `${YOLO_TAG}`, `${VOICE_TAG}` 는 host `.env` 로부터 주입
