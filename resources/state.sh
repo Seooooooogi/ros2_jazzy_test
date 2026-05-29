@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# resources/state.sh — Step progress tracking (Hard Rule #3 resumable + #4 progress).
+# resources/state.sh — Step progress tracking (resumable 재실행 + [n/total] 진행률).
 #
 # State file format (ADR 2026-05-27 구조화 선택):
 #   step_<name>=DONE|FAIL|SKIPPED|RUNNING

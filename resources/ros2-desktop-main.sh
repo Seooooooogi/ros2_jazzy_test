@@ -6,7 +6,7 @@
 #   원작: Tiryoh/ros2_setup_scripts_ubuntu (Apache-2.0), ROS2 docs (CC-BY-4.0).
 # 변경점:
 #   - distro/OS 를 config.sh 단일 진실 소스에서 (${ROS_DISTRO}/${UBUNTU_CODENAME}).
-#   - apt key 를 /usr/share/keyrings → /etc/apt/keyrings 로 통일 (Hard Rule #7).
+#   - apt key 를 /usr/share/keyrings → /etc/apt/keyrings 로 통일 (외부 repo 키링 한 경로).
 #   - `apt upgrade -y` 제거 (핀 drift 원인, COMPATIBILITY.md). set -euo pipefail.
 set -euo pipefail
 

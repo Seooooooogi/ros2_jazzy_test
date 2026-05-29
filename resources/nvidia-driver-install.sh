@@ -4,7 +4,7 @@
 #
 # 정책 (사용자 결정 2026-05-28):
 #   - NVIDIA_DRIVER_VERSION 빈 값  → `ubuntu-drivers install` 로 noble 권장 드라이버 자동 선택
-#     (RTX 4060 에서 ≈580). 추후 CUDA 메이저 (ADR-006) 최소 요구를 자동 만족.
+#     (RTX 4060 에서 ≈580). 추후 결정할 CUDA 메이저의 최소 드라이버 요구를 자동 만족.
 #   - NVIDIA_DRIVER_VERSION 숫자   → 그 버전 force-pin 설치 (override, CI/특수 GPU 용).
 #   설치 후 apt-mark hold 로 잠금 — `apt upgrade` 가 핀을 풀어 메이저를 올리는 drift 차단
 #   (docs/COMPATIBILITY.md "drift 패턴" 참조).

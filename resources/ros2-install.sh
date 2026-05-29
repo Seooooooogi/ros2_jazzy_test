@@ -5,11 +5,11 @@
 # backup/ros2-install.sh 의 jazzy 마이그레이션. 단, 이제 desktop 코어는 a01 이 먼저
 # ros2-desktop-main.sh 로 설치하므로 이 스크립트는 "extras 전용" (desktop-main 미호출).
 # 변경점:
-#   - ros-humble-* → ros-${ROS_DISTRO}-* (Hard Rule #1).
+#   - ros-humble-* → ros-${ROS_DISTRO}-* (distro 문자열은 config.sh 단일 소스).
 #   - Gazebo: Classic/Fortress (libignition-gazebo6-dev, gazebo-ros-pkgs, gazebo-msgs) 는
 #     jazzy 빌드가 없음 (Classic EOL 2025-01). ROS2 Jazzy 권장 Gazebo Harmonic 을
 #     packages.ros.org vendor 패키지 `ros-${ROS_DISTRO}-ros-gz` 로 설치 → 별도 OSRF
-#     apt repo 와 deprecated `apt-key add` 블록 자체를 삭제 (Hard Rule #7 위반 소멸).
+#     apt repo 와 deprecated `apt-key add` 블록 자체를 삭제.
 #   - `apt upgrade -y` 제거 (drift). set -euo pipefail.
 set -euo pipefail
 

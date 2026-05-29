@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# resources/env-load.sh — Safe .env loader (Hard Rule #10: no hardcoded secrets).
+# resources/env-load.sh — Safe .env loader — 자격증명을 스크립트에 박지 않고 .env 에서 로드.
 #
 # Usage:
 #   source "$(dirname "${BASH_SOURCE[0]}")/env-load.sh"

@@ -6,7 +6,7 @@
 #   - noble 용 latest stable docker-ce 스택 설치 (설치 시점 핀 없음).
 #   - 설치 후 apt-mark hold 로 엔진 패키지 잠금 (apt upgrade drift 차단).
 #   - 해소된 버전은 docs/COMPATIBILITY.md 에 기록 (스크립트가 끝에 echo).
-#   keyring 은 /etc/apt/keyrings/docker.asc (Hard Rule #7, signed-by).
+#   keyring 은 /etc/apt/keyrings/docker.asc (signed-by — deprecated apt-key 미사용).
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

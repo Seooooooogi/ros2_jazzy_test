@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # resources/confirm.sh — Confirm prompt for state-changing / irreversible operations
-# (Hard Rule #9: sudo reboot / apt purge / driver swap 등 사용자 명시 동의 필수).
+# (sudo reboot / apt purge / driver swap 등 되돌릴 수 없는 작업은 사용자 명시 동의 필수).
 #
 # Usage:
 #   source "$(dirname "${BASH_SOURCE[0]}")/confirm.sh"

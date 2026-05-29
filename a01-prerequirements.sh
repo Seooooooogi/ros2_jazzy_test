@@ -4,8 +4,8 @@
 #
 # 순차 실행 진입점: a01 → reboot → a02 → ... (Quick Ref).
 # 본 스크립트가 state 프레이밍을 소유 (step_begin/step_end_*) — 자식 resource 스크립트는
-# 순수 설치 본문. M5 install.sh 통합 시에도 state 호출은 한 곳(여기)에만 존재.
-# 재실행 안전: 완료 단계는 state 파일 기준 skip (Hard Rule #2/#3).
+# 순수 설치 본문. 향후 단일 진입점으로 통합하더라도 state 호출은 오케스트레이터 한 곳에만 둔다.
+# 재실행 안전: 완료 단계는 state 파일 기준 skip (apt source 중복·재설치 방지).
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -52,7 +52,7 @@ run_step 2 a01_docker        bash "${RESOURCE_DIR}/docker-install.sh"
 run_step 3 a01_ros2_desktop  bash "${RESOURCE_DIR}/ros2-desktop-main.sh"
 run_step 4 a01_ros2_extras   bash "${RESOURCE_DIR}/ros2-install.sh"
 
-# --- step 5: reboot (Hard Rule #9 confirm + 재부팅 루프 방지) -------------
+# --- step 5: reboot (되돌릴 수 없는 작업이라 사용자 confirm + 재부팅 루프 방지) ---
 if step_should_skip a01_reboot; then
     echo "a01: 모든 단계 완료 (reboot 포함). 재실행할 작업 없음."
     state_dump

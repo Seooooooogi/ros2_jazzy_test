@@ -8,8 +8,8 @@
 #   source "$(dirname "${BASH_SOURCE[0]}")/activate.sh"
 #   # 이후 ros2 / colcon / rclpy 사용 가능 (system Python).
 #
-# Application Python (PyTorch / ultralytics / langchain / openai 등) 은 Phase 4
-# Docker container 안에만 존재 — 본 wrapper 는 그것을 다루지 않는다 (ADR-008).
+# Application Python (PyTorch / ultralytics / langchain / openai 등) 은 별도(yolo/voice)
+# Docker container 안에만 존재 — 본 wrapper 는 그것을 다루지 않는다.
 
 _ACT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=./config.sh
