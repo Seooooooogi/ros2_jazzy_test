@@ -51,7 +51,9 @@ export UBUNTU_CODENAME=noble
 : "${KEYRING_DIR:=/etc/apt/keyrings}"
 
 # --- Progress 표시 ([n/total] 시각화) ---------------------
-: "${TOTAL_STEPS:=6}"   # 단일 진입점(install.sh) 통합 시 사용 — 실제 단계 수는 통합 때 확정
+# 통합 진입점 install.sh 의 전체 단계 수 (a01:5 + a02:4 + a03:1 + a04:1).
+# run-step.sh 의 STEPS_TOTAL fallback 으로도 쓰인다. 단계 추가 시 함께 갱신.
+: "${TOTAL_STEPS:=11}"
 
 # --- Self-check ----------------------------------------------------------
 # 자식 스크립트가 진입 직후 호출하면 필수 변수 누락 즉시 catch.
