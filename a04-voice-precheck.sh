@@ -24,24 +24,10 @@ source "${RESOURCE_DIR}/config.sh"
 source "${RESOURCE_DIR}/state.sh"
 config_assert_set
 
-A04_STEPS=1
-
-# run_step <n> <name> <cmd...> — DONE 이면 skip, 아니면 begin → 실행 → ok/fail 마킹.
-run_step() {
-    local n="$1" name="$2"
-    shift 2
-    if step_should_skip "${name}"; then
-        echo "[${n}/${A04_STEPS}] skip: ${name} (이미 DONE)"
-        return 0
-    fi
-    step_begin "${n}" "${A04_STEPS}" "${name}"
-    if "$@"; then
-        step_end_ok
-    else
-        step_end_fail
-        exit 1
-    fi
-}
+# 단독 실행 시 스테이지-로컬 진행률 ([n/1]). 통합 실행(install.sh)은 자체 STEPS_TOTAL=11 사용.
+STEPS_TOTAL=1
+# shellcheck source=resources/run-step.sh
+source "${RESOURCE_DIR}/run-step.sh"
 
 run_step 1 a04_voice_env bash "${RESOURCE_DIR}/voice-env-check.sh"
 

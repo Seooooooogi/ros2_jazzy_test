@@ -28,24 +28,10 @@ source "${RESOURCE_DIR}/state.sh"
 source "${RESOURCE_DIR}/confirm.sh"
 config_assert_set
 
-A01_STEPS=5
-
-# run_step <n> <name> <cmd...> — DONE 이면 skip, 아니면 begin → 실행 → ok/fail 마킹.
-run_step() {
-    local n="$1" name="$2"
-    shift 2
-    if step_should_skip "${name}"; then
-        echo "[${n}/${A01_STEPS}] skip: ${name} (이미 DONE)"
-        return 0
-    fi
-    step_begin "${n}" "${A01_STEPS}" "${name}"
-    if "$@"; then
-        step_end_ok
-    else
-        step_end_fail
-        exit 1
-    fi
-}
+# 단독 실행 시 스테이지-로컬 진행률 ([n/5]). 통합 실행(install.sh)은 자체 STEPS_TOTAL=11 사용.
+STEPS_TOTAL=5
+# shellcheck source=resources/run-step.sh
+source "${RESOURCE_DIR}/run-step.sh"
 
 run_step 1 a01_nvidia_driver bash "${RESOURCE_DIR}/nvidia-driver-install.sh"
 run_step 2 a01_docker        bash "${RESOURCE_DIR}/docker-install.sh"
@@ -58,7 +44,7 @@ if step_should_skip a01_reboot; then
     state_dump
     exit 0
 fi
-step_begin 5 "${A01_STEPS}" a01_reboot
+step_begin 5 "${STEPS_TOTAL}" a01_reboot
 confirm_or_abort "모든 사전준비 설치 완료. NVIDIA 드라이버 / docker 그룹 적용을 위해 지금 재부팅할까요?"
 # 중요: reboot 전에 DONE 을 디스크에 기록 — 재부팅 후 재실행이 이 단계를 건너뛰어
 # 무한 reboot 루프를 방지. reboot 자체 실패 시 상태가 낙관적이나, 실패는 시끄럽고

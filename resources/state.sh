@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # resources/state.sh — Step progress tracking (resumable 재실행 + [n/total] 진행률).
 #
-# State file format (ADR 2026-05-27 구조화 선택):
+# State file format (key=value — grep/sed 기반 in-place 갱신으로 idempotent 상태 기록):
 #   step_<name>=DONE|FAIL|SKIPPED|RUNNING
 #
 # Usage (from installer step):
