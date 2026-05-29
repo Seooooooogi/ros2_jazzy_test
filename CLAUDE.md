@@ -57,7 +57,7 @@ ROS2 Humble installer → ROS2 Jazzy installer 마이그레이션. Ubuntu + NVID
 - 커밋은 한 논리 변경 단위로 분리 (예: "RealSense distro 패치"와 "DSR 의존성 갱신"은 다른 커밋).
 - 커밋은 사용자 명시적 요청 시에만 (Hard Rule #11).
 - **커밋 메시지는 외부 사람이 이해 가능하게 작성** — 내부 마일스톤 코드 (M1, M2), 결정 기록 번호 (ADR-NNN), 단계 번호 (Phase N), 룰 ID (Hard Rule #N) 같은 본 레포 내부 축약어 미사용. 기능 단위로 분할. 한국어 회화 + 영어 식별자 혼용.
-- **remote 추가 금지** — 본 레포는 로컬 git 운영만 (`git remote -v` 결과 = 빈 출력 유지). push 사고 예방.
+- **remote = private 1개만** (2026-05-29 결정 변경) — 동일 모델 타 머신 설치 검증을 위해 private 원격 저장소 1개 허용. public 전환 금지(설치 스크립트엔 추적 secret 없으나 공개는 비가역). push 전 secret 스캔 + `.gitignore` 로 세션 기록/민감 작업 데이터 제외 확인. 신규 remote 추가나 public 전환은 사용자 명시 동의 필요.
 - destructive 작업 (apt purge, rm -rf, NVIDIA driver 교체 등) 직전 사용자 판단으로 안전망 commit 권장.
 - milestone tag 는 semver (`v0.1.0`, `v0.2.0`) — 외부 친화. 내부 단계 코드 (`M2-complete` 등) 미사용.
 - humble → jazzy 마이그레이션 중에는 humble 스크립트를 **삭제하지 않고** `backup/` 같은 별도 경로로 보존 — Phase 3 트러블슈팅 카탈로그 작성 시 diff 참조용.
