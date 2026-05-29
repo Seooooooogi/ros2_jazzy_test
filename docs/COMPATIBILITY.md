@@ -85,14 +85,17 @@
 | Python | 3.12 (noble 기본) | implicit (apt 기본 python3) | host 는 system Python 만 (ADR-008). application Python 은 Phase 4 컨테이너 |
 | ROS2 | jazzy | `resources/config.sh` (`ROS_DISTRO=jazzy`) | `/opt/ros/jazzy/` |
 | ROS apt key | `/etc/apt/keyrings/ros.gpg` (signed-by) | `resources/ros2-desktop-main.sh` | humble 의 `/usr/share/keyrings/` 에서 이전 (Hard Rule #7 통일) |
-| ros-jazzy-desktop | jazzy desktop 메타 | `resources/ros2-desktop-main.sh` | + ament-cmake, colcon-common-extensions/clean, rosdep, vcstool |
+| ros-jazzy-desktop | jazzy desktop 메타 (실측 `0.11.0-1noble.20260412`, pkg 374개) | `resources/ros2-desktop-main.sh` | + ament-cmake, colcon-common-extensions/clean, rosdep, vcstool. 실측 2026-05-29 |
 | ros-jazzy-* (robot/control) | control-msgs, realtime-tools, xacro, joint-state-publisher-gui, ros2-control, ros2-controllers, moveit-msgs, ament-lint-common, yaml-cpp-vendor, ros2launch, ament-pep257 | `resources/ros2-install.sh` | humble 의 `gazebo-msgs` 제거 (Classic 메시지는 `ros_gz_interfaces` 로 대체) |
 | Gazebo | Harmonic (`ros-jazzy-ros-gz`) | `resources/ros2-install.sh` | packages.ros.org vendor 패키지. **별도 OSRF repo·apt-key 불필요**. humble 의 Classic 11 / Fortress 6 (`libignition-gazebo6-dev`) / `gazebo-ros-pkgs` 는 jazzy 빌드 없음(Classic EOL 2025-01) → 제거 |
-| NVIDIA driver | `ubuntu-drivers install` 권장 자동 + `apt-mark hold` (RTX4060 ≈ 580) | `resources/nvidia-driver-install.sh` | 핀 안 함 — 추후 CUDA 메이저(ADR-006) 최소 요구 자동 만족. 설치 해소 버전: _(a01 실행 후 기입)_ |
-| Docker CE | noble latest stable + `apt-mark hold docker-ce docker-ce-cli containerd.io` | `resources/docker-install.sh` | jammy 핀(`5:23.0.6`) 폐기. keyring `/etc/apt/keyrings/docker.asc`. 설치 해소 버전: _(a01 실행 후 기입)_ |
-| containerd.io / docker-buildx-plugin / docker-compose-plugin | latest (containerd 는 hold) | `resources/docker-install.sh` | 설치 해소 버전: _(a01 실행 후 기입)_ |
-| CUDA / CUDA toolkit | **미결정 (ADR-006, M3)** | `backup/cuda-pytorch-install.sh` (humble 참조) | Noble repo 에 12-4 부재; 12-6/12-8/13-x 가용. PyTorch wheel 가용성으로 결정 |
-| PyTorch / torchvision | **미결정 (M3 / Phase 4)** | — | CUDA 메이저 확정 후 cuXXX wheel 매칭 |
+| NVIDIA driver | `ubuntu-drivers install` 권장 자동 + `apt-mark hold` (RTX4060) | `resources/nvidia-driver-install.sh` | 핀 안 함 — 추후 CUDA 메이저(ADR-006) 최소 요구 자동 만족. 설치 해소 버전: **`nvidia-driver-595-open` / 595.71.05** (nvidia-smi 실측 2026-05-29) |
+| Docker CE | noble latest stable + `apt-mark hold docker-ce docker-ce-cli containerd.io` | `resources/docker-install.sh` | jammy 핀(`5:23.0.6`) 폐기. keyring `/etc/apt/keyrings/docker.asc`. 설치 해소 버전: **29.5.2** (실측 2026-05-29) |
+| containerd.io / docker-buildx-plugin / docker-compose-plugin | latest (containerd 는 hold) | `resources/docker-install.sh` | 설치 해소 버전: **containerd v2.2.4 / buildx v0.34.1 / compose 5.1.4** (실측 2026-05-29) |
+| CUDA / CUDA toolkit | **host 미설치** — 12-8 (Phase 4 컨테이너) | ADR-006 (2026-05-29) | host colcon 패키지에 CUDA 소비자 없음(ADR-008). 12-8 은 Phase 4 yolo 컨테이너 base image 에서만. Noble repo 12-4 부재, cu130 PyTorch wheel 없음 → 12-8 채택 |
+| PyTorch / torchvision | **host 미설치** — `cu128` (Phase 4 컨테이너) | ADR-006 / ADR-008 | host `import torch` → ImportError 가 정상. numpy<2 재핀(ADR-002)도 컨테이너 Dockerfile |
+| Doosan DSR | `doosan-robotics/doosan-robot2 -b jazzy` (commit 816ecb5d), emulator `doosanrobot/dsr_emulator:3.0.1` 핀 | `resources/dsr-project-install.sh` | clone 위치 `~/cobot2_ws/src/`. host 빌드 = doosan-robot2 + `robot_control` + `od_msg` (symlink). DSR 전용 apt: `velocity-controllers`, `eigen3-cmake-module` (나머지는 rosdep 자동). 실측 2026-05-29: doosan-robot2 30개 패키지 colcon 빌드 성공, emulator 이미지 1.83GB |
+| librealsense2 SDK | `librealsense2-{dkms,utils,dev,dbg}` (RealSense AI apt repo, noble 정식) | `resources/realsense-sdk-install.sh` | **humble 의 "22.04 공급 중단 → ROS vendored 폴백" 우회 불필요**. **2025-11 Intel→RealSense AI 분사**로 도메인/키 교체: repo `librealsense.realsenseai.com/Debian/apt-repo` (구 `librealsense.intel.com`), 서명 키 `…FB0B24895113F120` (2025-11 신 키, 구 intel `librealsense.pgp` 의 2018 키로는 NO_PUBKEY). keyring `/etc/apt/keyrings/librealsenseai.gpg` (`.asc` → dearmor). DKMS 빌드에 `linux-headers-$(uname -r)` 동반. 실측 2026-05-29: `librealsense2-utils 2.58.1-0~realsense.19174`, `librealsense2-dkms 1.3.31`, `ros-jazzy-realsense2-camera 4.57.7` |
+| realsense-ros (래퍼) | `ros-jazzy-realsense2-camera` + `-description` (실측 candidate 4.57.7) | `resources/realsense-ros-install.sh` | camera 가 realsense2-camera-msgs 동반. 원본 a05 의 `ros-humble-realsense2-*` glob 대신 명시 패키지 |
 
 ---
 

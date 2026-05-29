@@ -166,6 +166,38 @@
 
 ---
 
+### ADR-006: CUDA 메이저 버전 = 12-8 (cu128), host 미설치 — Phase 4 컨테이너 적용
+
+**Date**: 2026-05-29
+
+**Status**: ✅ 확정
+
+**Context**:
+- humble baseline 은 host 에 CUDA 12.4 toolkit (apt) + PyTorch 2.6.0+cu124 (pip) 를 설치했다 (`backup/cuda-pytorch-install.sh`).
+- Noble (24.04) NVIDIA cuda repo 에는 **12-4 가 부재** — 가용 메이저는 12-5/12-6/12-8/12-9/13-0/13-1/13-2 (ADR-003 검증). 따라서 humble 의 12.4 를 그대로 못 가져옴 → 메이저 재결정 필요.
+- 설치된 NVIDIA 드라이버 595.71.05 (a01 실측) 는 CUDA 13.x 까지 지원 → 드라이버는 12.x/13.x 모두 만족, 제약이 아님.
+- 진짜 제약은 **PyTorch wheel 가용성**: PyTorch 안정판 Linux pip wheel 은 `cu118 / cu126 / cu128` 만 제공하며 **`cu130` (CUDA 13.x) wheel 은 없음** (pytorch.org/get-started 실측 2026-05-29). PyTorch 를 쓰는 한 13.x 는 선택 불가.
+- ADR-008 (host venv 폐기) 로 application Python (PyTorch / ultralytics / cv2) 의 home 이 host → Phase 4 컨테이너로 이동. host colcon 빌드 패키지 (robot_control / od_msg / doosan-robot2) 중 CUDA 를 import 하는 것은 없다.
+
+**Decision**:
+- **CUDA 메이저 = 12-8 (PyTorch `cu128`)**. 12-6 대비 더 최신 안정 라인 — 향후 GPU/기능 커버리지와 호환성 여유. 12-6 도 가용하나 12-8 채택 (사용자 결정 2026-05-29).
+- **host 에는 CUDA toolkit / PyTorch 를 설치하지 않는다**. host 에 CUDA 소비자가 없고 (cobot2_ws host 패키지는 CUDA 무관), 컨테이너의 PyTorch wheel 은 자체 CUDA 런타임을 번들하고 host 의 **드라이버**만 nvidia-container-toolkit 경유로 사용한다. host CUDA toolkit 은 dead weight.
+- **CUDA 12-8 + PyTorch cu128 은 Phase 4 yolo 컨테이너 base image 에서만** 설치/핀. numpy<2 재핀 (ADR-002) 도 그 Dockerfile 마지막 layer.
+- M3 (a02) 의 CUDA/PyTorch host 설치 단계 (humble 의 `cuda-pytorch-install.sh`) 는 **마이그레이션하지 않고 폐기** — Phase 4 로 이관.
+
+**Consequences**:
+- **M3 unblock**: ADR-006 대기로 막혀 있던 a02 가 CUDA 무관 작업 (DSR + RealSense) 으로 재정의되어 즉시 진행 가능.
+- `resources/config.sh` 의 `CUDA_VERSION` 은 host 설치에 쓰이지 않음 — Phase 4 Dockerfile 이 참조할 값 (`12-8`) 으로 의미가 바뀜. host 스크립트에서 이 변수를 읽는 코드 없음.
+- **검증 기준 (ADR-008 정합)**: host `python3 -c "import torch"` → ImportError 가 의도된 정상 결과. `torch.cuda.is_available()` 은 컨테이너 안에서만 True.
+- COMPATIBILITY.md 의 CUDA/PyTorch 행을 "host 미설치 / Phase 4 컨테이너 / 12-8·cu128" 로 갱신.
+
+**Reopen 조건**:
+- PyTorch 가 cu130 wheel 을 정식 제공하기 시작하고 13.x 의 이점이 분명해지면 재검토.
+- host 에서 직접 CUDA 연산 (컨테이너 밖 nvcc 빌드) 이 필요한 패키지가 등장하면 host toolkit 설치 재검토.
+- ultralytics 가 요구하는 PyTorch 최소 버전이 cu128 비호환으로 바뀌면 메이저 재결정.
+
+---
+
 ### ADR-007: Docker image publish & secret hygiene — Phase 4 컨테이너 배포 전략
 
 **Date**: 2026-05-27
