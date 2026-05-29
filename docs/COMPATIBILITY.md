@@ -96,6 +96,8 @@
 | Doosan DSR | `doosan-robotics/doosan-robot2 -b jazzy` (commit 816ecb5d), emulator `doosanrobot/dsr_emulator:3.0.1` 핀 | `resources/dsr-project-install.sh` | clone 위치 `~/cobot2_ws/src/`. host 빌드 = doosan-robot2 + `robot_control` + `od_msg` (symlink). DSR 전용 apt: `velocity-controllers`, `eigen3-cmake-module` (나머지는 rosdep 자동). 실측 2026-05-29: doosan-robot2 30개 패키지 colcon 빌드 성공, emulator 이미지 1.83GB |
 | librealsense2 SDK | `librealsense2-{dkms,utils,dev,dbg}` (RealSense AI apt repo, noble 정식) | `resources/realsense-sdk-install.sh` | **humble 의 "22.04 공급 중단 → ROS vendored 폴백" 우회 불필요**. **2025-11 Intel→RealSense AI 분사**로 도메인/키 교체: repo `librealsense.realsenseai.com/Debian/apt-repo` (구 `librealsense.intel.com`), 서명 키 `…FB0B24895113F120` (2025-11 신 키, 구 intel `librealsense.pgp` 의 2018 키로는 NO_PUBKEY). keyring `/etc/apt/keyrings/librealsenseai.gpg` (`.asc` → dearmor). DKMS 빌드에 `linux-headers-$(uname -r)` 동반. 실측 2026-05-29: `librealsense2-utils 2.58.1-0~realsense.19174`, `librealsense2-dkms 1.3.31`, `ros-jazzy-realsense2-camera 4.57.7` |
 | realsense-ros (래퍼) | `ros-jazzy-realsense2-camera` + `-description` (실측 candidate 4.57.7) | `resources/realsense-ros-install.sh` | camera 가 realsense2-camera-msgs 동반. 원본 a05 의 `ros-humble-realsense2-*` glob 대신 명시 패키지 |
+| VS Code | `code` (Microsoft apt repo, codename 무관 stable main) | `resources/vscode-install.sh` | 일회성 .deb 다운로드 → apt repo + keyring `/etc/apt/keyrings/packages.microsoft.gpg` (서명 키 `…EB3E94ADBE1229CF`). apt 관리 업데이트. `code` GUI 자동 실행 제거. 실측 버전: _(a03 실행 후 기입)_ |
+| Voice (langchain/openai/sounddevice/numpy) | **host 미설치** — 음성 컨테이너 전용 | `resources/voice-env-check.sh` | host pip install 전부 제거. a06 은 `.env`·`OPENAI_API_KEY` 점검 + Docker Hub 로그인 안내만. 실제 패키지는 voice 컨테이너 Dockerfile (numpy<2 재핀 포함) |
 
 ---
 
