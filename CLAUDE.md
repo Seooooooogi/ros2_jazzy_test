@@ -34,7 +34,7 @@ ROS2 Humble installer → ROS2 Jazzy installer 마이그레이션. Ubuntu + NVID
 ## Quick Ref
 
 - Entry: `bash a01-prerequirements.sh` (첫 단계 — NVIDIA + Docker + ROS2 설치 후 reboot)
-- 순차 실행: `a01 → reboot → a02 → a03 → a04 → a05 → a06`
+- 순차 실행: `a01 → reboot → a02 → a03 → a06` (RealSense 는 a02 단계에 흡수됨; humble 원본 a04/a05 는 `backup/` 보존)
 - 정적 검증: `shellcheck *.sh resources/*.sh`
 - Compatibility matrix: `docs/COMPATIBILITY.md` (Phase 1 산출물)
 - 트러블슈팅 카탈로그: `docs/TROUBLESHOOTING.md` (Phase 3 산출물)

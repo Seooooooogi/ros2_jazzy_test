@@ -15,7 +15,7 @@
 | ROS2 | humble | `resources/ros2-humble-desktop-main.sh:12` (`CHOOSE_ROS_DISTRO=humble`) | `/opt/ros/humble/` 에 설치 |
 | ros-humble-* (DSR) | 15 패키지 | `resources/dsr-project-install.sh:9-23` | xacro, rclpy, std-msgs, joint-state-publisher-gui, launch-ros, rosgraph-msgs, ament-cmake, ament-pep257, ament-index-cpp, ament-lint-common, moveit-msgs, velocity-controllers, yaml-cpp-vendor, eigen3-cmake-module, ros2launch |
 | ros-humble-* (ROS install) | 약 17 패키지 | `resources/ros2-install.sh:16,19-22,29` | control-msgs, realtime-tools, ros2-control, ros2-controllers, gazebo-msgs/gazebo-ros-pkgs, ros-gz-sim 등 |
-| ros-humble-realsense2-* | apt 글로브 | `a05-realsense02.sh:1` | |
+| ros-humble-realsense2-* | apt 글로브 | `backup/a05-realsense02.sh:1` | |
 | NVIDIA driver | 의도 570 → **실측 580.159.03** | `resources/nvidia-driver-install.sh` (`nvidia-driver-570 build-essential dkms`); 실측 출처: 노션 검증본 2026-05-22 | `apt upgrade -y` 가 핀 풀어 자동 상향. driver 측 CUDA 지원 13.0. reboot 필요 (a01 에서 처리). Phase 2: `apt-mark hold` 필요 |
 | Docker CE | 의도 `5:23.0.6-1~ubuntu.22.04~jammy` → **실측 29.5.0** | `resources/docker-install.sh:22`; 실측 출처: 노션 검증본 | **jammy-pin** + `apt upgrade` 로 메이저 6단계 자동 점프. Phase 2: `apt-mark hold docker-ce docker-ce-cli` |
 | Docker Compose Plugin | 5.1.3 (실측) | apt 의존성으로 동반 설치 | 스크립트가 명시적으로 핀 안 함 |
@@ -30,7 +30,7 @@
 | PyTorch CUDA pip wheels (cu12 시리즈) | `nvidia-cublas-cu12 12.4.5.8`, `nvidia-cuda-cupti/nvrtc/runtime-cu12 12.4.127`, `nvidia-cufft 11.2.1.3`, `nvidia-curand 10.3.5.147`, `nvidia-cusolver 11.6.1.9`, `nvidia-cusparse 12.3.1.170`, `nvidia-cusparselt 0.6.2`, `nvidia-nccl-cu12 2.21.5`, `nvidia-nvjitlink/nvtx-cu12 12.4.127` (총 13개) | pip transitive (torch 2.6.0+cu124 의존, 노션 pip list 실측) | 시스템 CUDA toolkit 과는 별도 — torch wheel 안에 동봉된 GPU 런타임. CUDA 메이저 12.4 으로 시스템 설치와 일치. Phase 2-6 분기 영향 큼 (Noble 의 torch wheel 이 어떤 cu 시리즈 끌어오는지 검증 필요) |
 | Doosan DSR | `doosan-robotics/doosan-robot2 -b humble`, commit **ec92425** (2026-03-24, 노션), **33개 패키지 colcon 빌드 성공** | `resources/dsr-project-install.sh:4` | clone 위치 `~/cobot_ws/src/`. 주요 패키지: dsr-bringup2 0.1.2, dsr-msgs2 1.1.0, dsr-mujoco 0.1.0, dsr-visualservoing 0.0.0, dsr-example, dsr-tests. 지원 모델 10종 (A0509/A0912/E0509/H2017/H2515/M0609/M0617/M1013/M1509/P3020) |
 | DSR Emulator (Docker image) | `doosanrobot/dsr_emulator:3.0.1` | upstream `install_emulator.sh:3` (`emulator_version="3.0.1"`), 본 레포 외부 자산 | a02 의 `dsr-project-install.sh:35 (./install_emulator.sh)` 가 `docker pull` 수행. humble/jazzy 브랜치 모두 동일 3.0.1, distro-agnostic |
-| RealSense SDK | **의도**: apt `librealsense2-{dkms,utils,dev,dbg}`<br>**실측**: 위 4개 패키지 22.04 공식 공급 중단으로 설치 실패. `ros-humble-librealsense2` vendored 패키지 (SDK 2.57.7) 로 대체 동작 | `a04-realsense01.sh:11-15`; 실측 출처: 노션 검증본 | **Noble (24.04) 전환 시 Intel 공식 librealsense2 정식 지원 복귀 예정 → Phase 2-9 의 큰 호재**. 검증 카메라: D435I (firmware 5.17.0.10, USB 3.0) |
+| RealSense SDK | **의도**: apt `librealsense2-{dkms,utils,dev,dbg}`<br>**실측**: 위 4개 패키지 22.04 공식 공급 중단으로 설치 실패. `ros-humble-librealsense2` vendored 패키지 (SDK 2.57.7) 로 대체 동작 | `backup/a04-realsense01.sh:11-15`; 실측 출처: 노션 검증본 | **Noble (24.04) 전환 시 Intel 공식 librealsense2 정식 지원 복귀 예정 → Phase 2-9 의 큰 호재**. 검증 카메라: D435I (firmware 5.17.0.10, USB 3.0) |
 | realsense-ros (래퍼) | 4.57.7 | apt `ros-humble-realsense2-*` | a05 단계 |
 | langchain | 0.3.27 | `a06-Voice.sh:1` | ✅ 의도 일치 (노션) |
 | langchain-core | 0.3.86 (transitive) | pip 의존성 | langchain 0.3.27 이 끌어옴 |
