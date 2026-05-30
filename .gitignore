@@ -43,3 +43,10 @@ Thumbs.db
 # claude-migration: 세션 transcript(.jsonl) 등 민감 데이터 포함. corecode: 별도 튜토리얼.
 claude-migration/
 corecode/
+
+# 이 브랜치(main)는 설치 스크립트 전용. 개발 도구 / 내부 문서 / 컨테이너 빌드는
+# 개발 브랜치(feat/application-shell)에서만 추적한다. 여기서는 작업트리에 남겨두되 추적 제외.
+.claude/
+tasks/
+docs/
+containers/
