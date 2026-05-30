@@ -6,7 +6,8 @@
 ## Identity (요약)
 - **What**: ROS2 Humble installer → ROS2 Jazzy installer 마이그레이션. bash 셋업 스크립트 모음.
 - **Stack**: Ubuntu 24.04 (noble) + ROS2 Jazzy + NVIDIA + Docker + CUDA + PyTorch + Doosan DSR + RealSense + Voice(LangChain/OpenAI).
-- **Phase 진행 상태**: Phase 1 + Phase 2 (M1~M5) 완료. **Phase 4 컨테이너 "빌드 게이트" 완료** (2026-05-30, host 무관 빌드+개별검증). yolo/voice 이미지 실제 빌드+import smoke PASS → `feat/application-containers` 브랜치 origin push. **다음 = Phase 3 host e2e 실행 검증 (Phase 4 통합 acceptance 의 선결) + feat 브랜치 처리 결정.** 상세는 `session-handoff-LATEST.md`.
+- **Phase 진행 상태**: Phase 1 + Phase 2 (M1~M5) 완료. **Phase 4 컨테이너 "빌드 게이트" 완료** (2026-05-30, host 무관 빌드+개별검증). yolo/voice 이미지 실제 빌드+import smoke PASS. **다음 = Phase 3 host e2e 실행 검증 (Phase 4 통합 acceptance 의 선결).** 상세는 `session-handoff-LATEST.md`.
+- **브랜치 토폴로지 (2026-05-30 재구성)**: `main` = 설치 스크립트 전용(`.claude/ tasks/ docs/ containers/` 추적 제외, 디스크엔 보존). `feat/application-shell` = 현 작업(dev) superset 브랜치(4개 폴더+컨테이너 전부). `feat/application-containers` = 빌드게이트 스냅샷 보존. 셋 다 origin. **작업은 `feat/application-shell` 에서.** main↔dev 병합 시 `.gitignore` 함정 주의 (handoff Remaining Issues).
 
 ## Hard Rules (CLAUDE.md 참조 — 절대 약화 금지)
 1. ROS distro 단일 진실 소스 (`${ROS_DISTRO}`)
@@ -53,8 +54,8 @@
 
 ## 현재 세션 컨텍스트
 - Phase 4 빌드게이트 완료 (2026-05-30): yolo/voice 멀티스테이지 Dockerfile + `containers/{entrypoint,docker-compose.yml,build-all.sh}` + 루트 `.dockerignore`, cobot2_ws 빌드버그 4건 수정. 이미지 `local/ros2-jazzy-{yolo:13.6GB,voice:1.89GB}:dev` 실제 빌드+smoke PASS. 3 커밋 → `feat/application-containers` origin push (pre-push 파이프라인 통과). main 은 origin/main 유지.
-- 빌드 = `bash containers/build-all.sh` (compose 플러그인 host 미설치 → docker build 직접). `gh` CLI 설치+인증(ssh) 완료. feature branch workflow 사용 시작.
-- 다음 행동: feat 브랜치 처리(PR/merge/iterate) + Phase 3 host e2e 검증 (Phase 4 통합 acceptance 의 선결, L-004). 자세한 진입점은 `session-handoff-LATEST.md`.
+- 빌드 = `bash containers/build-all.sh` (compose 플러그인 host 미설치 → docker build 직접). `gh` CLI 설치+인증(ssh) 완료.
+- 다음 행동: Phase 3 host e2e 검증 (Phase 4 통합 acceptance 의 선결, L-004). 작업 브랜치 = `feat/application-shell`. 자세한 진입점은 `session-handoff-LATEST.md`.
 - 미완료 task: Phase 3 (3-1 TROUBLESHOOTING / 3-2 e2e / 3-3 재개 / 3-4 ADR), Phase 4 통합(step 5: GPU/service/od_msg hash/카메라·마이크 passthrough/publish). 통합 소스 이슈: yolov8n_tools_0122.pt 가 object_detection/resource 부재, voice device_index=10 하드코딩. ROADMAP Phase2 체크박스 reconcile 미완.
 
 ## 도메인 사실 (Phase 2 작업 시 전제)

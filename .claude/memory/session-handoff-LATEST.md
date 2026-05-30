@@ -4,23 +4,23 @@
 > Forward-looking only — 본 세션에서 한 일이 아니라 다음 세션이 할 일.
 
 ## Last updated
-2026-05-30 — **Phase 4 컨테이너 "빌드 게이트" 완료** (host 무관 빌드 + 개별 검증). yolo/voice 멀티스테이지 Dockerfile + `containers/{entrypoint.sh, docker-compose.yml, build-all.sh}` + 루트 `.dockerignore` 신설, `cobot2_ws` 빌드버그 4건 수정. 두 이미지 실제 빌드 + import smoke + secret 위생 PASS (`local/ros2-jazzy-{yolo:13.6GB, voice:1.89GB}:dev`). 결정: **ADR-009** (base `ros:jazzy-ros-base-noble` 단일 / network host / od_msg 원본보존+Dockerfile 우회 / 빌드게이트 경계). 3 논리 커밋 → **feature 브랜치 `feat/application-containers` 로 origin push** (pre-push 파이프라인 통과, main 은 origin/main 그대로 유지). 빌드는 `bash containers/build-all.sh` (compose 플러그인 host 미설치 → docker build 직접).
+2026-05-30 (2) — **브랜치 재구성**: main = 설치 스크립트 전용(`.claude/ tasks/ docs/ containers/` 추적 제외), dev = `feat/application-shell`(신규, superset, 현 작업 브랜치), `feat/application-containers` 보존. 셋 다 origin push 완료. 상세 = 아래 "git 운영 / 브랜치 토폴로지".
+2026-05-30 (1) — **Phase 4 컨테이너 "빌드 게이트" 완료** (host 무관 빌드 + 개별 검증). yolo/voice 멀티스테이지 Dockerfile + `containers/{entrypoint.sh, docker-compose.yml, build-all.sh}` + 루트 `.dockerignore` 신설, `cobot2_ws` 빌드버그 4건 수정. 두 이미지 실제 빌드 + import smoke + secret 위생 PASS (`local/ros2-jazzy-{yolo:13.6GB, voice:1.89GB}:dev`). 결정: **ADR-009** (base `ros:jazzy-ros-base-noble` 단일 / network host / od_msg 원본보존+Dockerfile 우회 / 빌드게이트 경계). 3 논리 커밋 → **feature 브랜치 `feat/application-containers` 로 origin push** (pre-push 파이프라인 통과, main 은 origin/main 그대로 유지). 빌드는 `bash containers/build-all.sh` (compose 플러그인 host 미설치 → docker build 직접).
 > 이전(2026-05-29): GitHub private 동기화로 Phase 2 (M1~M5) 구현 완료, ADR-006/011/012.
 
 ---
 
 ## Next Actions (priority order)
 
-1. **`feat/application-containers` 처리 결정** — 사용자가 의도적으로 main 을 비켜 push. PR 생성(`gh pr create`) / main merge / 계속 iterate 중 선택. PR 링크: `https://github.com/Seooooooogi/ros2_jazzy_test/pull/new/feat/application-containers`.
-2. **Phase 3 — host installer end-to-end 실제 실행 검증** (ROADMAP 3-2, 3-3): `bash install.sh` 전체 `[n/11]` 실행 (reboot 포함), 중단-재개(`--status`/`--reset`) 검증. acceptance = cobot2_ws 실제 동작 (L-004, 이 머신이 타깃). **Phase 4 통합(step 5)의 선결** — 컨테이너 acceptance 가 host 의 a01/a02 동작에 의존.
-3. **Phase 4 통합 (step 5, host e2e 이후)** = 진짜 Phase 4 PASS. 빌드게이트에서 미룬 것 전부:
+1. **Phase 3 — host installer end-to-end 실제 실행 검증** (ROADMAP 3-2, 3-3): `bash install.sh` 전체 `[n/11]` 실행 (reboot 포함), 중단-재개(`--status`/`--reset`) 검증. acceptance = cobot2_ws 실제 동작 (L-004, 이 머신이 타깃). **Phase 4 통합(step 5)의 선결** — 컨테이너 acceptance 가 host 의 a01/a02 동작에 의존.
+2. **Phase 4 통합 (step 5, host e2e 이후)** = 진짜 Phase 4 PASS. 빌드게이트에서 미룬 것 전부:
    - GPU 런타임: `docker run --gpus all <yolo> python3 -c "import torch; assert torch.cuda.is_available()"` (nvidia-container-toolkit + host driver 필요)
    - service 왕복: host `robot_control`(client) ↔ 컨테이너 `/get_3d_position`(od_msg/SrvDepthPosition) + `/get_keyword`(std_srvs/Trigger). network_mode:host DDS.
    - **od_msg type hash 정합**: host(robot_control)·yolo 가 동일 `cobot2_ws/od_msg` 빌드해야 일치. 불일치 시 `wait_for_service` 무한 차단.
    - 카메라 USB passthrough (`/dev/bus/usb`) + 마이크 PipeWire socket mount (`${XDG_RUNTIME_DIR}/pulse`). compose 에 주석으로 placeholder 있음 → 활성화.
    - publish: `docker login` + tag(semver/SHA) + push (ADR-007). `.env` 에 DOCKERHUB_USER/TOKEN.
-4. **Phase 3 산출물 — `docs/TROUBLESHOOTING.md`** (3-1): L-004~L-008 의 실행 버그 카탈로그화.
-5. **보류된 MINOR** (이번 리뷰): smoke assertion `int(major)==1` 강건화, cobot2_ws 의 ROS2 `print()`→`get_logger()`(기존 코드), build-all `--help`, pip lock 파일(transitive 완전 잠금).
+3. **Phase 3 산출물 — `docs/TROUBLESHOOTING.md`** (3-1): L-004~L-008 의 실행 버그 카탈로그화.
+4. **보류된 MINOR** (이번 리뷰): smoke assertion `int(major)==1` 강건화, cobot2_ws 의 ROS2 `print()`→`get_logger()`(기존 코드), build-all `--help`, pip lock 파일(transitive 완전 잠금).
 
 ---
 
@@ -33,7 +33,6 @@
 
 ## Open Decisions
 
-- **`feat/application-containers` disposition**: PR / merge / iterate (사용자 결정 대기).
 - **Phase 4 통합 세부** (step 5 진입 시): 마이크 `device_index=10` 하드코딩(MicController/get_keyword) → 컨테이너에서 동적 매핑/PipeWire 필요. 카메라 USB passthrough 구체.
 - ~~Phase 4 디자인 3건 (base/network/install.sh 자동호출)~~ → **전부 해결**: (a) base = `ros:jazzy-ros-base-noble` 단일 (ADR-009), (b) network = host (ADR-009), (c) install.sh 자동호출 안 함 — build-all/compose 분리 (ADR-007/ROADMAP 4-6).
 
@@ -46,6 +45,7 @@
   - `object_detection` 이 `realsense2_camera` 노드를 직접 안 띄움 (launch 없음, `/camera/camera/*` subscribe 만). 컨테이너에서 카메라 노드 별도 기동 필요.
 - **ROADMAP 체크박스 미반영 (Phase 2 분)**: 2-1/2-2/2-3/2-4/2-5/2-7/2-11~2-15 가 `[ ]` 인데 작업 완료. Phase 3 진입 전 reconcile (활성 버그 아님).
 - yolo 이미지 13.6GB — nvidia CUDA 런타임 ≈4.2GB 가 floor (GPU torch 불가피). 안전 슬림 한계 도달.
+- **.gitignore 병합 함정 (브랜치 재구성 2026-05-30 부작용)**: main 의 `.gitignore` 가 `.claude/ tasks/ docs/ containers/` 를 ignore. main 을 dev 브랜치로 merge 하면 이 ignore 규칙이 전파돼 dev 에서 그 폴더의 **신규 파일이 silently 추적 누락**된다 (기존 추적 파일은 유지). main→dev merge 시 `.gitignore` 충돌을 dev 쪽 유지로 해소할 것. 역방향(dev→main)은 그 폴더가 다시 추적될 수 있으니 merge 대신 cherry-pick 권장.
 - 활성 런타임 버그 없음.
 
 ---
@@ -58,8 +58,12 @@
 - 컨테이너 pip 의존 핀: numpy<2(마지막 재핀), opencv-python<4.10(numpy>=2 메타 충돌 회피), ultralytics<9, langchain<2/openai<3. 실측 버전표 = `docs/COMPATIBILITY.md`.
 - **빌드게이트 ≠ Phase 4 PASS**: 빌드+import smoke+secret 까지만. GPU/service/hash/passthrough/publish 는 host e2e 이후 (위 Next Action 3).
 
-### git 운영 (2026-05-30)
-- **feature branch workflow 사용 시작**: `feat/application-containers` (origin push 됨, upstream 설정). main 은 origin/main(dc8fa19) 유지 — 사용자가 작업을 main 직접 반영 대신 브랜치로 분리 선호.
+### git 운영 / 브랜치 토폴로지 (2026-05-30 재구성)
+- **3-브랜치 구조 확정**:
+  - `main` (origin/main = 0582d17): **설치 스크립트 전용**. `.claude/ tasks/ docs/ containers/` 를 추적 제외(`git rm --cached` + `.gitignore`). 파일은 디스크/히스토리에 보존(비파괴). 추적: a01~a04, install.sh, resources/, cobot2_ws/, CLAUDE.md, .env.example, 루트 .dockerignore.
+  - `feat/application-shell` (origin, upstream 설정): **현 작업(dev) 브랜치 = superset**. 위 4개 폴더 + 컨테이너 작업 전부 보유. 세션 메모리/문서/노트는 여기서만 추적·커밋.
+  - `feat/application-containers` (origin, e3b384a): 변경 없이 보존 (컨테이너 빌드게이트 스냅샷).
+- 작업은 `feat/application-shell` 에서. 쉘 스크립트 변경을 main 에 반영할 때만 그 브랜치로 전환. 병합 함정은 Remaining Issues 참조.
 - `gh` CLI 설치 + 인증 완료 (Seooooooogi, ssh). `origin` = `git@github.com:Seooooooogi/ros2_jazzy_test.git` (private, ADR-012).
 - 커밋: 사용자 명의만, AI attribution 금지 (하네스 기본 Co-Authored-By trailer 미적용). 메시지 외부 친화 (내부 축약어 미사용).
 - 백업 브랜치 `backup/pre-github-sync-2026-05-29` 존재 (검토 후 삭제 가능).
@@ -76,5 +80,5 @@
 ---
 
 ## Current Focus
-- **Top priority**: `feat/application-containers` 처리 결정 + Phase 3 host e2e 검증 (Phase 4 통합 acceptance 의 선결 — torch.cuda/service/hash 전부 host 의존).
+- **Top priority**: Phase 3 host e2e 검증 (Phase 4 통합 acceptance 의 선결 — torch.cuda/service/hash 전부 host 의존). 작업 브랜치 = `feat/application-shell`.
 - **Friction**: Phase 4 PASS 는 host e2e 없이는 측정 불가. 통합 소스 이슈(가중치 위치, device_index, 카메라 노드 기동) 가 step 5 에서 추가로 드러날 것.
