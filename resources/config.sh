@@ -33,9 +33,11 @@ export UBUNTU_CODENAME=noble
 # 하드핀을 기본값으로 두지 않는 이유: 추후 결정할 CUDA 메이저가 요구하는 최소
 # 드라이버를 자동으로 만족시키기 위함.
 : "${NVIDIA_DRIVER_VERSION:=}"
-# 추후 결정 (Noble repo 에 12-4 부재, 12-6/12-8/13-x 가용).
-# 빈 문자열 = 미결정. 자식 스크립트가 사용 시 비어 있으면 에러.
-: "${CUDA_VERSION:=}"
+# CUDA 메이저 = 12.8 (PyTorch cu128). host 에는 설치하지 않는다 (host 콜콘 패키지에
+# CUDA 소비자 없음) — 이 값을 읽는 유일한 소비자는 Phase 4 yolo 컨테이너 Dockerfile 의
+# build-arg 다. pip index 는 cu${CUDA_VERSION//./} 로 cu128 을 구성.
+# Noble apt repo 에 12-4 부재 + PyTorch wheel 가용성 (cu118/cu126/cu128) 으로 12.8 선택.
+: "${CUDA_VERSION:=12.8}"
 
 # --- Docker --------------------------------------------------------------
 # 빈 문자열 = docker-install.sh 가 noble 용 latest stable 설치 후 apt-mark hold.

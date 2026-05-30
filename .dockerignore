@@ -1,0 +1,23 @@
+# Docker build context = repo 루트 (containers/build-all.sh 가 루트를 context 로 빌드).
+# 이미지에 필요한 것만 화이트리스트로 재포함하고, 나머지는 전부 제외.
+# (이 파일은 docker build 에만 영향 — git 추적/.gitignore 와 무관.)
+*
+
+# application 소스 (ROS2 패키지) + 컨테이너 보조 파일 (entrypoint 등).
+!cobot2_ws
+!containers
+
+# 재포함 경로 안에서도 빌드 산출물 / 모델 가중치 / secret 은 다시 제외 (마지막 매칭 우선).
+**/build
+**/install
+**/log
+**/__pycache__
+**/*.pyc
+**/.ipynb_checkpoints
+**/*.pt
+**/.env
+**/.env.*
+**/*.key
+**/*.pem
+**/id_rsa*
+secrets/

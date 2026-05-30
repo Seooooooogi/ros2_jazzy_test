@@ -1,0 +1,62 @@
+# Phase 4 application 컨테이너 (yolo / voice) — 런타임(up) 정의.
+#
+# 빌드 게이트(개별 검증)는 containers/build-all.sh 가 `docker build` 로 직접 수행한다.
+# 이 compose 파일은 host e2e 검증 이후의 런타임 단계용이다 (GPU / 마이크 / 카메라 passthrough).
+# install.sh 는 이 파일을 자동 호출하지 않는다 — host(설치) / application(컨테이너) 책임 분리.
+#
+# 사용 (host 검증 이후):
+#   cp .env.example .env  # OPENAI_API_KEY / DOCKERHUB_USER / *_TAG 채우기
+#   docker compose -f containers/docker-compose.yml up -d
+# 에뮬레이터까지: docker compose --profile dev up -d
+#
+# compose 로 직접 build 할 때는 distro 단일 진실 소스(config.sh)를 환경에 올린 뒤 실행:
+#   set -a; source resources/config.sh; set +a; docker compose ... build
+# (ROS_DISTRO 미설정 시 아래 build args 의 :-jazzy fallback 적용. 권장 빌드 경로는 build-all.sh.)
+
+services:
+  yolo-detection:
+    image: docker.io/${DOCKERHUB_USER:-local}/ros2-jazzy-yolo:${YOLO_TAG:-dev}
+    build:
+      context: ..
+      dockerfile: containers/yolo-detection/Dockerfile
+      args:
+        ROS_DISTRO: ${ROS_DISTRO:-jazzy}
+        CUDA_VERSION: ${CUDA_VERSION:-12.8}
+    network_mode: host          # DDS discovery — host robot_control(client) ↔ 컨테이너 service
+    restart: unless-stopped
+    environment:
+      - ROS_DOMAIN_ID=${ROS_DOMAIN_ID:-0}
+    deploy:                     # GPU 예약 — 런타임 필드(빌드엔 무영향). nvidia-container-toolkit 필요(host).
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    # --- 후속(통합) 단계에서 활성화 ---
+    # devices:
+    #   - /dev/bus/usb:/dev/bus/usb          # RealSense USB passthrough
+    # volumes:
+    #   - ./models/yolov8n_tools_0122.pt:/ws/install/share/object_detection/resource/yolov8n_tools_0122.pt:ro
+
+  voice-processing:
+    image: docker.io/${DOCKERHUB_USER:-local}/ros2-jazzy-voice:${VOICE_TAG:-dev}
+    build:
+      context: ..
+      dockerfile: containers/voice-processing/Dockerfile
+      args:
+        ROS_DISTRO: ${ROS_DISTRO:-jazzy}
+    network_mode: host
+    restart: unless-stopped
+    env_file: ../.env           # OPENAI_API_KEY 런타임 주입 (이미지에 박지 않음)
+    environment:
+      - ROS_DOMAIN_ID=${ROS_DOMAIN_ID:-0}
+    # --- 후속(통합) 단계에서 활성화 ---
+    # volumes:
+    #   - ${XDG_RUNTIME_DIR}/pulse:${XDG_RUNTIME_DIR}/pulse:ro   # PipeWire/PulseAudio socket
+
+  dsr-emulator:                 # 실기 우선 — 개발/테스트 시에만 명시적 활성화
+    image: doosanrobot/dsr_emulator:3.0.1
+    profiles: [dev]
+    network_mode: host
+    restart: unless-stopped
