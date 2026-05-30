@@ -76,6 +76,15 @@
 
 ---
 
+## L-008: Dockerfile `RUN` 의 `set -u` + ROS `setup.bash` source → unbound variable 빌드 실패
+
+- **Symptom**: 컨테이너 Dockerfile 이 `SHELL ["/bin/bash","-eu","-o","pipefail","-c"]` 로 fail-fast 를 걸어둔 상태에서 `RUN source /opt/ros/${ROS_DISTRO}/setup.bash && colcon build` 실행 시 `/opt/ros/jazzy/setup.bash: line 8: AMENT_TRACE_SETUP_FILES: unbound variable` 로 죽고 빌드가 exit 127. rosdep/apt 등 직전 단계는 모두 성공해서 원인 위치 혼동.
+- **Why it happened**: ROS2 의 `setup.bash`(및 `local_setup.bash`)는 내부에서 `AMENT_TRACE_SETUP_FILES`, `COLCON_*` 같은 변수를 set 여부 확인 없이 참조한다. `set -u`(nounset) 하에서 미정의 변수 참조는 즉시 에러 → source 실패. entrypoint 는 이미 `set +u` 로 감쌌지만(`containers/entrypoint.sh`), Dockerfile 의 `RUN` 은 SHELL 의 `-u` 를 그대로 상속해서 같은 함정에 빠진다.
+- **Correction**: ROS `setup.bash` 를 source 하는 `RUN` 은 `set +u` 로 감싼다 — `RUN set +u && source "/opt/ros/${ROS_DISTRO}/setup.bash" && colcon build`. `-e`/`-o pipefail` 은 유지(빌드 실패 여전히 catch), `-u` 만 그 RUN 한정 해제(각 RUN 은 새 shell 이라 영향 국소). 정적(shellcheck/`bash -n`)으로는 안 잡힘 — 실제 `docker build` 로만 드러남(L-004 와 같은 결: 정적≠동작).
+- **Trigger**: ROS2 컨테이너 Dockerfile 에서 `SHELL [... -u ...]` + `RUN ... source .../setup.bash`. colcon overlay source. 다음 distro(kilted/lyrical) 컨테이너 작업, 새 application 컨테이너 추가 시.
+
+---
+
 ## 예상 후보 (발생 시 정식 항목으로 승격)
 
 본 프로젝트가 Phase 2 마이그레이션 단계에서 실제 작업이 진행되면, 발견되는 반복 실수를 이 파일에 누적.
