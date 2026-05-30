@@ -118,7 +118,9 @@ ROS2 Humble installer → ROS2 Jazzy installer 마이그레이션. 1–4주, sol
 ```
 > topic publisher 가 아니라 **service server** 다 — yolo/voice 는 robot_control 의 요청에 응답하는 구조. RealSense 카메라는 yolo 컨테이너가 USB passthrough 로 직접 열고 자기 안에서 처리한다 (host realsense 노드 아님). udev rule·커널 모듈만 host 에 둔다.
 
-- [ ] 4-1. `containers/yolo-detection/Dockerfile` + 빌드 스크립트 (cobot2_ws `object_detection` + `realsense2_camera`)
+**빌드 게이트 진행 상태 (2026-05-30, ADR-009)**: 컨테이너 "빌드 + 개별(isolated) 검증" 단계 **구현 완료** — yolo/voice multi-stage Dockerfile(base `ros:jazzy-ros-base-noble`), `containers/{entrypoint.sh, docker-compose.yml, build-all.sh}`, 루트 `.dockerignore`, `cobot2_ws` 빌드 버그 수정(object_detection/voice_processing — od_msg 는 원본 보존 + Dockerfile 우회), `config.sh` CUDA_VERSION=12.8, `.env.example` 컨테이너 변수. **acceptance = 빌드 게이트(이미지 빌드 + 컨테이너 내부 import smoke + secret 위생)까지만.** GPU 런타임 / 카메라·마이크 passthrough / service 왕복 / od_msg hash 정합 / Docker Hub publish 는 host e2e(Phase 3) 이후 단계 — 아래 4-1~4-7 의 **빌드 부분만 충족, 통합·런타임 부분은 미충족**(빌드 게이트 통과를 Phase 4 PASS 로 격상 금지, lessons L-004/L-007). 타깃 머신에 compose 플러그인 부재라 build-all.sh 는 `docker build` 직접 사용.
+
+- [ ] 4-1. `containers/yolo-detection/Dockerfile` + 빌드 스크립트 (cobot2_ws `object_detection` + `realsense2_camera`) — *빌드 게이트 부분 완료(2026-05-30): Dockerfile + multi-stage 빌드 + import smoke. 미충족: GPU/카메라 passthrough, 모델 가중치 mount, service 왕복.*
   - Base: `ros:jazzy-ros-base-noble` 명시 핀 (Hard Rule #6)
   - **역할 = service server** `/get_3d_position` (`od_msg/SrvDepthPosition`). client 는 host 의 `robot_control` 노드. topic publish 아님 — request/response 구조.
   - **카메라 = 컨테이너 자체 포함** (구조 결정 2026-05-28, 기존 host-side 안에서 변경): `realsense2_camera` 노드를 yolo 컨테이너 안에서 실행 → USB 직접 열고 `/camera/camera/*` 를 컨테이너 안에서 publish, `object_detection` 의 ImgNode 가 같은 topic subscribe. 근거 = workflow 단순화 + 카메라/추론 한 이미지로 자기완결 배포.
@@ -127,7 +129,7 @@ ROS2 Humble installer → ROS2 Jazzy installer 마이그레이션. 1–4주, sol
   - **GPU 패스스루**: NVIDIA Container Toolkit 의존 (host a01 에서 driver 설치되어 있다는 전제)
   - 모델 가중치 / 설정은 volume mount (image 안에 안 박음)
   - **`od_msg` 빌드 정합성**: yolo 컨테이너 + host(robot_control) + voice 가 동일 `od_msg` 정의를 빌드해야 service type hash 일치. 단일 source = `cobot2_ws/od_msg`
-- [ ] 4-2. `containers/voice-processing/Dockerfile` + 빌드 스크립트 (cobot2_ws `voice_processing` 패키지)
+- [ ] 4-2. `containers/voice-processing/Dockerfile` + 빌드 스크립트 (cobot2_ws `voice_processing` 패키지) — *빌드 게이트 부분 완료(2026-05-30): Dockerfile + multi-stage 빌드 + import smoke. 미충족: 마이크 PipeWire passthrough, `.env` 런타임 주입 동작, service 왕복.*
   - Base: `ros:jazzy-ros-base-noble` 명시 핀
   - **역할 = service server** `/get_keyword` (`std_srvs/Trigger`). client 는 host 의 `robot_control` 노드. wake-word 발화 → STT → keyword 추출 결과를 response 로 반환.
   - 내부: langchain + langchain-openai + openai + PyAudio + openwakeword + tflite-runtime + sounddevice
@@ -143,14 +145,14 @@ ROS2 Humble installer → ROS2 Jazzy installer 마이그레이션. 1–4주, sol
     ```
   - host 측 사전 조건: Ubuntu 24.04 desktop 의 PipeWire 데몬이 user session 에 실행 중 (기본). 내장 마이크가 `pactl list sources short` 에 인식되는지 a04 (또는 Phase 4 진입 검증) 에서 확인.
   - **API key 전달**: `.env` 를 docker-compose 의 `env_file:` 로 mount, image 안에 박지 않음 (Hard Rule #10)
-- [ ] 4-3. `containers/docker-compose.yml` — 두 서비스 동시 start/stop
+- [ ] 4-3. `containers/docker-compose.yml` — 두 서비스 동시 start/stop — *골격 작성 완료(2026-05-30): yolo(GPU reservation)+voice(env_file)+dsr-emulator(profiles:dev), network_mode:host, build context=`..`. 미충족: compose `up` 실동작(통합 단계, USB/audio passthrough 주석 활성화 필요).*
   - 각 서비스의 image 태그 명시 (ADR-007): `docker.io/${DOCKERHUB_USER}/ros2-jazzy-yolo:${YOLO_TAG}`, `docker.io/${DOCKERHUB_USER}/ros2-jazzy-voice:${VOICE_TAG}`. `${DOCKERHUB_USER}`, `${YOLO_TAG}`, `${VOICE_TAG}` 는 host `.env` 로부터 주입
   - `restart: unless-stopped` 정책
   - GPU 사용 (yolo 만): `deploy.resources.reservations.devices` 또는 `runtime: nvidia`
   - **API key 등 secret 은 `environment:` runtime 주입만** (ADR-007 § 4) — image 안에 placeholder 도 안 박음. `env_file: .env` 또는 `environment: - OPENAI_API_KEY=${OPENAI_API_KEY}` 패턴
   - **DSR emulator 서비스 (`doosanrobot/dsr_emulator:3.0.1`)**: 거의 미사용 가정 (2026-05-27 사용자 결정 — 실기 우선). 기본 `docker compose up` 에 포함하지 않고 `profiles: [dev]` 로 격리. 개발 모드에서만 `docker compose --profile dev up` 으로 활성화. 설치 흐름의 `install_emulator.sh` 호출은 그대로 — 이미지는 받아두되 실행은 명시적
-- [ ] 4-4. ROS2 통신 패턴 결정 (별도 ADR 후보 — ADR-007 은 publish 결정으로 점유됨)
-  - 후보 (a) `network_mode: host` — DDS multicast 자연 동작, 보안↓
+- [x] 4-4. ROS2 통신 패턴 결정 — **`network_mode: host` 채택 (ADR-009, 2026-05-30)**. 후보 (a). host robot_control(client) ↔ 컨테이너 service(server) DDS discovery 자연 동작.
+  - 후보 (a) `network_mode: host` — DDS multicast 자연 동작, 보안↓ ← **채택**
   - 후보 (b) custom bridge + `ROS_DOMAIN_ID` 격리 — 보안↑, DDS discovery 설정 필요
   - 후보 (c) `host` 와 동등하나 명시적 (`--network host` + ROS_DOMAIN_ID 고정)
   - host↔container 통신 = 2개 service (`/get_3d_position`, `/get_keyword`) request/response (DDS). camera topic (`/camera/camera/*`) 은 yolo 컨테이너 내부 (realsense → object_detection). `network_mode: host` 가 service discovery 커버.
@@ -168,7 +170,7 @@ ROS2 Humble installer → ROS2 Jazzy installer 마이그레이션. 1–4주, sol
   - ADR-007 §5 의 pull-first 분기 (`docker manifest inspect` 성공 시 pull, 실패 시 build) 는 별도 wrapper 스크립트 (`containers/up.sh` 등) 에 캡슐화 — 사용자가 한 명령으로 호출 가능하되 install.sh 와는 독립.
 - [ ] 4-7. **이미지 빌드 + secret hygiene 검증 + Docker Hub publish + 종단 검증 (ROADMAP 종착점)**
   - `docker compose build --pull` 양쪽 이미지 빌드 → exit 0
-  - 빌드 산출물 검증: `docker image ls` 에서 `ros2-jazzy-yolo:<tag>`, `ros2-jazzy-voice:<tag>` 존재 + size sanity check (yolo 5GB 이하, voice 2GB 이하 등 — 베이스 이미지 + 의존성 합 기준)
+  - 빌드 산출물 검증: `docker image ls` 에서 `ros2-jazzy-yolo:<tag>`, `ros2-jazzy-voice:<tag>` 존재 + size sanity check. **측정값 (2026-05-30, 빌드 게이트): yolo ≈ 13.6GB, voice ≈ 1.9GB.** yolo 의 floor 는 불가피한 비용 (torch cu128 이 번들하는 nvidia CUDA 런타임 라이브러리 ≈4.2GB + torch ≈1.6GB + realsense apt ≈1.1GB + ROS base ≈0.9GB) — 슬리밍(triton/헤더/정적 라이브러리/pycache 제거)으로 14.9→13.6GB 까지가 안전 한계. 초기 "5GB 이하" 추정은 GPU PyTorch+RealSense+ROS 조합엔 비현실적이라 폐기.
   - **Secret hygiene mandatory 검증 (ADR-007 § 4)**:
     ```bash
     for img in ros2-jazzy-yolo ros2-jazzy-voice; do
@@ -198,9 +200,11 @@ ROS2 Humble installer → ROS2 Jazzy installer 마이그레이션. 1–4주, sol
 - `containers/yolo-detection/Dockerfile` + 부속 (entrypoint, requirements, `.dockerignore`)
 - `containers/voice-processing/Dockerfile` + 부속 (`.dockerignore`)
 - `containers/docker-compose.yml` (image 태그 = ADR-007 publish target, secret 은 runtime env 주입)
-- `containers/build-all.sh` (빌드 wrapper — `docker compose build --pull` + secret hygiene grep 자동화)
-- `containers/up.sh` (pull-first 분기 wrapper — ADR-007 § 5)
-- **ADR-009 (가칭)** — Phase 4 base image 선택 / ROS2 네트워크 모드 / install.sh 통합 결정 (현재 Open Decisions 의 (a)(b)(c))
+- `containers/build-all.sh` (빌드 게이트 wrapper — `docker build` ×2 + secret hygiene grep + isolated import smoke 자동화. compose 플러그인 부재로 `docker build` 직접 사용) — *완료 2026-05-30*
+- `containers/entrypoint.sh` (공유 — ROS2 + `/ws/install` overlay source) — *완료 2026-05-30*
+- 루트 `.dockerignore` (build context 화이트리스트 + secret/모델가중치 제외) — *완료 2026-05-30*
+- `containers/up.sh` (pull-first 분기 wrapper — ADR-007 § 5) — *미작성(런타임 단계)*
+- **ADR-009** — Phase 4 base image(`ros:jazzy-ros-base-noble` 단일) / 네트워크 모드(`host`) / 소스 수정 정책 / 빌드 게이트 경계 — *완료 2026-05-30* (install.sh 통합은 4-6 의 수동 분리로 결정)
 - Docker Hub publish 된 두 image (ADR-007): `docker.io/${DOCKERHUB_USER}/ros2-jazzy-yolo:<tag>`, `docker.io/${DOCKERHUB_USER}/ros2-jazzy-voice:<tag>`
 - `.env.example` 갱신: `DOCKERHUB_USER`, `DOCKERHUB_TOKEN`, `YOLO_TAG`, `VOICE_TAG` placeholder 추가
 - `docs/COMPATIBILITY.md` 의 Docker 섹션에 두 image 행 추가 (publish digest 포함) + jazzy 최종 매트릭스

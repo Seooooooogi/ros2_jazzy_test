@@ -406,3 +406,30 @@
 - 검증이 끝나 원격이 불필요해지면 → 저장소 삭제 + 로컬 전용 복귀 검토.
 - secret leak 사고 시 → `.gitignore` 강화 + pre-commit hook 도입.
 - 외부 공개나 협업이 실제로 필요해지면 → public 전환 / branch·PR 정책을 별도 결정으로 기록.
+
+---
+
+### ADR-009: Phase 4 컨테이너 base image / 네트워크 모드 / 빌드 게이트 분리 (2026-05-30)
+
+**Context**:
+- Phase 4 진입 전 미해결이던 세 결정(base image / ROS2 네트워크 모드 / install.sh 통합)을 확정해야 컨테이너 Dockerfile 작성이 가능.
+- 사용자 결정(2026-05-30): "실 검증(host e2e) 전에 컨테이너 이미지 생성 단계를 먼저 만들고 개별 검증." 의존성 매핑 결과, 컨테이너 작업은 (A) 빌드+isolated import (host 콘텐츠 의존 0) 와 (B) host 노드와의 통합(host 의존) 으로 갈린다.
+- `cobot2_ws` 의 일부 패키지가 빌드 차단 버그 보유: voice `setup.py` 가 없는 `resource/.env` 참조, object_detection/voice_processing `package.xml` 에 런타임 의존 미선언(최소 ros-base 이미지에서 cv_bridge/std_srvs 미해소).
+
+**Decision**:
+- **Base image = `ros:jazzy-ros-base-noble` 단일** (yolo/voice 공통, named 태그 핀). yolo 도 `nvidia/cuda` base 안 씀 — PyTorch cu128 wheel 이 CUDA 런타임 라이브러리를 자체 번들하고, GPU 는 런타임에 `nvidia-container-toolkit` 가 host driver 를 주입한다. OS 에 CUDA toolkit 불필요(이미지 비대화 회피). `template/Dockerfile` 의 `ubuntu:24.04` self-build 패턴은 상속하지 않고, `entrypoint` source 패턴 + `SHELL` fail-fast 만 계승.
+- **네트워크 모드 = `network_mode: host`** (ROADMAP 4-4 후보 a). host `robot_control`(client) ↔ 컨테이너 service(server) 의 DDS discovery 자연 동작. 보안 격리보다 ~5 노트북 단순성 우선.
+- **CUDA_VERSION = 12.8** 을 `resources/config.sh` 에 주입(`:=12.8`). 유일 소비자는 yolo Dockerfile build-arg (host 미사용). pip index 는 `cu${CUDA_VERSION//./}` = cu128.
+- **소스 수정 정책**: object_detection/voice_processing 의 빌드 차단 버그는 `cobot2_ws` 소스에서 직접 수정(host colcon 미빌드 → host 영향 0). **`od_msg` 는 원본 보존** — host `robot_control` 과 공유하는 type hash 단일 소스라, yolo Dockerfile 에서 `rosidl-default-generators` 툴체인 apt 설치로만 우회(host 재빌드/hash 재정합 불필요).
+- **빌드 게이트 ↔ acceptance 경계**: "개별 검증" = 이미지 빌드 + 컨테이너 내부 import smoke + secret 위생까지. GPU 런타임(`torch.cuda.is_available()`), service 왕복, od_msg type hash 정합은 host e2e(Phase 3) 이후 단계 — 빌드 게이트 통과를 Phase 4 PASS 로 격상하지 않는다(lessons L-004/L-007: 정적·import 통과 ≠ 동작).
+- **빌드 도구**: 타깃 머신에 docker compose 플러그인 부재 → `containers/build-all.sh` 는 `docker build` 직접 사용(엔진만 필요). `docker-compose.yml` 은 런타임(up) 단계용으로 보존, install.sh 자동 호출 안 함(ADR-007/ROADMAP 4-6 책임 분리 유지).
+
+**Consequences**:
+- yolo/voice 가 동일 base layer 공유 → pull/디스크 효율. multi-stage(builder→runtime) 로 build-essential/pip cache 를 최종 이미지에서 제거.
+- 컨테이너 빌드를 host e2e 와 병행/선행 가능 → reboot 포함 host 사이클을 기다리지 않고 host 무관 결함(voice `.env` 참조, package.xml 의존, tflite-runtime wheel 가용성 등)을 조기 노출.
+- `od_msg` 미수정으로 host robot_control 영향 0 — 단 type hash 정합은 빌드 게이트에서 검증 불가(구조적으로 동일 소스 COPY 까지만 보장), host 통합 단계로 이월.
+
+**Reopen 조건**:
+- 다중 노트북 동시 운용으로 ROS_DOMAIN_ID 충돌이 생기면 → `network_mode: host` 대신 bridge + 도메인 격리(4-4 후보 b) 재검토.
+- yolo 이미지에 nvidia/cuda base 가 실제로 필요한 상황(예: 특정 CUDA 라이브러리 OS 의존)이 드러나면 → base 재선택.
+- od_msg 인터페이스가 변경되면 → host/yolo 동시 재빌드 + hash 재정합 절차를 통합 단계 ADR 로 기록.

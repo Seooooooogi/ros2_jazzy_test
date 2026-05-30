@@ -120,6 +120,41 @@
 
 ---
 
+## Phase 4 컨테이너 Python 의존 (실측 빌드 2026-05-30, build gate)
+
+host 미설치 (ADR-008) — 아래는 두 컨테이너 이미지 **안에서** `pip` 가 해소한 실측 버전.
+빌드 검증 = `containers/build-all.sh` (이미지 빌드 + 컨테이너 내부 import smoke). 메이저 상한 핀은 각 Dockerfile 에 명시 (silent major drift 차단).
+
+### yolo-detection (base `ros:jazzy-ros-base-noble`, Python 3.12)
+
+| 패키지 | 실측 버전 | Dockerfile 핀 | 비고 |
+|--------|----------|---------------|------|
+| torch | 2.11.0+cu128 | cu128 index | CUDA 런타임 자체 번들 → host CUDA toolkit 불요 |
+| torchvision | 0.26.0+cu128 | cu128 index | |
+| ultralytics | 8.4.56 | `<9` | 메이저 상한 |
+| opencv-python | 4.9.0.80 | `<4.10` | 4.10+ 은 numpy>=2 메타 요구 → numpy<2 와 충돌. `<4.10` 으로 회피 (위 충돌표 1행 해소) |
+| numpy | 1.26.4 | `<2` (마지막 재핀) | ultralytics 호환 |
+| polars | 1.41.2 | (ultralytics 의존) | |
+
+### voice-processing (base `ros:jazzy-ros-base-noble`, Python 3.12)
+
+| 패키지 | 실측 버전 | Dockerfile 핀 | 비고 |
+|--------|----------|---------------|------|
+| langchain | 1.3.2 | `<2` | 메이저 사이 import 경로 변경 위험 (`langchain.prompts` → `langchain_core.prompts`) |
+| langchain-core | 1.4.0 | (langchain 의존) | |
+| langchain-openai | 1.2.2 | `<2` | |
+| openai | 2.38.0 | `<3` | |
+| openwakeword | 0.4.0 | `<1` | wake-word. tflite 아닌 onnxruntime 백엔드 |
+| onnxruntime | 1.26.0 | (openwakeword 의존) | |
+| scipy | 1.17.1 | `<2` | |
+| sounddevice | 0.5.5 | — | |
+| PyAudio | 0.2.14 | — | apt `portaudio19-dev` 빌드 의존 |
+
+> 이미지 크기 (build gate 측정): yolo ≈ 13.6GB (nvidia CUDA 런타임 ≈4.2GB 가 지배), voice ≈ 1.9GB.
+> `OPENAI_API_KEY` 는 이미지에 미포함 — runtime env 주입 (ADR-007). transitive 완전 잠금(lock 파일)은 추후 과제.
+
+---
+
 ## 실측 vs 스크립트 의도 — drift 패턴 (`apt upgrade -y` 부작용)
 
 노션 검증본의 핵심 발견: 스크립트가 명시한 핀 버전을 `sudo apt upgrade -y` 가 풀어버려 실제 설치 버전이 의도와 다름.
