@@ -433,3 +433,35 @@
 - 다중 노트북 동시 운용으로 ROS_DOMAIN_ID 충돌이 생기면 → `network_mode: host` 대신 bridge + 도메인 격리(4-4 후보 b) 재검토.
 - yolo 이미지에 nvidia/cuda base 가 실제로 필요한 상황(예: 특정 CUDA 라이브러리 OS 의존)이 드러나면 → base 재선택.
 - od_msg 인터페이스가 변경되면 → host/yolo 동시 재빌드 + hash 재정합 절차를 통합 단계 ADR 로 기록.
+
+---
+
+### ADR-013: NVIDIA 드라이버 closed 핀 + HWE 커널 트랙 고정 + modules-extra 보장 (2026-06-01)
+
+**Date**: 2026-06-01
+
+**Context**:
+- 타 노트북(동일 모델)에서 `install.sh` 클린 설치 중, NVIDIA 단계 직후 재부팅에서 **검은 화면 + 깜빡이는 `_` 로 부팅 정지** 발생.
+- 추적 결과 단일 원인이 아니라 `nvidia-driver-install.sh` 의 `ubuntu-drivers install` **자동 선택**에서 세 문제가 파생:
+  1. 비결정적 드라이버 선택 — 머신/시점마다 다른 드라이버.
+  2. 자동 선택된 드라이버가 HWE 커널 이미지를 의존성으로 끌어오지만 `linux-modules-extra-<kernel>`(wifi / 일부 USB 입력 드라이버)는 함께 오지 않음 → 그 커널로 부팅 시 wifi·USB 키보드 소실(노트북 실측: GA 6.8 커널로 부팅하면 정상, 반쪽 HWE 6.17 로 부팅하면 소실).
+  3. 모듈 적재 실패가 재부팅 후 검은 화면으로만 드러남(설치 중 검증 없음 → silent brick).
+- RealSense(`librealsense2-dkms`)도 동일 계열의 커널-헤더 결합을 가짐 — 커널 바뀌면 DKMS 재빌드가 헤더 없이는 실패.
+- 작업 머신은 깨진 노트북과 같은 6.17 HWE 커널인데도 정상. 유일한 차이가 **HWE 메타(`linux-generic-hwe-24.04`) + `modules-extra` 존재**였다.
+
+**Decision** (사용자 결정 2026-06-01 — installer 를 작업 머신 기준으로 고정):
+1. **커널 트랙을 HWE 로 고정** — 새 step `kernel-baseline.sh`(a01 의 첫 단계)가 `linux-generic-hwe-24.04` + `linux-headers-generic-hwe-24.04` 메타를 `--install-recommends` 로 설치해 이미지 + 헤더 + `modules-extra` 를 함께 보장. nvidia/RealSense DKMS 보다 먼저 실행.
+2. **NVIDIA 드라이버를 `nvidia-driver-595` (closed) 로 명시 핀** — `config.sh` 에 `NVIDIA_DRIVER_VERSION=595` / `NVIDIA_DRIVER_FLAVOR=""`. 자동선택 폐기(빈값 VERSION 일 때만 폴백). 커널-모듈 메타 `linux-modules-nvidia-595-generic-hwe-24.04` 동반 → 커널 업데이트 시 nvidia 모듈 자동 추적. 드라이버 userspace 만 hold(메타는 hold 안 함 — hold 하면 추적 끊김).
+   - 변형 선택 경위: 처음엔 작업 머신과 동일하게 `-open` 으로 핀했으나, 동일 모델 노트북에서 `-open` + KMS 가 내장 패널 디스플레이를 못 올려 부팅 후 검은 화면(gdm 세션 실패)이 났다(nvidia 모듈 blacklist 로도 미해결 — 잔여 nvidia 디스플레이 설정 정황). closed 드라이버로 재설치하니 정상 부팅·디스플레이 확인되어 closed 를 기본으로 채택. open↔closed 는 커널 모듈만 다르고 userspace(CUDA 등)는 동일.
+3. **재부팅 전 검증 게이트** — nvidia 설치 직후 부팅 예정 커널(설치된 최신 커널)에 `nvidia.ko` 가 실제로 있는지 확인, 없으면 `exit 1` 로 reboot 단계 진입 차단.
+4. **RealSense 헤더 메타 의존** — `linux-headers-$(uname -r)` 단독 대신 `linux-headers-generic-hwe-24.04` 메타 동반(커널 업데이트 후 헤더 자동 추적).
+
+**Consequences**:
+- 동일 모델 타 머신에서 검증된 구성(6.17 HWE + nvidia-driver-595 closed + modules-extra)을 결정적으로 재현. 반쪽 커널 brick 과 비결정적 드라이버 선택이 제거됨.
+- step 총수 11 → 12(신규 `a01_kernel_baseline`). state 키 이름 불변이라 resumability 유지.
+- `docs/TROUBLESHOOTING.md` 신설 — 검은 화면 / 커널 모듈 누락 / 다중 커널 항목.
+
+**Reopen 조건**:
+- GA(6.8) 트랙이 필요한 하드웨어가 생기면 → 커널 트랙 변수(`KERNEL_META`)를 `linux-generic` 으로 전환하고 nvidia 모듈 메타 명명도 함께 조정.
+- open 드라이버로 되돌릴 이유(예: closed 가 특정 GPU/커널에서 회귀, 또는 open 이 디스플레이 정상)가 드러나면 → `NVIDIA_DRIVER_FLAVOR=-open` 으로 전환.
+- Secure Boot 활성 타깃이 생기면 → MOK 등록 단계를 별도 결정으로 추가.

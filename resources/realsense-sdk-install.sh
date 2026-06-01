@@ -10,7 +10,9 @@
 #     도메인 + .asc(armored) 키를 gpg --dearmor 로 변환.
 #   - keyring ${KEYRING_DIR}/librealsenseai.gpg + signed-by (deprecated apt-key 미사용).
 #   - repo 코드네임 `lsb_release -cs` → ${UBUNTU_CODENAME} (config 단일 소스).
-#   - DKMS 커널 모듈 빌드에 현재 커널 헤더 필요 → linux-headers-$(uname -r) 동반 설치.
+#   - DKMS 커널 모듈 빌드에 커널 헤더 필요 → HWE 헤더 메타(${KERNEL_HEADERS_META}) +
+#     현재 커널 헤더 동반 설치. 메타가 있으면 커널 업데이트 후에도 헤더가 자동 추적돼
+#     librealsense2-dkms 재빌드가 깨지지 않는다 (헤더 누락 = 카메라 커널 모듈 빌드 실패).
 #   - 제거: `apt remove --purge libgtk-3-dev` (되돌릴 수 없는 purge / noble 불필요),
 #           `realsense-viewer` 자동 실행 (GUI blocking).
 # 순수 설치 본문 — state 호출 없음.
@@ -30,9 +32,10 @@ RS_REPO="https://librealsense.realsenseai.com/Debian/apt-repo"
 #    구 repo 의 NO_PUBKEY 가 첫 update 를 막는다. 본 프로젝트가 만든 산출물이라 재생성 가능.
 sudo rm -f /etc/apt/sources.list.d/librealsense.list "${KEYRING_DIR}/librealsense.pgp"
 
-# 1) 선행 도구 + keyring 디렉토리 + 현재 커널 헤더 (DKMS 빌드용).
+# 1) 선행 도구 + keyring 디렉토리 + 커널 헤더 (DKMS 빌드용 — HWE 헤더 메타 + 현재 커널).
 sudo apt-get update
-sudo apt-get install -y curl ca-certificates gnupg apt-transport-https "linux-headers-$(uname -r)"
+sudo apt-get install -y curl ca-certificates gnupg apt-transport-https \
+    "${KERNEL_HEADERS_META}" "linux-headers-$(uname -r)"
 sudo install -m 0755 -d "${KEYRING_DIR}"
 
 # 2) RealSense AI GPG 키 (armored → dearmor, 없을 때만 — idempotent).
