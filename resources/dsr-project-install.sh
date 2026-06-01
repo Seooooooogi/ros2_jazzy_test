@@ -60,6 +60,16 @@ sudo apt-get install -y \
     "ros-${ROS_DISTRO}-velocity-controllers" \
     "ros-${ROS_DISTRO}-eigen3-cmake-module"
 
+# 4b) robot_control(host client)의 런타임 Python 의존 — system Python(apt)으로 설치(thin client).
+#     컨테이너 variant 라 앱 Python(torch/ultralytics/openwakeword)의 본거지는 yolo/voice 컨테이너지만,
+#     robot_control 은 host 에서 실행되는 ROS2 노드라 scipy(좌표 변환)/numpy/pymodbus(gripper Modbus)가
+#     host 에 필요하다. ament_python 은 빌드시 import 안 해 colcon 은 통과하나 ros2 run 런타임에 깨진다.
+#     venv 대신 apt: host=system Python 책임을 유지하고 ros2 run 이 추가 활성화 없이 바로 본다.
+#     numpy 는 noble apt(1.26, <2)로 충분(host 에 ultralytics 없음), pymodbus 는 noble apt 3.x
+#     (onrobot.py 가 3.x API 로 이관됨).
+sudo apt-get install -y \
+    python3-numpy python3-scipy python3-pymodbus
+
 # 5) DSR 에뮬레이터 이미지 (명시 태그 — 이미 있으면 docker 가 자동 skip).
 docker pull "doosanrobot/dsr_emulator:${DSR_EMULATOR_VERSION}"
 
