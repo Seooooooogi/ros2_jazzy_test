@@ -33,8 +33,8 @@ ROS2 Humble installer → ROS2 Jazzy installer 마이그레이션. Ubuntu + NVID
 
 ## Quick Ref
 
-- Entry (권장): `bash install.sh` — a01~a04 전체를 단일 시퀀스(`[n/11]`)로 실행. 완료된 step 은 자동 skip, reboot 후 재실행하면 이어서 진행. `--status`(상태), `--reset`(state 초기화), `--help`.
-- 개별 스테이지 재실행: `bash a01-prerequirements.sh`(시스템, reboot 포함) / `a02-robot-camera.sh`(로봇+카메라) / `a03-vs-code-install.sh`(VS Code) / `a04-voice-precheck.sh`(음성 점검). 단독 실행 시 스테이지-로컬 진행률(`[n/5]` 등). install.sh 와 같은 state 파일 공유 → 어느 쪽으로 실행하든 skip 일관.
+- Entry (권장): `bash install.sh` — a01~a04 전체를 단일 시퀀스(`[n/12]`)로 실행. 완료된 step 은 자동 skip, reboot 후 재실행하면 이어서 진행. `--status`(상태), `--reset`(state 초기화), `--help`.
+- 개별 스테이지 재실행: `bash a01-prerequirements.sh`(시스템, reboot 포함) / `a02-robot-camera.sh`(로봇+카메라) / `a03-vs-code-install.sh`(VS Code) / `a04-voice-precheck.sh`(음성 점검). 단독 실행 시 스테이지-로컬 진행률(`[n/6]` 등). install.sh 와 같은 state 파일 공유 → 어느 쪽으로 실행하든 skip 일관.
 - 순차 의미: `a01 → reboot → a02 → a03 → a04`. RealSense 는 a02 에 포함, humble 원본 realsense 스크립트는 `backup/` 보존. `run_step` 은 `resources/run-step.sh` 로 중앙화(오케스트레이터는 `STEPS_TOTAL` 만 설정).
 - 정적 검증: `shellcheck *.sh resources/*.sh`
 - Compatibility matrix: `docs/COMPATIBILITY.md` (Phase 1 산출물)

@@ -26,13 +26,30 @@ export UBUNTU_CODENAME=noble
 : "${DSR_EMULATOR_VERSION:=3.0.1}"
 : "${DSR_WORKSPACE:=${HOME}/cobot2_ws}"
 
-# --- NVIDIA / CUDA -------------------------------------------------------
-# 빈 문자열 = nvidia-driver-install.sh 가 `ubuntu-drivers install` 로 noble 권장
-# 드라이버를 자동 선택 (RTX 4060 에서 ≈580) 후 apt-mark hold. 사용자 결정 2026-05-28.
-# 숫자 (예: 580) 를 명시하면 그 버전을 force-pin 설치 (override, CI/특수 GPU 용).
-# 하드핀을 기본값으로 두지 않는 이유: 추후 결정할 CUDA 메이저가 요구하는 최소
-# 드라이버를 자동으로 만족시키기 위함.
-: "${NVIDIA_DRIVER_VERSION:=}"
+# --- Kernel track (HWE) --------------------------------------------------
+# HWE 커널 메타를 명시 설치해 커널 이미지 + 헤더 + modules-extra 를 항상 함께 보장한다.
+# 이 메타가 빠지면 다른 패키지(예: nvidia 모듈)가 커널 이미지만 끌어와 modules-extra
+# (wifi / 일부 USB 입력 드라이버 수록) 가 누락 → 부팅은 되나 wifi·USB 키보드가 사라지는
+# 반쪽 커널이 된다. nvidia / librealsense2-dkms 모두 이 헤더 메타로 커널 업데이트를 추적.
+# 주의: nvidia-driver-install.sh 의 커널-모듈 메타 계산이 KERNEL_META 의 'linux-' 접두사
+# 제거에 의존한다 (linux-generic-hwe-24.04 → generic-hwe-24.04). 접두사 형식을 바꾸면
+# 그쪽 module_meta 명명도 함께 점검할 것.
+: "${KERNEL_META:=linux-generic-hwe-24.04}"
+: "${KERNEL_HEADERS_META:=linux-headers-generic-hwe-24.04}"
+
+# --- NVIDIA driver -------------------------------------------------------
+# 드라이버를 버전 + 변형으로 명시 핀 고정한다. 과거 `ubuntu-drivers install` 자동선택은
+# 머신/시점마다 다른 드라이버를 골랐고, 그 드라이버가 modules-extra 없는 반쪽 HWE 커널을
+# 의존성으로 끌어와 재부팅 시 검은 화면(wifi/USB 입력 소실)으로 이어졌다. 작업 머신의
+# 검증된 known-good 구성을 결정적으로 재현하기 위해 핀.
+#   설치 패키지 = nvidia-driver-${NVIDIA_DRIVER_VERSION}${NVIDIA_DRIVER_FLAVOR}
+#   FLAVOR = "" (closed, 기본) 또는 "-open" (오픈 커널 모듈).
+#   closed 를 기본으로: Optimus(하이브리드) 노트북에서 -open + KMS 가 내장 패널 디스플레이를
+#   못 올려 검은 화면(gdm 세션 실패)이 나는 사례가 있어, 디스플레이가 더 안정적인 closed 로 핀.
+#   VERSION 을 빈값으로 두면 nvidia-driver-install.sh 가 ubuntu-drivers 자동선택으로
+#   폴백한다 (override 용 — 비결정성 감수).
+: "${NVIDIA_DRIVER_VERSION:=595}"
+: "${NVIDIA_DRIVER_FLAVOR:=}"
 # CUDA 메이저 = 12.8 (PyTorch cu128). host 에는 설치하지 않는다 (host 콜콘 패키지에
 # CUDA 소비자 없음) — 이 값을 읽는 유일한 소비자는 Phase 4 yolo 컨테이너 Dockerfile 의
 # build-arg 다. pip index 는 cu${CUDA_VERSION//./} 로 cu128 을 구성.
@@ -53,15 +70,15 @@ export UBUNTU_CODENAME=noble
 : "${KEYRING_DIR:=/etc/apt/keyrings}"
 
 # --- Progress 표시 ([n/total] 시각화) ---------------------
-# 통합 진입점 install.sh 의 전체 단계 수 (a01:5 + a02:4 + a03:1 + a04:1).
+# 통합 진입점 install.sh 의 전체 단계 수 (a01:6 + a02:4 + a03:1 + a04:1).
 # run-step.sh 의 STEPS_TOTAL fallback 으로도 쓰인다. 단계 추가 시 함께 갱신.
-: "${TOTAL_STEPS:=11}"
+: "${TOTAL_STEPS:=12}"
 
 # --- Self-check ----------------------------------------------------------
 # 자식 스크립트가 진입 직후 호출하면 필수 변수 누락 즉시 catch.
 config_assert_set() {
     local var missing=0
-    for var in ROS_DISTRO UBUNTU_CODENAME STATE_FILE KEYRING_DIR; do
+    for var in ROS_DISTRO UBUNTU_CODENAME STATE_FILE KEYRING_DIR KERNEL_META KERNEL_HEADERS_META DSR_WORKSPACE; do
         if [[ -z "${!var:-}" ]]; then
             echo "config: required variable '$var' is empty" >&2
             missing=1
