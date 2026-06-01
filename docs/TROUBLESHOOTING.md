@@ -45,3 +45,37 @@
 설치 후 `/lib/modules` 에 커널이 2개 이상 보이는 것은 정상이다.
 - **이전 커널 보존(안전망)**: 커널 업데이트 시 apt 가 직전 커널을 지우지 않아, 새 커널이 부팅을 깨면 GRUB 에서 되돌릴 수 있다.
 - **GA vs HWE 트랙**: 24.04 는 출시 커널 라인(GA, 6.8.x)과 신형 하드웨어 지원용 롤링 트랙(HWE, 6.11→6.14→6.17…)이 별개 패키지로 공존한다. 본 installer 는 HWE 트랙으로 통일(`linux-generic-hwe-24.04`).
+
+---
+
+## `ros2 run <pkg> <node>` → ModuleNotFoundError (scipy / pymodbus / openwakeword 등) — application-shell
+
+**증상**: `colcon build` 는 성공했는데 `ros2 run robot_control robot_control` 실행 시 `ModuleNotFoundError`. host venv 에는 패키지가 분명히 설치돼 있다.
+
+**원인**: ament_python 패키지는 **빌드 시 third-party 를 import 하지 않아** 빌드는 통과하지만, 런타임에 import 한다. host venv(`--system-site-packages`)는 venv→system 단방향만 열려, system Python 으로 실행되는 `ros2 run` 이 venv 의 app Python 을 못 본다.
+
+**복구 / 예방** (application-shell):
+- 핵심은 **colcon 빌드를 venv active 에서 수행**하는 것 — 그래야 entry_point console_script 의 shebang 이 venv python 으로 박혀 `ros2 run` 이 venv 를 본다(`resources/colcon-build.sh` 가 `HOST_VENV` 있으면 자동 activate).
+- 이미 빌드했는데 깨졌다면 venv active 상태에서 재빌드: `source ~/cobot2_ws/.venv/bin/activate && cd ~/cobot2_ws && colcon build`.
+- 직접 `python3 ...` 실행/디버깅은 `source resources/activate.sh` (ROS + 워크스페이스 overlay + venv 함께 활성화).
+- 설치된 스크립트 shebang 확인: `head -1 ~/cobot2_ws/install/robot_control/lib/robot_control/robot_control` → venv python 경로여야 함.
+
+---
+
+## openwakeword `Model(.tflite)` 로드 실패 / tflite-runtime Python 3.12 wheel 없음
+
+**증상**: `import openwakeword` 는 되는데 `Model(wakeword_models=["...tflite"])` 에서 실패. 또는 `pip install openwakeword` 가 `Could not find a version that satisfies tflite-runtime` 로 실패.
+
+**원인**: wakeword 모델이 `.tflite` 라 tflite 백엔드가 필요한데, openwakeword 0.6.0 이 의존으로 강제하는 `tflite-runtime` 은 **Python 3.12 wheel 이 없다**(최대 3.11). noble=3.12. (import smoke 만으론 안 잡힘 — `.tflite` 로드는 런타임에만 일어남.)
+
+**복구 / 예방**: 후속작 `ai-edge-litert`(cp312 wheel, 동일 `Interpreter` API)로 대체. `host-python-deps.sh` / voice Dockerfile 이 이미 적용 — (1) `openwakeword==0.6.0 --no-deps` (불가능한 tflite-runtime 의존 회피), (2) 실제 의존 명시 + `ai-edge-litert`, (3) `tflite_runtime → ai_edge_litert` shim 을 site-packages 에 생성, (4) feature 모델은 `download_models()`. 검증은 `import` 가 아닌 **`Model(.tflite)` 인스턴스화 + predict**. 상세 = ADR-014.
+
+---
+
+## pymodbus 3.x gripper — `unit=`/`slave=`, 통신 실패 시 cryptic 에러
+
+**증상**: gripper 코드에서 `ModuleNotFoundError: pymodbus.client.sync`(2.x import), 또는 통신 실패 시 `AttributeError: ... has no attribute 'registers'`.
+
+**원인**: noble apt / 최신 pip 의 pymodbus 는 3.x 라 `pymodbus.client.sync` 모듈이 없고(→`pymodbus.client`), 메서드 인자가 `unit=`→`slave=` 로 바뀌었다. 3.x 는 통신 실패 시 예외 대신 에러 응답 객체를 반환해 `result.registers[0]` 직접 접근이 AttributeError 가 된다.
+
+**복구 / 예방**: onrobot.py 3개를 3.x API 로 이관 완료(`from pymodbus.client import ...`, `slave=`, read·write 후 `isError()` 가드 — write 실패 silent 진행 차단). ⚠️ **안전**: register write 의미는 import smoke 로 검증 안 됨 — 실 RG gripper 에서 open/close/move 하드웨어 재검증 없이 실로봇 운용 금지. 설치되는 3.x minor 에 따라 `slave=`→`device_id=` 일 수 있어 실기에서 인자명 확인. 상세 = ADR-014.

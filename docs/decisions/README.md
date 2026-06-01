@@ -465,3 +465,41 @@
 - GA(6.8) 트랙이 필요한 하드웨어가 생기면 → 커널 트랙 변수(`KERNEL_META`)를 `linux-generic` 으로 전환하고 nvidia 모듈 메타 명명도 함께 조정.
 - open 드라이버로 되돌릴 이유(예: closed 가 특정 GPU/커널에서 회귀, 또는 open 이 디스플레이 정상)가 드러나면 → `NVIDIA_DRIVER_FLAVOR=-open` 으로 전환.
 - Secure Boot 활성 타깃이 생기면 → MOK 등록 단계를 별도 결정으로 추가.
+
+---
+
+### ADR-014: 배포 variant 브랜치 분기 (full host vs 컨테이너) + ADR-008 의 application-shell 한정 부분 환원
+
+**Date**: 2026-06-02
+
+**Context**:
+- 실기(noble/Python 3.12) 검증에서 두 결함 발견.
+  1. **host application Python 누락**: ADR-008 이 host pip 을 폐기하고 앱 Python 을 컨테이너로 옮겼는데, `dsr-project-install.sh` 가 host ws 로 복사하는 패키지도 `robot_control od_msg` 로 한정돼 있었다. 그 결과 host 에서 `ros2 run robot_control` 런타임에 `ModuleNotFoundError`(scipy/numpy/pymodbus) — ament_python 은 빌드시 import 하지 않아 colcon 빌드는 통과하지만 런타임에 깨진다. `pick_and_place_text/detection` 은 host 에서 ultralytics 를 직접 import 한다(토폴로지 검증).
+  2. **openwakeword 가 Python 3.12 에서 미동작**: `wakeup_word.py` 가 `.tflite` 모델을 로드하는데, openwakeword 0.6.0 은 `tflite-runtime>=2.8` 을 의존으로 강제하고 tflite-runtime 은 Python 3.12 wheel 이 없다(최대 3.11).
+- 사용자 결정(2026-06-02): 두 배포 방식을 **브랜치 variant** 로 분기. `feat/application-shell` = 컨테이너 없이 host 단독 실행(monolith), `feat/application-containers` = host 최소화 + yolo/voice 컨테이너(ADR-008/009 유지).
+
+**Decision**:
+- **브랜치 variant 분기**. 공통 코드(cobot2_ws / 셸 프레임워크)는 공유하되 host Python 설치 범위가 갈린다.
+  - `application-shell`: `dsr-project-install.sh` 의 `HOST_PKGS` 를 host 실행 패키지 전체로 확장(robot_control / od_msg / pick_and_place_text / pick_and_place_voice / rokey / voice_processing / object_detection). 신규 `resources/host-python-deps.sh`(a02 step) 가 host venv 에 앱 Python 을 설치.
+  - `application-containers`: `HOST_PKGS` 현행 유지, host 는 robot_control 용 thin client 만.
+- **ADR-008 의 application-shell 한정 부분 환원**. ADR-008 의 Reopen 조건 #2("컨테이너에서 못 다루는 라이브러리 — 특정 ROS2 노드 안에서 application Python 직접 사용 — 가 등장하면 재검토")에 정확히 해당: robot_control(ROS2 노드)이 host 에서 scipy/pymodbus 를 직접 쓰고, application-shell 은 정의상 모든 노드를 host 실행한다. 따라서 application-shell 에서만 host venv(`--system-site-packages`)를 재도입한다. `application-containers` 는 ADR-008 그대로.
+- **PEP 668(noble) 회피 = venv `--system-site-packages`** (system Python 전역 pip / `--break-system-packages` 비채택 — system rclpy 오염 회피, ADR-004 의 venv 논거 재사용). 핀은 Phase 4 컨테이너 Dockerfile(검증본)을 미러링(torch cu128 / ultralytics<9 / opencv-python<4.10 / langchain<2 / numpy<2 마지막 재핀).
+- **venv↔`ros2 run` 연동**: colcon 빌드를 venv active 에서 수행(`colcon-build.sh`) → ament_python entry_point console_script 의 shebang 이 venv python 으로 박혀 `ros2 run` 이 venv 의 앱 Python 을 본다. (ADR-004 식 `~/.bashrc` 자동수정은 침습적이라 채택하지 않고, opt-in `resources/activate.sh` 가 ROS+overlay+venv 를 함께 켠다.)
+- **openwakeword Python 3.12 해법 (컨테이너에서 실측 검증 완료)**: openwakeword `0.6.0` 을 `--no-deps` 로 설치(불가능한 tflite-runtime 의존 회피) + 실제 의존을 명시 설치하되 tflite-runtime 자리에 후속작 **ai-edge-litert**(cp312 wheel, 동일 `Interpreter` API)를 넣고, openwakeword 코드가 `import tflite_runtime.interpreter` 를 하드 호출하므로 `tflite_runtime → ai_edge_litert` 최소 shim 을 site-packages 에 생성한다. feature 모델(melspectrogram/embedding/VAD)은 wheel 미동봉이라 `download_models()` 로 받는다. **`.tflite` 모델·`wakeup_word.py` 코드는 그대로 유지**. 컨테이너(`voice-processing/Dockerfile`)와 host(`host-python-deps.sh`) 동일 레시피. 검증은 `import` 가 아닌 **`Model(.tflite)` 인스턴스화 + predict** 로(빌드게이트 smoke 도 동일하게 강화).
+- **pymodbus 2.x→3.x 코드 이관**: onrobot.py 3개(robot_control / pick_and_place_text / pick_and_place_voice)의 `pymodbus.client.sync` → `pymodbus.client`, `unit=` → `slave=`. 3.x 는 통신 실패 시 예외 대신 에러객체를 반환하므로 read·write 결과 모두에 `isError()` 가드 추가(cryptic AttributeError → fail-loud, gripper write 실패도 silent 진행 차단).
+
+**Consequences**:
+- step 총수 12 → 13(신규 `a02_host_python_deps`, colcon-build 직전). `config.sh` `TOTAL_STEPS`, `install.sh`/`a02` 분모 동시 갱신. state 키 `a02_host_python_deps` 추가(resumability 유지).
+- ADR-008 의 검증 항목 "host `import torch` → ImportError(의도)" 는 **application-shell 에서 무효**(host venv 에 torch 존재). application-containers 에선 여전히 유효.
+- ADR-002(numpy<2 재핀) 적용 위치가 application-shell 에선 host venv 끝단으로 환원.
+- **gripper 안전(BLOCKING)**: pymodbus 3.x 이관은 SW 변경이라 import smoke 로는 register write 의미가 검증되지 않는다. 실 RG gripper open/close/move 하드웨어 재검증 없이 실로봇 운용 금지. 3.x minor 별 `slave` vs `device_id` 인자명도 실기에서 확인.
+- 두 feature(공통 fix = pymodbus 3 파일 + voice Dockerfile openwakeword 레시피)는 두 브랜치에 동기화 필요.
+
+**검증** (실기 noble/3.12):
+- 컨테이너에서 선검증 완료: `Model(.tflite)` 로드 + predict OK(`tflite_runtime.interpreter.Interpreter` → `ai_edge_litert.interpreter`).
+- host: `bash install.sh` ×2 멱등 / `ros2 run robot_control robot_control` 런타임 import OK / `${HOST_VENV}/bin/python -c "import numpy; assert numpy.__version__.startswith('1.')"` / `import torch` OK.
+
+**Reopen 조건**:
+- 두 variant 를 단일 브랜치로 통합 요구 / host venv 유지비용 과다 시.
+- openwakeword 가 ai-edge-litert 를 정식 의존으로 채택한 릴리스가 나오면 shim 제거 검토.
+- pymodbus 3.x minor API(`slave`→`device_id`)가 더 바뀌면 onrobot.py 재점검.
