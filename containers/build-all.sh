@@ -74,12 +74,20 @@ import object_detection.yolo, object_detection.realsense, object_detection.detec
 assert numpy.__version__.startswith('1.'), numpy.__version__
 print('  yolo import OK — numpy', numpy.__version__)"
 
-step 5 "isolated import smoke — voice (마이크/네트워크 불요)"
+step 5 "isolated smoke — voice (import + .tflite wakeword 모델 실제 로드, 마이크/네트워크 불요)"
+# import 만으론 부족: wakeup_word.py 의 Model(.tflite) 로드는 런타임에만 일어나 import smoke 를 통과해도
+# tflite 백엔드(ai-edge-litert) 부재 시 실로봇에서 실패한다. 여기서 Model 인스턴스화 + predict 1회로 확증.
 smoke "${VOICE_IMAGE}" \
-"import langchain, langchain_openai, openai, pyaudio, sounddevice, scipy, openwakeword, dotenv, numpy
+"import os, numpy as np
+import langchain, langchain_openai, openai, pyaudio, sounddevice, scipy, openwakeword, ai_edge_litert, dotenv, numpy
 import voice_processing.get_keyword, voice_processing.MicController, voice_processing.stt, voice_processing.wakeup_word
 assert numpy.__version__.startswith('1.'), numpy.__version__
-print('  voice import OK — numpy', numpy.__version__)"
+from ament_index_python.packages import get_package_share_directory
+from openwakeword.model import Model
+mp = os.path.join(get_package_share_directory('voice_processing'), 'resource', 'hello_rokey_8332_32.tflite')
+m = Model(wakeword_models=[mp])
+out = m.predict(np.zeros(1280, dtype=np.int16))
+print('  voice OK — numpy', numpy.__version__, '| Model(.tflite) load + predict keys:', list(out.keys()))"
 
 printf '\n✅ 빌드 게이트 PASS — 두 이미지 빌드 + secret 위생 + import smoke 통과.\n'
 printf '   GPU 런타임 / service 왕복 / od_msg hash 정합은 host e2e 이후 검증 (이 단계 범위 아님).\n'
