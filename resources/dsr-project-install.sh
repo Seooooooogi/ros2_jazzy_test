@@ -4,10 +4,11 @@
 #
 # backup/dsr-project-install{,_25}.sh 의 jazzy 마이그레이션 + idempotency.
 #   - clone 브랜치 -b ${DSR_BRANCH}(=jazzy). 이미 받은 경우 skip (재현성 — git pull 안 함).
-#   - 워크스페이스 = ${DSR_WORKSPACE}(=~/cobot2_ws). 레포 cobot2_ws/ 의 host 패키지
-#     (robot_control, od_msg) 만 src/ 로 복사 — app/container 패키지
-#     (object_detection / voice_processing / pick_and_place_* / rokey) 는 별도(yolo/voice) 컨테이너가
-#     담당하므로 host ws 에서 제외. src/ 에 든 패키지만 빌드되어 범위가 자연히 한정됨.
+#   - 워크스페이스 = ${DSR_WORKSPACE}(=~/cobot2_ws). 본 브랜치(application-shell)는 컨테이너 없이
+#     host 단독 실행(monolith) variant 이므로 cobot2_ws 의 host 실행 패키지를 모두 src/ 로 복사한다.
+#     런타임 application Python(torch / ultralytics / openwakeword / langchain 등)은 host venv
+#     (host-python-deps.sh)가 제공. (컨테이너 variant 인 application-containers 브랜치는 robot_control /
+#     od_msg 만 복사하고 나머지는 yolo/voice 컨테이너가 담당.)
 #     복사(symlink 아님): 워크스페이스가 레포 위치에 의존하지 않게 — 탈착식 미디어(USB)에서
 #     실행해도 빼면 깨지지 않는다. 레포가 소스 진실원본이라 재실행 시 레포 기준 재동기화.
 #   - 에뮬레이터: doosanrobot/dsr_emulator:${DSR_EMULATOR_VERSION} 명시 태그 pull.
@@ -26,8 +27,9 @@ REPO_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"          # 레포 루트 (resources/ 
 WS_SRC="${DSR_WORKSPACE}/src"
 DSR_REPO_URL="https://github.com/doosan-robotics/doosan-robot2.git"
 
-# host colcon 빌드 대상 패키지 (CUDA/voice 의존 패키지는 컨테이너로 제외).
-HOST_PKGS=(robot_control od_msg)
+# host colcon 빌드 대상 패키지. application-shell variant = host 단독 실행이므로 전체 포함.
+# (application-containers variant 는 robot_control od_msg 만 — 나머지는 컨테이너.)
+HOST_PKGS=(robot_control od_msg pick_and_place_text pick_and_place_voice rokey voice_processing object_detection)
 
 # 1) 워크스페이스 src 디렉토리.
 mkdir -p "${WS_SRC}"

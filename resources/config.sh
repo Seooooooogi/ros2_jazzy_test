@@ -17,9 +17,14 @@
 export ROS_DISTRO=jazzy
 export UBUNTU_CODENAME=noble
 
-# NOTE: host venv 는 폐기 (2026-05-27 결정). application Python 패키지
-# (PyTorch / ultralytics / langchain / openai 등) 는 모두 별도(yolo/voice) 컨테이너 안에만 존재.
-# host 는 system Python (apt) + colcon 워크스페이스만 책임.
+# --- Host Python venv (application-shell 브랜치) -------------------------
+# 본 브랜치는 컨테이너 없이 host 단독 실행(monolith) variant 다. cobot2_ws 의 host 실행
+# 패키지(robot_control / pick_and_place_* / voice_processing 등)가 런타임에 import 하는
+# application Python(torch / ultralytics / openwakeword / langchain / openai / pymodbus 등)을
+# host 에 직접 설치한다. noble 의 PEP 668(externally-managed) 회피를 위해 system Python 전역
+# pip 대신 venv(--system-site-packages, rclpy/colcon 가시)를 쓴다. host-python-deps.sh 가 소유.
+# (컨테이너 variant 인 application-containers 브랜치는 이 변수를 쓰지 않고 host 설치를 최소화한다.)
+: "${HOST_VENV:=${DSR_WORKSPACE}/.venv}"
 
 # --- DSR (jazzy 브랜치 활성 확인 완료 2026-05-26) ---------------
 : "${DSR_BRANCH:=${ROS_DISTRO}}"
@@ -70,9 +75,10 @@ export UBUNTU_CODENAME=noble
 : "${KEYRING_DIR:=/etc/apt/keyrings}"
 
 # --- Progress 표시 ([n/total] 시각화) ---------------------
-# 통합 진입점 install.sh 의 전체 단계 수 (a01:6 + a02:4 + a03:1 + a04:1).
+# 통합 진입점 install.sh 의 전체 단계 수 (a01:6 + a02:5 + a03:1 + a04:1).
+# a02 에 host-python-deps(host venv 설치) 단계가 추가되어 12 → 13 (application-shell variant).
 # run-step.sh 의 STEPS_TOTAL fallback 으로도 쓰인다. 단계 추가 시 함께 갱신.
-: "${TOTAL_STEPS:=12}"
+: "${TOTAL_STEPS:=13}"
 
 # --- Self-check ----------------------------------------------------------
 # 자식 스크립트가 진입 직후 호출하면 필수 변수 누락 즉시 catch.

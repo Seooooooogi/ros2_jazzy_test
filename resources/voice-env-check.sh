@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 # shellcheck source-path=SCRIPTDIR
-# resources/voice-env-check.sh — 음성 기능 사전 점검 (host 설치 없음).
+# resources/voice-env-check.sh — 음성 환경 점검 (application-shell variant).
 #
-# 음성/추론용 Python 패키지(langchain / openai / sounddevice 등)는 host 가 아닌
-# 별도(yolo/voice) 컨테이너 안에만 설치된다. host 단계의 역할은 컨테이너가 mount 할
-# .env 자격증명 점검 + 이미지 받기 전 Docker Hub 로그인 안내뿐이다.
+# 본 브랜치는 host 단독 실행이라 음성/추론 Python(openwakeword / langchain / openai /
+# sounddevice 등)이 host venv 에 설치돼 있다(host-python-deps.sh, openwakeword Model 로드까지
+# 검증 완료). 따라서 이 단계의 역할은 host 음성 노드가 환경변수로 읽을 .env 자격증명 점검이다.
 # 순수 점검 본문 — state 호출 없음. 자격증명 값은 절대 출력/로그하지 않는다.
 set -euo pipefail
 
@@ -34,18 +34,13 @@ fi
 # 2) OPENAI_API_KEY 점검 (값은 출력 안 함). 음성 컨테이너가 .env mount 로 사용.
 _load_env "${ENV_FILE}"
 if _require_env OPENAI_API_KEY 2>/dev/null; then
-    echo "voice: OPENAI_API_KEY 확인됨 (음성 컨테이너가 .env mount 로 사용)."
+    echo "voice: OPENAI_API_KEY 확인됨 (host 음성 노드가 환경변수로 사용)."
 else
-    echo "voice: 경고 — OPENAI_API_KEY 가 비어 있습니다. 음성 컨테이너 실행 전 .env 에 설정 필요." >&2
+    echo "voice: 경고 — OPENAI_API_KEY 가 비어 있습니다. 음성 노드 실행 전 .env 에 설정 필요." >&2
 fi
 
-# 3) Docker Hub 로그인 안내 — 애플리케이션 이미지 pull 전제.
-#    로그인 여부의 권위 있는 소스는 ~/.docker/config.json 의 auths 항목이다
-#    (docker info 출력의 Username 필드는 버전/설정에 따라 없어 신뢰 불가).
-if grep -q 'index.docker.io' "${HOME}/.docker/config.json" 2>/dev/null; then
-    echo "voice: Docker Hub 자격증명 설정 감지됨 (~/.docker/config.json)."
-else
-    echo "voice: 안내 — 애플리케이션 이미지(yolo/voice) pull 전 'docker login' 이 필요할 수 있습니다."
-fi
+# 3) application-shell 은 음성을 host venv 로 직접 실행한다 — 애플리케이션 이미지 pull/로그인 불요.
+#    음성 패키지/모델은 a02(host-python-deps + colcon-build)에서 설치·검증 완료.
+echo "voice: host venv 로 직접 실행 — 'source resources/activate.sh' 후 'ros2 run voice_processing get_keyword'."
 
-echo "success checking voice environment (host 설치 없음 — 컨테이너가 실제 실행)"
+echo "success checking voice environment (host venv 가 직접 실행)"

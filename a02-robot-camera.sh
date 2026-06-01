@@ -5,9 +5,9 @@
 # 순차 실행: a01 → reboot → a02 → ...
 # a01 과 동일하게 본 스크립트가 state 프레이밍(run_step)을 소유 — 자식 resource 스크립트는
 # 순수 설치 본문. 향후 단일 진입점으로 통합하더라도 state 호출은 오케스트레이터 한 곳에만 둔다.
-# CUDA/PyTorch 는 host 에 설치하지 않음: application Python (PyTorch / ultralytics / langchain)
-# 은 별도 컨테이너(yolo/voice) 전용이고, host colcon 패키지(robot_control / od_msg / doosan-robot2)
-# 중 CUDA 소비자가 없다.
+# application-shell variant: host 단독 실행이므로 application Python (PyTorch / ultralytics /
+# openwakeword / langchain 등)을 host venv 에 설치한다(host-python-deps.sh). colcon 빌드를 venv
+# 하에서 돌려 entry_point shebang 이 venv python 을 가리키게 한다(ros2 run 이 app Python 을 봄).
 # 재실행 안전: 완료 단계는 state 파일 기준 skip (apt source 중복·재설치 방지).
 set -euo pipefail
 
@@ -28,15 +28,16 @@ source "${RESOURCE_DIR}/config.sh"
 source "${RESOURCE_DIR}/state.sh"
 config_assert_set
 
-# 단독 실행 시 스테이지-로컬 진행률 ([n/4]). 통합 실행(install.sh)은 자체 STEPS_TOTAL=12 사용.
-STEPS_TOTAL=4
+# 단독 실행 시 스테이지-로컬 진행률 ([n/5]). 통합 실행(install.sh)은 자체 STEPS_TOTAL=13 사용.
+STEPS_TOTAL=5
 # shellcheck source=resources/run-step.sh
 source "${RESOURCE_DIR}/run-step.sh"
 
-run_step 1 a02_dsr_project    bash "${RESOURCE_DIR}/dsr-project-install.sh"
-run_step 2 a02_realsense_sdk  bash "${RESOURCE_DIR}/realsense-sdk-install.sh"
-run_step 3 a02_realsense_ros  bash "${RESOURCE_DIR}/realsense-ros-install.sh"
-run_step 4 a02_colcon_build   bash "${RESOURCE_DIR}/colcon-build.sh"
+run_step 1 a02_dsr_project       bash "${RESOURCE_DIR}/dsr-project-install.sh"
+run_step 2 a02_realsense_sdk     bash "${RESOURCE_DIR}/realsense-sdk-install.sh"
+run_step 3 a02_realsense_ros     bash "${RESOURCE_DIR}/realsense-ros-install.sh"
+run_step 4 a02_host_python_deps  bash "${RESOURCE_DIR}/host-python-deps.sh"
+run_step 5 a02_colcon_build      bash "${RESOURCE_DIR}/colcon-build.sh"
 
 state_dump
-echo "a02: 완료 — DSR + RealSense 설치 및 ${DSR_WORKSPACE} 빌드 (CUDA/PyTorch 는 별도 컨테이너)"
+echo "a02: 완료 — DSR + RealSense + host Python(venv) + ${DSR_WORKSPACE} 빌드"

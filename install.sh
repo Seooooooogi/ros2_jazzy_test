@@ -2,7 +2,7 @@
 # shellcheck source-path=SCRIPTDIR
 # install.sh — host 워크스테이션 셋업 단일 진입점 (a01~a04 전체 시퀀스).
 #
-# a01~a04 오케스트레이터의 모든 step 을 하나의 연속 시퀀스([n/12])로 실행한다.
+# a01~a04 오케스트레이터의 모든 step 을 하나의 연속 시퀀스([n/13])로 실행한다.
 # 같은 state 파일을 공유하므로 개별 오케스트레이터(bash a0N-...sh)로 이미 완료한 step 은
 # 자동 skip 된다. 특정 스테이지만 다시 돌리려면 해당 a0N 스크립트를 직접 실행하면 된다.
 #
@@ -34,13 +34,13 @@ source "${RESOURCE_DIR}/state.sh"
 source "${RESOURCE_DIR}/confirm.sh"
 config_assert_set
 
-STEPS_TOTAL=12
+STEPS_TOTAL=13
 # shellcheck source=resources/run-step.sh
 source "${RESOURCE_DIR}/run-step.sh"
 
 usage() {
     cat <<'EOF'
-install.sh — host 셋업 단일 진입점 (a01~a04 통합, 전체 12 step)
+install.sh — host 셋업 단일 진입점 (a01~a04 통합, 전체 13 step)
 
   bash install.sh            전체 시퀀스 실행 (이미 완료된 step 은 skip)
   bash install.sh --status   현재 진행 상태(state) 출력
@@ -118,17 +118,20 @@ if [[ ! -d "/lib/modules/${__running}/kernel/drivers/net/wireless" ]]; then
     echo "          GRUB 에서 modules-extra 가 있는 커널로 부팅하거나 docs/TROUBLESHOOTING.md 의 커널 모듈 항목 참조." >&2
 fi
 
-# --- step 7~10: 로봇/카메라 (a02: DSR + RealSense + colcon 빌드) ---
-run_step 7  a02_dsr_project   bash "${RESOURCE_DIR}/dsr-project-install.sh"
-run_step 8  a02_realsense_sdk bash "${RESOURCE_DIR}/realsense-sdk-install.sh"
-run_step 9  a02_realsense_ros bash "${RESOURCE_DIR}/realsense-ros-install.sh"
-run_step 10 a02_colcon_build  bash "${RESOURCE_DIR}/colcon-build.sh"
+# --- step 7~11: 로봇/카메라 (a02: DSR + RealSense + host Python + colcon 빌드) ---
+run_step 7  a02_dsr_project      bash "${RESOURCE_DIR}/dsr-project-install.sh"
+run_step 8  a02_realsense_sdk    bash "${RESOURCE_DIR}/realsense-sdk-install.sh"
+run_step 9  a02_realsense_ros    bash "${RESOURCE_DIR}/realsense-ros-install.sh"
+# host application Python(venv) 은 colcon 빌드 전에: 빌드를 venv 하에서 돌려야 ament_python
+# entry_point shebang 이 venv python 을 가리켜 `ros2 run` 이 app Python 을 본다(colcon-build.sh).
+run_step 10 a02_host_python_deps bash "${RESOURCE_DIR}/host-python-deps.sh"
+run_step 11 a02_colcon_build     bash "${RESOURCE_DIR}/colcon-build.sh"
 
-# --- step 11: 개발 도구 (a03: VS Code) ---
-run_step 11 a03_vscode bash "${RESOURCE_DIR}/vscode-install.sh"
+# --- step 12: 개발 도구 (a03: VS Code) ---
+run_step 12 a03_vscode bash "${RESOURCE_DIR}/vscode-install.sh"
 
-# --- step 12: 음성 사전 점검 (a04: .env 자격증명 + Docker Hub 로그인 안내) ---
-run_step 12 a04_voice_env bash "${RESOURCE_DIR}/voice-env-check.sh"
+# --- step 13: 음성 점검 (a04: .env 자격증명 + wakeword 모델 로드 smoke) ---
+run_step 13 a04_voice_env bash "${RESOURCE_DIR}/voice-env-check.sh"
 
 state_dump
-echo "install: 전체 12 step 완료 — host 셋업 종료."
+echo "install: 전체 13 step 완료 — host 셋업 종료."

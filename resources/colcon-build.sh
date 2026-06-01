@@ -27,6 +27,17 @@ set +u
 source "/opt/ros/${ROS_DISTRO}/setup.bash"
 set -u
 
+# application-shell: host venv 가 있으면 활성화한 뒤 빌드한다. ament_python 패키지의 entry_point
+# console_script shebang 은 setup.py 를 실행하는 python(=활성 venv python)으로 박히므로, 이렇게 빌드하면
+# `ros2 run <pkg> <node>` 가 venv 의 application Python(torch/openwakeword 등)을 보게 된다. venv 없으면
+# (application-containers variant) no-op — system python 으로 빌드.
+if [[ -n "${HOST_VENV:-}" && -d "${HOST_VENV}" ]]; then
+    set +u
+    # shellcheck disable=SC1091
+    source "${HOST_VENV}/bin/activate"
+    set -u
+fi
+
 cd "${DSR_WORKSPACE}"
 
 # rosdep: 워크스페이스 패키지의 선언적 의존 자동 해소 (init 은 a01 에서 완료).

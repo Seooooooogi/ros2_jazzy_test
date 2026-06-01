@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 # shellcheck source-path=SCRIPTDIR
-# a04-voice-precheck.sh — 음성 기능 사전 점검 (host 에는 설치하지 않음).
+# a04-voice-precheck.sh — 음성 환경 점검 (application-shell variant).
 #
-# 음성/추론 Python 패키지는 host 가 아닌 별도(yolo/voice) 컨테이너 안에만 존재한다.
-# 따라서 이 단계는 설치가 아니라, 컨테이너가 mount 할 .env 자격증명을 점검하고
-# 애플리케이션 이미지 pull 전 Docker Hub 로그인을 안내하는 host 측 사전 점검이다.
+# 본 브랜치는 host 단독 실행이라 음성/추론 Python 은 host venv 에 설치돼 있다(a02 host-python-deps,
+# openwakeword Model 로드까지 검증). 따라서 이 단계는 설치가 아니라, host 음성 노드가 환경변수로
+# 읽을 .env 자격증명을 점검하는 host 측 사전 점검이다.
 # 본 스크립트가 state 프레이밍(run_step)을 소유 — 자식 resource 스크립트는 순수 점검 본문.
 # 재실행 안전: 완료 단계는 state 파일 기준 skip.
 set -euo pipefail
@@ -32,4 +32,4 @@ source "${RESOURCE_DIR}/run-step.sh"
 run_step 1 a04_voice_env bash "${RESOURCE_DIR}/voice-env-check.sh"
 
 state_dump
-echo "a04: 완료 — 음성 환경 점검 (실제 실행은 음성 컨테이너)"
+echo "a04: 완료 — 음성 환경 점검 (host venv 가 직접 실행)"
