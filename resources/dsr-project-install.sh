@@ -5,9 +5,11 @@
 # backup/dsr-project-install{,_25}.sh 의 jazzy 마이그레이션 + idempotency.
 #   - clone 브랜치 -b ${DSR_BRANCH}(=jazzy). 이미 받은 경우 skip (재현성 — git pull 안 함).
 #   - 워크스페이스 = ${DSR_WORKSPACE}(=~/cobot2_ws). 레포 cobot2_ws/ 의 host 패키지
-#     (robot_control, od_msg) 만 src/ 로 symlink — app/container 패키지
+#     (robot_control, od_msg) 만 src/ 로 복사 — app/container 패키지
 #     (object_detection / voice_processing / pick_and_place_* / rokey) 는 별도(yolo/voice) 컨테이너가
-#     담당하므로 host ws 에서 제외. 빌드 범위가 symlink 로 자연히 한정됨.
+#     담당하므로 host ws 에서 제외. src/ 에 든 패키지만 빌드되어 범위가 자연히 한정됨.
+#     복사(symlink 아님): 워크스페이스가 레포 위치에 의존하지 않게 — 탈착식 미디어(USB)에서
+#     실행해도 빼면 깨지지 않는다. 레포가 소스 진실원본이라 재실행 시 레포 기준 재동기화.
 #   - 에뮬레이터: doosanrobot/dsr_emulator:${DSR_EMULATOR_VERSION} 명시 태그 pull.
 #     태그를 config.sh 단일 소스로 통제 (apt/docker latest drift 차단). upstream
 #     install_emulator.sh 도 동일 pull 만 수행하므로, 호출 대신 직접 pull.
@@ -37,7 +39,9 @@ else
     git clone -b "${DSR_BRANCH}" "${DSR_REPO_URL}" "${WS_SRC}/doosan-robot2"
 fi
 
-# 3) 레포 host 패키지를 ws src 로 symlink (재실행 안전 — ln -sfn).
+# 3) 레포 host 패키지를 ws src 로 복사 (symlink 아님 — 워크스페이스가 레포/USB 위치에
+#    의존하지 않도록). 레포가 소스 진실원본이므로 재실행 시 레포 기준으로 재동기화:
+#    기존 대상(과거 버전이 만든 symlink 포함)을 지우고 새로 복사 → 재실행 안전.
 #    누락 시 fail-loud: 경고만 하고 넘어가면 빌드는 성공(exit 0)하지만 워크스페이스에
 #    해당 패키지가 빠진 채 state=DONE 이 되어, 런타임에 ROS2 토픽 부재로야 발견된다.
 for pkg in "${HOST_PKGS[@]}"; do
@@ -45,7 +49,8 @@ for pkg in "${HOST_PKGS[@]}"; do
         echo "dsr: host 패키지 소스 누락 — ${REPO_DIR}/cobot2_ws/${pkg}" >&2
         exit 1
     fi
-    ln -sfn "${REPO_DIR}/cobot2_ws/${pkg}" "${WS_SRC}/${pkg}"
+    rm -rf "${WS_SRC:?}/${pkg}"
+    cp -a "${REPO_DIR}/cobot2_ws/${pkg}" "${WS_SRC}/${pkg}"
 done
 
 # 4) DSR 빌드 의존 apt 패키지 (a01 ros2-install.sh / desktop 코어에 없는 DSR 전용만).
