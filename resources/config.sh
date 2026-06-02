@@ -81,6 +81,13 @@ export DEBIAN_FRONTEND=noninteractive
 # --- apt keyring (모든 외부 repo 키링을 한 경로로 통일) ----
 : "${KEYRING_DIR:=/etc/apt/keyrings}"
 
+# --- ROS2 DDS / RMW (host ↔ 컨테이너 동일해야 discovery 성립) -----------
+# host 노드와 yolo/voice 컨테이너가 같은 topic/service 를 보려면 RMW 가 일치해야 한다
+# (Fast-DDS ↔ CycloneDDS 혼합 시 같은 topic 도 안 보임). jazzy 기본값(fastrtps)으로 명시
+# 핀해 오염된 셸에서도 결정적. activate.sh 가 이 값을 host 환경에 싣고, docker-compose 의
+# 두 서비스도 같은 기본값을 참조 → 양쪽 일치. override 시엔 compose 실행 전 동일 값 export 할 것.
+export RMW_IMPLEMENTATION="${RMW_IMPLEMENTATION:-rmw_fastrtps_cpp}"
+
 # --- Progress 표시 ([n/total] 시각화) ---------------------
 # 통합 진입점 install.sh 의 전체 단계 수 (a01:6 + a02:4 + a03:1 + a04:1).
 # run-step.sh 의 STEPS_TOTAL fallback 으로도 쓰인다. 단계 추가 시 함께 갱신.

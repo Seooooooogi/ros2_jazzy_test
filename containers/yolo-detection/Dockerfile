@@ -81,12 +81,15 @@ SHELL ["/bin/bash", "-eu", "-o", "pipefail", "-c"]
 ARG DEBIAN_FRONTEND=noninteractive
 ARG ROS_DISTRO=jazzy
 
-# 실행 의존만: cv_bridge/sensor_msgs + realsense2_camera (카메라 노드는 yolo 컨테이너 내부 실행).
+# 실행 의존만: cv_bridge/sensor_msgs. 카메라(realsense2_camera)는 host 에서 실행하고
+# 이 컨테이너의 object_detection 노드는 host 가 publish 하는 /camera/camera/* 토픽
+# (color/aligned_depth_to_color/camera_info)을 DDS 로 subscribe 한다 → 컨테이너 안에
+# realsense2_camera 드라이버나 USB passthrough 가 필요 없다. cv_bridge(Image↔cv2) 와
+# sensor_msgs(구독 메시지 타입)는 노드 런타임에 필수라 유지.
 RUN apt-get update \
  && apt-get install -y --no-install-recommends \
       ros-${ROS_DISTRO}-cv-bridge \
       ros-${ROS_DISTRO}-sensor-msgs \
-      ros-${ROS_DISTRO}-realsense2-camera \
  && rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /opt/venv   /opt/venv
