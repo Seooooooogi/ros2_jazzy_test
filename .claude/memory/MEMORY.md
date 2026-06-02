@@ -6,8 +6,8 @@
 ## Identity (요약)
 - **What**: ROS2 Humble installer → ROS2 Jazzy installer 마이그레이션. bash 셋업 스크립트 모음.
 - **Stack**: Ubuntu 24.04 (noble) + ROS2 Jazzy + NVIDIA + Docker + CUDA + PyTorch + Doosan DSR + RealSense + Voice(LangChain/OpenAI).
-- **Phase 진행 상태**: Phase 1 + Phase 2 (M1~M5) 완료. **Phase 4 컨테이너 "빌드 게이트" 완료** (2026-05-30, host 무관 빌드+개별검증). yolo/voice 이미지 실제 빌드+import smoke PASS. **다음 = Phase 3 host e2e 실행 검증 (Phase 4 통합 acceptance 의 선결).** 상세는 `session-handoff-LATEST.md`.
-- **브랜치 토폴로지 (2026-05-30 재구성)**: `main` = 설치 스크립트 전용(`.claude/ tasks/ docs/ containers/` 추적 제외, 디스크엔 보존). `feat/application-shell` = 현 작업(dev) superset 브랜치(4개 폴더+컨테이너 전부). `feat/application-containers` = 빌드게이트 스냅샷 보존. 셋 다 origin. **작업은 `feat/application-shell` 에서.** main↔dev 병합 시 `.gitignore` 함정 주의 (handoff Remaining Issues).
+- **Phase 진행 상태**: Phase 1 + Phase 2(M1~M5) + Phase 4 빌드게이트 완료. **2026-06-02 실기 검증 2문제 해결**(host Python 누락 / openwakeword Python 3.12) — pymodbus 3.x 이관, openwakeword→ai-edge-litert+shim(컨테이너 빌드 실측 PASS), 브랜치 배포 variant 분기(ADR-014). **다음 = 실기(noble/3.12) e2e 검증 (install.sh + ros2 run + gripper 하드웨어 BLOCKING).** 상세는 `session-handoff-LATEST.md`.
+- **브랜치 배포 variant (ADR-014, 2026-06-02)**: 공통 코드 fix는 동일, host Python 설치만 분기. `feat/application-shell` = **full host monolith**(venv에 torch/openwakeword 전부, `host-python-deps.sh`, step 13, 현 작업). `feat/application-containers` = **thin client**(robot_control용 numpy/scipy/pymodbus만 apt) + yolo/voice 컨테이너. `main` = 설치 스크립트 전용. 셋 다 origin. 두 feat은 merge 안 함(공통 fix는 cherry-pick/checkout). main↔dev `.gitignore` 함정 주의(handoff).
 
 ## Hard Rules (CLAUDE.md 참조 — 절대 약화 금지)
 1. ROS distro 단일 진실 소스 (`${ROS_DISTRO}`)
@@ -37,6 +37,7 @@
 - **ADR-007 (2026-05-27)**: Phase 4 컨테이너 (yolo / voice) 를 **Docker Hub public** 으로 publish. `latest` 금지 + semver/SHA 태그. Secret 차단 3중 layer (`.dockerignore` + runtime env injection only + multi-stage build) + publish 전 `docker history` grep 수동 검증 mandatory. `install.sh` (M5) 는 pull-first 분기 (`docker manifest inspect` 성공 시 `compose pull`, 실패 시 `compose build`).
 - **ADR-008**: host venv 폐기. application Python (PyTorch / ultralytics / langchain / openai 등) 은 모두 Phase 4 yolo/voice 컨테이너 image 안에서만 존재. host 는 system Python (apt) + colcon 워크스페이스만 책임.
 - **ADR-009 (2026-05-30)**: Phase 4 컨테이너 **base image = `ros:jazzy-ros-base-noble` 단일** (yolo도 nvidia/cuda base 안 씀 — PyTorch cu128 wheel 이 CUDA 런타임 번들, GPU 는 런타임 nvidia-container-toolkit). **network_mode: host**. 소스 수정 정책: object_detection/voice_processing 직접 수정, **od_msg 원본 보존**(host robot_control 공유 hash) + Dockerfile rosidl 툴체인으로 우회. 빌드게이트(빌드+import smoke+secret) ≠ Phase 4 PASS(GPU/service/hash/passthrough/publish 는 host e2e 이후).
+- **ADR-014 (2026-06-02)**: 배포 variant 브랜치 분기(application-shell=full host venv / application-containers=thin client+컨테이너) + **ADR-008 의 application-shell 한정 부분 환원**(robot_control 이 host 직접 실행 노드 → ADR-008 reopen 조건 충족, venv 재도입). openwakeword Python 3.12 = ai-edge-litert+`tflite_runtime` shim(`.tflite` 유지). pymodbus 2.x→3.x(`slave=`, read/write isError 가드, **gripper 하드웨어 재검증 BLOCKING**). venv↔ros2 run = colcon 을 venv active 에서 빌드(entry_point shebang).
 
 ## 트러블슈팅 누적 (Phase 3 산출물 예고)
 > 마이그레이션 중 발견하는 이슈는 `docs/TROUBLESHOOTING.md`에 카테고리별로. 본 인덱스에는 한 줄 요약만.

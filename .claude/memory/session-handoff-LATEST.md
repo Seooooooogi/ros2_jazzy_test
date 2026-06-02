@@ -4,81 +4,81 @@
 > Forward-looking only — 본 세션에서 한 일이 아니라 다음 세션이 할 일.
 
 ## Last updated
-2026-05-30 (2) — **브랜치 재구성**: main = 설치 스크립트 전용(`.claude/ tasks/ docs/ containers/` 추적 제외), dev = `feat/application-shell`(신규, superset, 현 작업 브랜치), `feat/application-containers` 보존. 셋 다 origin push 완료. 상세 = 아래 "git 운영 / 브랜치 토폴로지".
-2026-05-30 (1) — **Phase 4 컨테이너 "빌드 게이트" 완료** (host 무관 빌드 + 개별 검증). yolo/voice 멀티스테이지 Dockerfile + `containers/{entrypoint.sh, docker-compose.yml, build-all.sh}` + 루트 `.dockerignore` 신설, `cobot2_ws` 빌드버그 4건 수정. 두 이미지 실제 빌드 + import smoke + secret 위생 PASS (`local/ros2-jazzy-{yolo:13.6GB, voice:1.89GB}:dev`). 결정: **ADR-009** (base `ros:jazzy-ros-base-noble` 단일 / network host / od_msg 원본보존+Dockerfile 우회 / 빌드게이트 경계). 3 논리 커밋 → **feature 브랜치 `feat/application-containers` 로 origin push** (pre-push 파이프라인 통과, main 은 origin/main 그대로 유지). 빌드는 `bash containers/build-all.sh` (compose 플러그인 host 미설치 → docker build 직접).
-> 이전(2026-05-29): GitHub private 동기화로 Phase 2 (M1~M5) 구현 완료, ADR-006/011/012.
+2026-06-02 — **실기 검증 2문제 해결 + 브랜치 배포 variant 분기 구현**. (1) host application Python 누락 → host 단독 실행 구성, (2) openwakeword 가 Python 3.12 미동작(`.tflite`→tflite-runtime, 3.12 wheel 없음). 해결: pymodbus 2.x→3.x 이관(onrobot.py ×3, read/write `isError()` 가드), openwakeword → **ai-edge-litert + `tflite_runtime→ai_edge_litert` shim**(`.tflite`/코드 유지, **컨테이너 빌드+`Model(.tflite)` 로드 실측 PASS**). 브랜치 분기: `feat/application-shell`=full host venv(`resources/host-python-deps.sh` 신설, HOST_PKGS 7개, step 12→13), `feat/application-containers`=thin client(robot_control 용 numpy/scipy/pymodbus 만 apt). **ADR-014** 신설. 양 브랜치 각 4 논리 커밋 origin push. shellcheck 0 / 시크릿 0.
+> 이전(2026-05-30): 브랜치 재구성(main=설치 스크립트 전용), Phase 4 컨테이너 빌드게이트(ADR-009).
 
 ---
 
 ## Next Actions (priority order)
 
-1. **Phase 3 — host installer end-to-end 실제 실행 검증** (ROADMAP 3-2, 3-3): `bash install.sh` 전체 `[n/11]` 실행 (reboot 포함), 중단-재개(`--status`/`--reset`) 검증. acceptance = cobot2_ws 실제 동작 (L-004, 이 머신이 타깃). **Phase 4 통합(step 5)의 선결** — 컨테이너 acceptance 가 host 의 a01/a02 동작에 의존.
-2. **Phase 4 통합 (step 5, host e2e 이후)** = 진짜 Phase 4 PASS. 빌드게이트에서 미룬 것 전부:
-   - GPU 런타임: `docker run --gpus all <yolo> python3 -c "import torch; assert torch.cuda.is_available()"` (nvidia-container-toolkit + host driver 필요)
-   - service 왕복: host `robot_control`(client) ↔ 컨테이너 `/get_3d_position`(od_msg/SrvDepthPosition) + `/get_keyword`(std_srvs/Trigger). network_mode:host DDS.
-   - **od_msg type hash 정합**: host(robot_control)·yolo 가 동일 `cobot2_ws/od_msg` 빌드해야 일치. 불일치 시 `wait_for_service` 무한 차단.
-   - 카메라 USB passthrough (`/dev/bus/usb`) + 마이크 PipeWire socket mount (`${XDG_RUNTIME_DIR}/pulse`). compose 에 주석으로 placeholder 있음 → 활성화.
-   - publish: `docker login` + tag(semver/SHA) + push (ADR-007). `.env` 에 DOCKERHUB_USER/TOKEN.
-3. **Phase 3 산출물 — `docs/TROUBLESHOOTING.md`** (3-1): L-004~L-008 의 실행 버그 카탈로그화.
-4. **보류된 MINOR** (이번 리뷰): smoke assertion `int(major)==1` 강건화, cobot2_ws 의 ROS2 `print()`→`get_logger()`(기존 코드), build-all `--help`, pip lock 파일(transitive 완전 잠금).
+1. **실기(noble/Python 3.12) e2e 검증 — 양 브랜치 공통.** 이 dev 머신은 jammy/3.10 이라 불가, 실기 필수.
+   - `bash install.sh` 전체 `[n/13]`(shell) / `[n/12]`(containers) 실행, reboot 포함, `--status`/`--reset` 중단-재개.
+   - `ros2 run robot_control robot_control` 런타임 import OK(scipy/numpy/pymodbus), shell 은 `ros2 run pick_and_place_text detection`(ultralytics) 도.
+   - **(BLOCKING, 하드웨어)** 실 RG gripper open/close/move 1회씩 — pymodbus 3.x write 는 SW(`isError`)만 검증됨. **3.x minor 의 `slave=` vs `device_id=` 인자명 확인**(설치본에 따라 다름). 미검증 실로봇 운용 금지.
+   - host openwakeword: shell 은 `host-python-deps.sh` 가 `Model(.tflite)` 로드까지 검증(컨테이너에선 PASS, host 미검증). containers 는 `python3-pymodbus` apt 버전(noble 3.x)이 코드와 호환되는지.
+   - 실측 버전을 `docs/COMPATIBILITY.md` 의 "application-shell host Python(venv)" 표(현재 _TBD_)에 기입.
+2. **Phase 4 컨테이너 통합 (step 5, containers 브랜치, host e2e 이후)** = 진짜 Phase 4 PASS:
+   - GPU 런타임: `docker run --gpus all <yolo> python3 -c "import torch; assert torch.cuda.is_available()"` (nvidia-container-toolkit + driver).
+   - service 왕복: host `robot_control` ↔ 컨테이너 `/get_3d_position`(od_msg/SrvDepthPosition) + `/get_keyword`(std_srvs/Trigger). network_mode:host DDS. **od_msg type hash 정합**(host·yolo 동일 빌드).
+   - 카메라 USB passthrough(`/dev/bus/usb`) + 마이크 PipeWire(`${XDG_RUNTIME_DIR}/pulse`). compose 주석 placeholder 활성화.
+   - publish: `docker login` + semver/SHA tag + push (ADR-007).
+3. **정리(낮음)**: ROADMAP Phase 2 체크박스 reconcile. 보류 MINOR(host-python-deps 단독 재실행 시 `apt update` 네트워크 의존 주석, build-all `--help`, pip lock 파일).
 
 ---
 
 ## Current Work State
 
-- 코드 변경 없음 (in-progress 작업 없음). 모든 빌드게이트 작업은 `feat/application-containers` 에 커밋+push 완료.
-- **`.claude/memory/{MEMORY.md, session-handoff-LATEST.md}` 만 미커밋** (이 체크포인트 갱신분). 세션 메모리라 의도적 비커밋 — 다음 세션이 커밋하거나 그대로 둠.
+- 코드 변경 없음 (in-progress 없음). 2문제 해결 작업은 **양 브랜치 커밋+push 완료**(shell feed18b / containers 62bd3a9).
+- **`.claude/memory/` 세션 메모리 + 루트 `.gitignore`(로컬 도구 ignore) 만 미커밋** — 의도적. `.gitignore` 는 이번 작업 무관(`.understand-anything/`·`.agents/`·`.claude/skills/`·`skills-lock.json`).
+- 검증 잔여 이미지 `local/ros2-jazzy-voice:dev-aiedge`(로컬, 삭제 무방).
 
 ---
 
 ## Open Decisions
 
-- **Phase 4 통합 세부** (step 5 진입 시): 마이크 `device_index=10` 하드코딩(MicController/get_keyword) → 컨테이너에서 동적 매핑/PipeWire 필요. 카메라 USB passthrough 구체.
-- ~~Phase 4 디자인 3건 (base/network/install.sh 자동호출)~~ → **전부 해결**: (a) base = `ros:jazzy-ros-base-noble` 단일 (ADR-009), (b) network = host (ADR-009), (c) install.sh 자동호출 안 함 — build-all/compose 분리 (ADR-007/ROADMAP 4-6).
+- **Phase 4 통합 세부** (containers step 5 진입 시): 마이크 `device_index=10` 하드코딩(MicController/get_keyword) → 동적 매핑/PipeWire. 카메라 USB passthrough 구체.
 
 ---
 
 ## Remaining Issues
 
-- **통합 미해결 소스 이슈** (step 5 에서 처리, 빌드게이트엔 무관):
-  - YOLO 가중치 `yolov8n_tools_0122.pt` 가 `cobot2_ws/object_detection/resource/` 에 **없음** — `cobot2_ws/pick_and_place_text/resource/` 에만 존재(6MB). 런타임 `YoloModel()` 인스턴스화 시 FileNotFoundError. mount 또는 복사 필요 (ROADMAP 4-1: image 에 안 박고 mount).
-  - `object_detection` 이 `realsense2_camera` 노드를 직접 안 띄움 (launch 없음, `/camera/camera/*` subscribe 만). 컨테이너에서 카메라 노드 별도 기동 필요.
-- **ROADMAP 체크박스 미반영 (Phase 2 분)**: 2-1/2-2/2-3/2-4/2-5/2-7/2-11~2-15 가 `[ ]` 인데 작업 완료. Phase 3 진입 전 reconcile (활성 버그 아님).
-- yolo 이미지 13.6GB — nvidia CUDA 런타임 ≈4.2GB 가 floor (GPU torch 불가피). 안전 슬림 한계 도달.
-- **.gitignore 병합 함정 (브랜치 재구성 2026-05-30 부작용)**: main 의 `.gitignore` 가 `.claude/ tasks/ docs/ containers/` 를 ignore. main 을 dev 브랜치로 merge 하면 이 ignore 규칙이 전파돼 dev 에서 그 폴더의 **신규 파일이 silently 추적 누락**된다 (기존 추적 파일은 유지). main→dev merge 시 `.gitignore` 충돌을 dev 쪽 유지로 해소할 것. 역방향(dev→main)은 그 폴더가 다시 추적될 수 있으니 merge 대신 cherry-pick 권장.
-- 활성 런타임 버그 없음.
+- **(BLOCKING, 하드웨어) gripper 안전**: pymodbus 3.x write 의미는 import smoke 로 검증 불가 — 실 gripper 재검증 필수. `slave=`/`device_id=` minor 차이도 실기 확인.
+- **Phase 4 통합 미해결 소스 이슈** (step 5, containers):
+  - YOLO 가중치 `yolov8n_tools_0122.pt` 가 `object_detection/resource/` 에 **없음**(`pick_and_place_text/resource/` 에만, 6MB). 런타임 `YoloModel()` FileNotFoundError. mount/복사 필요.
+  - `object_detection` 이 `realsense2_camera` 노드 직접 안 띄움(`/camera/camera/*` subscribe 만) → 카메라 노드 별도 기동.
+- **pick_and_place_voice 구조 smell**: setup.py 가 robot_control/voice_processing/object_detection 를 vendored sub-package 로 포함(`onrobot.py`·`wakeup_word.py` 중복본 존재). 동작은 하나 향후 한쪽만 패치하는 실수 경로. 리팩토링 후보(미요청).
+- **.gitignore 병합 함정**: main 의 `.gitignore` 가 `.claude/ tasks/ docs/ containers/` ignore → main→dev merge 시 dev 에서 그 폴더 신규 파일 silent 추적 누락. merge 시 `.gitignore` 충돌을 dev 쪽 유지, 역방향은 cherry-pick.
+- ROADMAP Phase 2 체크박스 미반영(활성 버그 아님).
 
 ---
 
 ## Context Notes (다음 세션 전제)
 
-### Phase 4 빌드게이트 산출물 (2026-05-30)
-- `containers/yolo-detection/Dockerfile`, `containers/voice-processing/Dockerfile` (멀티스테이지 builder→runtime, base `ros:jazzy-ros-base-noble`). 빌드 context = repo 루트, COPY `cobot2_ws/{od_msg,object_detection}` / `cobot2_ws/voice_processing` + `containers/entrypoint.sh`.
-- 빌드 = `bash containers/build-all.sh` → docker build ×2 + secret grep + 컨테이너 내부 import smoke. **compose 플러그인 host 미설치** (docker 29.1.3, compose 없음) → build-all 은 `docker build` 직접. compose 는 런타임(up) 단계용.
-- 컨테이너 pip 의존 핀: numpy<2(마지막 재핀), opencv-python<4.10(numpy>=2 메타 충돌 회피), ultralytics<9, langchain<2/openai<3. 실측 버전표 = `docs/COMPATIBILITY.md`.
-- **빌드게이트 ≠ Phase 4 PASS**: 빌드+import smoke+secret 까지만. GPU/service/hash/passthrough/publish 는 host e2e 이후 (위 Next Action 3).
+### 브랜치 배포 variant (ADR-014, 2026-06-02)
+- 공통 코드 fix(pymodbus onrobot.py ×3, openwakeword voice Dockerfile/build-all.sh)는 **양 브랜치 동일**. host Python 설치만 갈림:
+  - `feat/application-shell` = **full host monolith**: `host-python-deps.sh` 가 venv(`${DSR_WORKSPACE}/.venv`, `--system-site-packages`)에 torch cu128/ultralytics/openwakeword/langchain/pymodbus 등 설치(컨테이너 핀 미러링). `HOST_PKGS` 7개 전체. colcon 을 venv active 에서 빌드 → entry_point shebang=venv python → `ros2 run` 이 venv 봄. step 12→13(`a02_host_python_deps`). `activate.sh` 가 ROS+overlay+venv opt-in.
+  - `feat/application-containers` = **thin client**: `HOST_PKGS=(robot_control od_msg)`, host 는 `python3-numpy/scipy/pymodbus` 만 apt(`dsr-project-install.sh` step 4b). yolo/voice 는 컨테이너. step 12 유지.
+- 두 변종은 같은 내용에서 출발한 별도 브랜치(merge 안 함, 공통 fix 는 cherry-pick/checkout 동기화).
 
-### git 운영 / 브랜치 토폴로지 (2026-05-30 재구성)
-- **3-브랜치 구조 확정**:
-  - `main` (origin/main = 0582d17): **설치 스크립트 전용**. `.claude/ tasks/ docs/ containers/` 를 추적 제외(`git rm --cached` + `.gitignore`). 파일은 디스크/히스토리에 보존(비파괴). 추적: a01~a04, install.sh, resources/, cobot2_ws/, CLAUDE.md, .env.example, 루트 .dockerignore.
-  - `feat/application-shell` (origin, upstream 설정): **현 작업(dev) 브랜치 = superset**. 위 4개 폴더 + 컨테이너 작업 전부 보유. 세션 메모리/문서/노트는 여기서만 추적·커밋.
-  - `feat/application-containers` (origin, e3b384a): 변경 없이 보존 (컨테이너 빌드게이트 스냅샷).
-- 작업은 `feat/application-shell` 에서. 쉘 스크립트 변경을 main 에 반영할 때만 그 브랜치로 전환. 병합 함정은 Remaining Issues 참조.
-- `gh` CLI 설치 + 인증 완료 (Seooooooogi, ssh). `origin` = `git@github.com:Seooooooogi/ros2_jazzy_test.git` (private, ADR-012).
-- 커밋: 사용자 명의만, AI attribution 금지 (하네스 기본 Co-Authored-By trailer 미적용). 메시지 외부 친화 (내부 축약어 미사용).
-- 백업 브랜치 `backup/pre-github-sync-2026-05-29` 존재 (검토 후 삭제 가능).
-- push 전 `pre-push` 스킬 (시크릿 스캔 + code-reviewer) 필수. 스킬은 staged diff 기준이나 commit 후 push 시 `git diff origin/main..HEAD` 로 payload 스캔.
+### openwakeword Python 3.12 레시피 (검증됨)
+- 진짜 블로커 = `.tflite` 가 요구하는 **tflite-runtime**(3.12 wheel 없음, 최대 3.11), openwakeword 자체 아님. 리서치가 "0.6.0 이 ai-edge-litert 조건부 설치"라 했으나 **실제 0.6.0 은 tflite-runtime 하드 의존** — 컨테이너 빌드로 직접 확인(lessons.md L-009).
+- 해법: `pip install --no-deps openwakeword==0.6.0` + 실제 의존 명시(onnxruntime/tqdm/scikit-learn/requests) + `ai-edge-litert`(cp312, 동일 Interpreter API) + `tflite_runtime→ai_edge_litert` shim 을 site-packages 에 생성 + `download_models(['__feature_only__'])`(feature 모델 wheel 미동봉). `.tflite`/`wakeup_word.py` 무변경. 검증 = `import` 아닌 `Model(.tflite)` 인스턴스화+predict.
 
-### 검증 함정 (lessons.md 참조)
-- **L-004** 정적 통과 ≠ 동작 / **L-005** apt hold `hi` / **L-006** apt 키 fingerprint / **L-007** ROS2 인터페이스 import 검증 / **L-008** Dockerfile RUN 의 `set -u` + ROS setup.bash 충돌.
+### git 운영 / 브랜치 토폴로지
+- `main`(설치 스크립트 전용) / `feat/application-shell`(full host dev, 현 작업) / `feat/application-containers`(thin client + 컨테이너). 셋 다 origin.
+- `origin` = `git@github.com:Seooooooogi/ros2_jazzy_test.git`(private). 커밋: 사용자 명의만, AI attribution 금지. 메시지 외부 친화(내부 축약어 미사용).
+- push 전 시크릿 스캔 필수. (주의: pre-push 스킬 스캐너 `scan_secrets.pl` 가 `.claude/skills/` 미존재 시 수동 grep 폴백.)
 
-### 도메인 사실 (step 5 통합 시 전제 — 유효)
-- doosan-robot2: host↔controller = TCP 12345 via DRFL (DDS 아님). clone `-b jazzy`, emulator `3.0.1` `profiles:[dev]`.
-- librealsense2 = Intel noble apt 정식. Voice 입력 = 노트북 내장 마이크 (PipeWire socket mount).
-- 호스트 = RTX 4060 Laptop (sm_89). host↔container 통신 = 2개 ROS2 service (topic 아님). 카메라 `/camera/camera/*` 는 yolo 컨테이너 내부에서 닫힘.
+### 검증 함정 (lessons.md)
+- **L-004** 정적 통과 ≠ 동작 / **L-007** ROS2 인터페이스 import 검증 / **L-008** Dockerfile `set -u`+ROS setup.bash / **L-009** 외부 리서치 ≠ 사실(openwakeword 의존, 빌드로 실증) + import smoke ≠ 런타임 로드.
+
+### 도메인 사실 (유효)
+- doosan-robot2: host↔controller = TCP 12345 via DRFL. gripper = OnRobot RG2/RG6, Modbus TCP(`onrobot.py`, slave=65).
+- 호스트(실기) = RTX 4060 Laptop, noble/Python 3.12. 이 dev 머신 = jammy/3.10(타깃 아님).
+- Voice 입력 = 노트북 내장 마이크(PipeWire). librealsense2 = Intel noble apt 정식.
 
 ---
 
 ## Current Focus
-- **Top priority**: Phase 3 host e2e 검증 (Phase 4 통합 acceptance 의 선결 — torch.cuda/service/hash 전부 host 의존). 작업 브랜치 = `feat/application-shell`.
-- **Friction**: Phase 4 PASS 는 host e2e 없이는 측정 불가. 통합 소스 이슈(가중치 위치, device_index, 카메라 노드 기동) 가 step 5 에서 추가로 드러날 것.
+- **Top priority**: 실기(noble/3.12) e2e 검증 — `bash install.sh` + `ros2 run` + **gripper 하드웨어(BLOCKING)**. 작업 브랜치 = `feat/application-shell`.
+- **Friction**: 이 dev 머신은 jammy/3.10 이라 host 런타임·GPU·gripper 검증 불가. openwakeword 레시피만 컨테이너(3.12)로 실증 완료.

@@ -85,6 +85,15 @@
 
 ---
 
+## L-009: 외부 리서치 결과 ≠ 사실 — 의존성/호환성은 빌드로 실증한다. 그리고 `import` smoke ≠ 런타임 로드
+
+- **Symptom**: openwakeword Python 3.12 호환을 조사한 웹 리서치가 "openwakeword 0.6.0 이 Linux 에서 `ai-edge-litert` 를 조건부 의존으로 설치한다"고 Fact 로 보고. 이를 믿고 Dockerfile 을 짰으나 `docker build` 가 `Could not find a version that satisfies tflite-runtime` 으로 실패. 실제 0.6.0(PyPI 최신) 의 `Requires-Dist` 는 `tflite-runtime<3,>=2.8; platform_system=="Linux"` 를 **하드 강제**였고, ai-edge-litert 조건부는 미출시 git main 한정이었다.
+- **Why it happened**: 외부 소스(이슈 트래커/포크/현재 git main)는 **버전-시점 불일치**가 흔하다. "릴리스 X 의 setup.py"라는 주장이 실은 X 가 아닌 main 브랜치 setup.py 인 경우가 많다. 리서치는 가설을 좁혀주지만 그 자체가 검증은 아니다. 또 컨테이너 build smoke 가 `import openwakeword` 까지만 해서 통과했는데, `.tflite` 로드는 런타임(`Model(...)`)에만 일어나 동일 버그가 잠재해 있었다.
+- **Correction**: 의존성/호환성 주장은 **wheel METADATA 직접 확인 + 실제 빌드**로 실증한다(`pip download <pkg>==<ver> --no-deps` 후 `Requires-Dist` 확인 → `docker build`). 컨테이너 base 가 타깃 Python(3.12)이면 실기 host 없이도 검증 가능 — 적극 활용. import 만으로 끝내지 말고 런타임에 실제로 일어나는 동작(모델 로드/노드 인스턴스화)까지 smoke 에 포함. 실제 해법 = `--no-deps` + 실제 의존 명시 + `ai-edge-litert` + `tflite_runtime→ai_edge_litert` shim + `download_models` (ADR-014), `Model(.tflite)` 로드+predict 로 확증.
+- **Trigger**: 외부(웹/이슈/포크) 의존성·버전·API 주장에 기반해 설치/핀을 결정할 때. import 만 하는 smoke 를 "검증"이라 부를 때. 새 ML 라이브러리(특정 Python 버전 의존) 도입, openwakeword/tflite 계열 갱신 시.
+
+---
+
 ## 예상 후보 (발생 시 정식 항목으로 승격)
 
 본 프로젝트가 Phase 2 마이그레이션 단계에서 실제 작업이 진행되면, 발견되는 반복 실수를 이 파일에 누적.
