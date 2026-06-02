@@ -28,9 +28,10 @@
 
 ## Current Work State
 
-- 코드 변경 없음 (in-progress 없음). 2문제 해결 작업은 **양 브랜치 커밋+push 완료**(shell feed18b / containers 62bd3a9).
-- **`.claude/memory/` 세션 메모리 + 루트 `.gitignore`(로컬 도구 ignore) 만 미커밋** — 의도적. `.gitignore` 는 이번 작업 무관(`.understand-anything/`·`.agents/`·`.claude/skills/`·`skills-lock.json`).
+- 코드 변경 없음 (in-progress 없음). 이번 세션 작업 **전부 origin 반영 완료**: 2문제 해결(shell `50c30ca`, 세션 메모리 커밋 포함 / containers `62bd3a9`), main 동기. 세 브랜치 모두 0 ahead.
+- **미커밋(의도적, 이번 작업 무관)**: 루트 `.gitignore`(로컬 도구 ignore 추가분) + `?? .codegraph/`·`.agents/`·`.understand-anything/` 등 로컬 에이전트 도구 산출물. 사용자 지시로 제외 유지.
 - 검증 잔여 이미지 `local/ros2-jazzy-voice:dev-aiedge`(로컬, 삭제 무방).
+- **agentmemory 장기 저장소 미반영**: 이 세션에 agentmemory MCP 서버 미연결(연결 MCP = Slack/Notion/Gmail/Drive 만, `memory_save` 도구 부재). 파일 기반 메모리(`.claude/memory/`, `tasks/lessons.md`, ADR)는 git 으로 반영됨. agentmemory 장기 저장을 원하면: `/plugin list`(agentmemory enabled 확인) → Claude Code 재시작 → `/mcp`(connected 확인) → `/remember`(이번 세션 핵심: 브랜치 variant / openwakeword 레시피 / L-009 / pymodbus 안전).
 
 ---
 
