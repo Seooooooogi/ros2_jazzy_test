@@ -33,7 +33,7 @@ ROS2 Humble installer → ROS2 Jazzy installer 마이그레이션. Ubuntu + NVID
 
 ## Quick Ref
 
-- Entry (권장): `bash install.sh` — a01~a04 전체를 단일 시퀀스(`[n/12]`)로 실행. 완료된 step 은 자동 skip, reboot 후 재실행하면 이어서 진행. `--status`(상태), `--reset`(state 초기화), `--help`.
+- Entry (권장): `bash install.sh` — a01~a04 전체를 단일 시퀀스(`[n/12]`)로 실행. 완료된 step 은 자동 skip, reboot 후 재실행하면 이어서 진행. `--status`(상태), `--reset`(state 초기화), `--help`. 콘솔엔 `[n/total]` 진행률 + 경고/에러만 남고, 각 step 의 상세 출력(apt/pip/colcon)은 `~/.ros2_jazzy_test/install.log`(append-only)로 빠진다.
 - 개별 스테이지 재실행: `bash a01-prerequirements.sh`(시스템, reboot 포함) / `a02-robot-camera.sh`(로봇+카메라) / `a03-vs-code-install.sh`(VS Code) / `a04-voice-precheck.sh`(음성 점검). 단독 실행 시 스테이지-로컬 진행률(`[n/6]` 등). install.sh 와 같은 state 파일 공유 → 어느 쪽으로 실행하든 skip 일관.
 - 순차 의미: `a01 → reboot → a02 → a03 → a04`. RealSense 는 a02 에 포함, humble 원본 realsense 스크립트는 `backup/` 보존. `run_step` 은 `resources/run-step.sh` 로 중앙화(오케스트레이터는 `STEPS_TOTAL` 만 설정).
 - 정적 검증: `shellcheck *.sh resources/*.sh`
@@ -53,7 +53,7 @@ ROS2 Humble installer → ROS2 Jazzy installer 마이그레이션. Ubuntu + NVID
 - 스크립트 작성 후 `shellcheck` 통과 없이 머지 금지.
 - 새 단계 추가 시 `total` 카운트와 진행률 표시 동시 갱신 (Hard Rule #4).
 - 새 외부 repo / Docker image 도입 시 `docs/COMPATIBILITY.md` 매트릭스 갱신 (Hard Rule #8).
-- 로그는 append-only (`>> install.log`), 덮어쓰기 (`> install.log`) 금지.
+- 로그는 append-only — 각 step 의 상세 stdout/stderr 는 `run-step.sh` 가 `~/.ros2_jazzy_test/install.log` 로 append(콘솔엔 `[n/total]` 진행률 + 경고/에러만). 덮어쓰기 (`> install.log`) 금지.
 - 커밋은 한 논리 변경 단위로 분리 (예: "RealSense distro 패치"와 "DSR 의존성 갱신"은 다른 커밋).
 - 커밋은 사용자 명시적 요청 시에만 (Hard Rule #11).
 - **커밋 메시지는 외부 사람이 이해 가능하게 작성** — 내부 마일스톤 코드 (M1, M2), 결정 기록 번호 (ADR-NNN), 단계 번호 (Phase N), 룰 ID (Hard Rule #N) 같은 본 레포 내부 축약어 미사용. 기능 단위로 분할. 한국어 회화 + 영어 식별자 혼용.

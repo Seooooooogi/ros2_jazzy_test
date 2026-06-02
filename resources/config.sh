@@ -17,6 +17,11 @@
 export ROS_DISTRO=jazzy
 export UBUNTU_CODENAME=noble
 
+# apt 비대화 모드 강제. run-step.sh 가 설치 명령의 stdout 을 로그파일로만 보내므로
+# (콘솔엔 진행률 + stderr 만) dpkg 의 conffile/대화 프롬프트가 stdout 으로 나가면
+# 화면에 안 보인 채 입력을 기다려 설치가 멈춘다. noninteractive 로 그 경로를 차단.
+export DEBIAN_FRONTEND=noninteractive
+
 # NOTE: host venv 는 폐기 (2026-05-27 결정). application Python 패키지
 # (PyTorch / ultralytics / langchain / openai 등) 는 모두 별도(yolo/voice) 컨테이너 안에만 존재.
 # host 는 system Python (apt) + colcon 워크스페이스만 책임.
@@ -65,6 +70,13 @@ export UBUNTU_CODENAME=noble
 # --- State file (resumable 재실행, 구조화 포맷 2026-05-27) ----
 : "${STATE_DIR:=${HOME}/.ros2_jazzy_test}"
 : "${STATE_FILE:=${STATE_DIR}/state}"
+
+# --- 설치 상세 로그 (append-only — 덮어쓰기 금지) ------------------------
+# run-step.sh 가 각 step 명령의 stdout+stderr 전량을 여기에 append 한다.
+# 콘솔에는 [n/total] 진행률과 stderr(경고/에러)만 남고, 대량 출력(apt/pip/colcon)은
+# 이 파일로 빠진다. torch/colcon 으로 회당 수십 MB 누적 가능 — resumable 재실행이라
+# 계속 쌓이지만 규칙상 truncate/회전하지 않는다 (필요 시 사용자가 수동 정리).
+: "${LOG_FILE:=${STATE_DIR}/install.log}"
 
 # --- apt keyring (모든 외부 repo 키링을 한 경로로 통일) ----
 : "${KEYRING_DIR:=/etc/apt/keyrings}"
