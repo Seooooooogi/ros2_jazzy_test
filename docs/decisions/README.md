@@ -503,3 +503,31 @@
 - 두 variant 를 단일 브랜치로 통합 요구 / host venv 유지비용 과다 시.
 - openwakeword 가 ai-edge-litert 를 정식 의존으로 채택한 릴리스가 나오면 shim 제거 검토.
 - pymodbus 3.x minor API(`slave`→`device_id`)가 더 바뀌면 onrobot.py 재점검.
+
+---
+
+### ADR-015: 카메라 소유권 host 이전 — yolo 컨테이너는 토픽 subscribe (2026-06-02)
+
+**Date**: 2026-06-02
+
+**Context**:
+- Notion 워크플로우 다이어그램 2-1-a(통신 구조 축약) 갱신으로 컨테이너 토폴로지 변경. 종전 설계(구현본)는 `realsense2_camera` 노드를 yolo 컨테이너 안에서 USB passthrough(`/dev/bus/usb`)로 실행했다(yolo Dockerfile runtime 의 `ros-jazzy-realsense2-camera`, compose 의 주석 USB devices).
+- 사용자 결정(2026-06-02): 카메라를 **host 소유**로 이전. host 가 `realsense2_camera` 를 실행해 `/camera/camera/*` 를 publish 하고, yolo 컨테이너의 `object_detection` 노드는 그 토픽을 DDS 로 subscribe 만 한다.
+- 근거: `object_detection.realsense.ImgNode` 는 이미 `/camera/camera/{color/image_raw, aligned_depth_to_color/image_raw, color/camera_info}` 의 **구독자**다(rclpy/sensor_msgs/cv_bridge 만 import — realsense2_camera 패키지 무의존). 카메라 드라이버를 컨테이너에 둘 구조적 이유가 없고, USB passthrough·udev·커널 모듈을 컨테이너로 끌고 가는 함정을 host 책임으로 되돌리면 단순해진다. host 는 이미 `realsense-ros-install.sh`(a02)가 `ros-jazzy-realsense2-camera` 설치.
+
+**Decision**:
+- **yolo 컨테이너에서 카메라 드라이버 제거**: `containers/yolo-detection/Dockerfile` runtime 스테이지의 `ros-${ROS_DISTRO}-realsense2-camera` apt 제거. `cv-bridge`/`sensor-msgs` 는 구독·변환에 필수라 유지. builder 스테이지 무변경.
+- **USB passthrough 제거**: `docker-compose.yml` yolo 서비스의 주석 USB `devices` 블록 삭제(카메라가 host 라 불필요). `network_mode: host` 는 유지 — 이제 host↔컨테이너 service 왕복뿐 아니라 **카메라 토픽 구독**도 이 경로로 일어난다.
+- **host 카메라 기동은 운영 절차**: 컨테이너 up 전에 host 에서 `ros2 launch realsense2_camera rs_launch.py align_depth.enable:=true`. `align_depth` 누락 시 `aligned_depth_to_color` 미publish → 노드 depth 계산 실패(TROUBLESHOOTING 카탈로그 + compose 헤더에 명시).
+- **RMW 일관성 명시 핀**: host↔컨테이너가 같은 topic/service 를 보려면 RMW 일치 필요. `config.sh` 가 `RMW_IMPLEMENTATION`(기본 `rmw_fastrtps_cpp`=jazzy 기본)을 export(host 는 activate.sh 경유), compose 두 서비스도 동일 기본값 참조. `ROS_DOMAIN_ID` 와 함께 양쪽 동일해야 discovery 성립.
+
+**Consequences**:
+- yolo 이미지에서 realsense2_camera + 그 transitive 의존 제거 → 이미지 약간 축소. ADR-009 의 base/네트워크/빌드게이트 결정은 그대로 유효 — 본 ADR 은 카메라 배치만 변경(ADR-009 의 컨테이너-내 카메라 실행 가정을 대체).
+- 빌드게이트(`build-all.sh`) 영향 없음 — yolo smoke 는 `object_detection.realsense` import(구독자, realsense2_camera 무의존)라 제거 후에도 PASS.
+- 운영 의존 추가: 컨테이너만 띄우면 안 되고 host 카메라 노드가 선행해야 함(host/application 2-step 에 카메라 기동 1줄 추가).
+- application-shell 변형은 무관(전부 host 실행이라 카메라도 자연히 host). 본 변경은 application-containers 한정.
+- Notion 2-1 풀 다이어그램 / 3-1 스택 / 3-2-4 는 아직 카메라-in-컨테이너 표기 → 문서 정합 필요(코드가 단일 진실, 2-1-a 기준).
+
+**Reopen 조건**:
+- 카메라를 다시 컨테이너로 넣을 구조적 이유(예: 다중 카메라를 컨테이너별 격리)가 생기면 → USB passthrough + udev 책임 재설계.
+- RMW 를 CycloneDDS 로 표준 변경 시 → config.sh 기본값 + 양쪽 일관성 재점검.

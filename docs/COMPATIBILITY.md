@@ -137,6 +137,9 @@ host 미설치 (ADR-008) — 아래는 두 컨테이너 이미지 **안에서** 
 | numpy | 1.26.4 | `<2` (마지막 재핀) | ultralytics 호환 |
 | polars | 1.41.2 | (ultralytics 의존) | |
 
+> 카메라는 **host 소유**(ADR-015, 2026-06-02): 이 컨테이너엔 realsense2_camera 드라이버를 두지 않는다. apt 런타임 ROS 의존은 `cv-bridge`/`sensor-msgs` 만(이미지 슬림화). host 가 `/camera/camera/*` 를 publish 하고 `object_detection` 노드는 subscribe — host 카메라 패키지는 위 시스템 표의 `ros-jazzy-realsense2-camera`(4.57.7) 행.
+> DDS 통신: host↔컨테이너 동일 `RMW_IMPLEMENTATION`(기본 `rmw_fastrtps_cpp`) + 동일 `ROS_DOMAIN_ID` + compose `network_mode: host` 필요(`resources/config.sh` 가 host 에, compose env 가 컨테이너에 주입).
+
 ### voice-processing (base `ros:jazzy-ros-base-noble`, Python 3.12)
 
 | 패키지 | 실측 버전 | Dockerfile 핀 | 비고 |

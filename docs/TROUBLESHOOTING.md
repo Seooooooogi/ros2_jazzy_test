@@ -79,3 +79,19 @@
 **원인**: noble apt / 최신 pip 의 pymodbus 는 3.x 라 `pymodbus.client.sync` 모듈이 없고(→`pymodbus.client`), 메서드 인자가 `unit=`→`slave=` 로 바뀌었다. 3.x 는 통신 실패 시 예외 대신 에러 응답 객체를 반환해 `result.registers[0]` 직접 접근이 AttributeError 가 된다.
 
 **복구 / 예방**: onrobot.py 3개를 3.x API 로 이관 완료(`from pymodbus.client import ...`, `slave=`, read·write 후 `isError()` 가드 — write 실패 silent 진행 차단). ⚠️ **안전**: register write 의미는 import smoke 로 검증 안 됨 — 실 RG gripper 에서 open/close/move 하드웨어 재검증 없이 실로봇 운용 금지. 설치되는 3.x minor 에 따라 `slave=`→`device_id=` 일 수 있어 실기에서 인자명 확인. 상세 = ADR-014.
+
+---
+
+## yolo 컨테이너가 카메라를 못 봄 / `/get_3d_position` 좌표가 비거나 depth 가 None
+
+**증상**: yolo 컨테이너(`object_detection`)는 떠 있는데 `/get_3d_position` 서비스 호출이 응답을 안 주거나, 응답 좌표의 depth(z)가 0/None. `ros2 topic list` 에 `/camera/camera/aligned_depth_to_color/image_raw` 가 없다.
+
+**원인**: 카메라는 **host 소유**다(2026-06-02 토폴로지 변경). yolo 컨테이너 안엔 realsense2_camera 드라이버가 없고, `object_detection` 노드는 host 가 publish 하는 `/camera/camera/*` 토픽을 DDS 로 subscribe 만 한다. host 에서 카메라 노드를 안 띄웠거나, `align_depth` 없이 띄워 `aligned_depth_to_color` 토픽이 없으면 노드의 `depth_frame` 이 채워지지 않아 좌표 계산이 실패한다.
+
+**복구 / 예방**:
+- yolo 컨테이너를 올리기 **전에** host 에서 카메라 노드 기동(align_depth 필수):
+  ```bash
+  ros2 launch realsense2_camera rs_launch.py align_depth.enable:=true
+  ```
+- 토픽 확인: `ros2 topic list | grep /camera/camera` → `color/image_raw`, `aligned_depth_to_color/image_raw`, `color/camera_info` 3개가 보여야 한다. (노드 구독 경로가 `/camera/camera/*` 이중 namespace 라 `camera_name`/namespace 를 바꿔 띄우면 토픽이 안 맞는다 — 기본 launch 사용.)
+- host 와 컨테이너가 서로의 토픽을 보는지: 같은 `ROS_DOMAIN_ID` + 같은 `RMW_IMPLEMENTATION`(둘 다 `resources/config.sh` 가 host 에 싣고 compose 가 컨테이너에 주입, 기본 fastrtps) + compose `network_mode: host`. 하나라도 어긋나면 같은 topic 도 discovery 안 됨. 상세 = ADR-015.
