@@ -1,6 +1,9 @@
 # Environment
 .env
 .env.local
+# .env 키 기록 시 만드는 임시파일(.env.XXXXXX) 등 모든 .env 파생물 — 단 템플릿은 추적
+.env.*
+!.env.example
 
 # Installer state / checkpoint — 머신별 진행 상태라 재생성 가능, 추적하지 않음
 .install_state

@@ -29,7 +29,7 @@ STEPS_TOTAL=1
 # shellcheck source=resources/run-step.sh
 source "${RESOURCE_DIR}/run-step.sh"
 
-run_step 1 a04_voice_env bash "${RESOURCE_DIR}/voice-env-check.sh"
+run_step --interactive 1 a04_voice_env bash "${RESOURCE_DIR}/voice-env-check.sh"
 
 state_dump
 echo "a04: 완료 — 음성 환경 점검 (실제 실행은 음성 컨테이너)"
