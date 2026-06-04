@@ -19,8 +19,26 @@
 # 호출자에 설치된 ERR trap 이 발화하지 않는다(exit 는 trap 대상이 아님). 즉 실패 보고는
 # step_end_fail 의 FAIL 기록이 단일 진실이고, ERR trap 은 run_step 밖의 명령 실패만 잡는다.
 
-# run_step <n> <name> <cmd...> — DONE 이면 skip, 아니면 begin → 실행 → ok/fail 마킹.
+# step 실행 중 콘솔이 "멈춘 듯" 보이지 않도록 경과시간을 in-place(\r)로 갱신하는 heartbeat.
+# stdout 이 로그로 빠지는 비-verbose + 대화형(tty) 일 때만 띄운다. verbose 모드는 step 의
+# 실제 출력(colcon n/total, apt %)이 콘솔로 흐르므로 heartbeat 를 띄우지 않는다.
+# 첫 draw 를 2초 뒤로 미룬다: 짧은 step / step 초반의 sudo 비밀번호 프롬프트가 heartbeat
+# 라인과 겹치지 않게 — sudo 는 보통 step 시작 직후에 묻고 그 안에 끝난다.
+_step_heartbeat() {
+    local name="$1" start="$SECONDS" e
+    while :; do
+        sleep 2
+        e=$(( SECONDS - start ))
+        printf '\r  ⋯ %s 진행 중 (%02d:%02d 경과)\033[K' "$name" $(( e / 60 )) $(( e % 60 )) >&2
+    done
+}
+
+# run_step [--interactive] <n> <name> <cmd...> — DONE 이면 skip, 아니면 begin → 실행 → ok/fail.
+# --interactive: step 이 stdin 으로 사용자 입력을 받는 경우(예: API 키 직접 입력) heartbeat 를
+#   끈다. heartbeat 의 \r 갱신이 입력 프롬프트를 덮어써 입력이 엉키는 것을 방지.
 run_step() {
+    local interactive=0
+    if [[ "${1:-}" == --interactive ]]; then interactive=1; shift; fi
     local n="$1" name="$2"
     shift 2
     if [[ $# -eq 0 ]]; then
@@ -51,9 +69,26 @@ run_step() {
     # 파이프라인이 아니라 리다이렉트 + process-sub 라 pipefail 과 무관하고, exit code 는
     # "$@" 의 것을 rc 에 그대로 받는다(`|| rc=$?` 라 set -e 도 미발화). sudo 프롬프트는
     # /dev/tty 로 나가므로 이 리다이렉트에 삼켜지지 않는다.
-    local rc=0 teepid tfd
+    #
+    # VERBOSE=1 이면 step 의 stdout 도 tee 로 콘솔+로그 양쪽에 흘려 colcon `[n/total]`,
+    # apt 퍼센트 같은 step-내 진행률을 실시간으로 보여준다. 기본(비-verbose)은 stdout 을
+    # 로그 전용으로 두는 대신, 살아있음을 알리는 경과시간 heartbeat 를 콘솔에 띄운다.
+    local rc=0 teepid tfd hbpid=""
     exec {tfd}> >(tee -a "$log" >&2); teepid=$!
-    "$@" >>"$log" 2>&"$tfd" || rc=$?
+    if [[ "${VERBOSE:-0}" == 1 ]]; then
+        "$@" >&"$tfd" 2>&1 || rc=$?
+    else
+        if [[ -t 2 && "$interactive" -eq 0 ]]; then
+            echo "  (상세 진행: tail -f ${log})" >&2
+            _step_heartbeat "${name}" & hbpid=$!
+        fi
+        "$@" >>"$log" 2>&"$tfd" || rc=$?
+        if [[ -n "$hbpid" ]]; then
+            kill "$hbpid" 2>/dev/null || true
+            wait "$hbpid" 2>/dev/null || true
+            printf '\r\033[K' >&2   # heartbeat 잔여 라인 제거
+        fi
+    fi
     exec {tfd}>&-
     wait "$teepid" 2>/dev/null || true
 

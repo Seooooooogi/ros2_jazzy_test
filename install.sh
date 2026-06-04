@@ -42,16 +42,35 @@ usage() {
     cat <<'EOF'
 install.sh — host 셋업 단일 진입점 (a01~a04 통합, 전체 12 step)
 
-  bash install.sh            전체 시퀀스 실행 (이미 완료된 step 은 skip)
-  bash install.sh --status   현재 진행 상태(state) 출력
-  bash install.sh --reset    state 초기화 (confirm 후 — 모든 step 재실행)
-  bash install.sh --help     이 도움말
+  bash install.sh             전체 시퀀스 실행 (이미 완료된 step 은 skip)
+  bash install.sh --verbose   각 step 의 상세 출력(colcon n/total, apt %)을 콘솔에도 표시
+  bash install.sh --status    현재 진행 상태(state) 출력
+  bash install.sh --reset     state 초기화 (confirm 후 — 모든 step 재실행)
+  bash install.sh --help      이 도움말
+
+기본은 콘솔에 [n/total] 진행률 + step 경과시간만 표시하고 상세 출력은
+~/.ros2_jazzy_test/install.log 로 빠집니다. --verbose 또는 VERBOSE=1 환경변수로
+상세 출력을 콘솔에도 표시할 수 있습니다(개별 a0N 스크립트는 VERBOSE=1 bash a0N-...sh).
 
 reboot(step 6) 후에는 다시 'bash install.sh' 를 실행하면 step 7 부터 이어집니다.
 개별 스테이지만 재실행하려면 a01-prerequirements.sh / a02-robot-camera.sh /
 a03-vs-code-install.sh / a04-voice-precheck.sh 를 직접 실행하세요.
 EOF
 }
+
+# --verbose/-v 는 서브커맨드와 직교하므로 먼저 분리해 VERBOSE 로 흡수하고 나머지만 남긴다.
+# run-step.sh 가 같은 셸에서 VERBOSE 를 읽는다(export 는 자식 resource 스크립트 대비).
+VERBOSE="${VERBOSE:-0}"
+__args=()
+for __a in "$@"; do
+    case "$__a" in
+        -v|--verbose) VERBOSE=1 ;;
+        *) __args+=("$__a") ;;
+    esac
+done
+export VERBOSE
+# 빈 배열 + set -u → unbound var 오류(bash<4.4) 방지용 확장 guard. "${__args[@]}" 로 단순화 금지.
+set -- "${__args[@]+"${__args[@]}"}"
 
 # --- 인자 디스패치 (set -u 하 ${1:-} 필수) ---
 case "${1:-}" in
@@ -128,7 +147,7 @@ run_step 10 a02_colcon_build  bash "${RESOURCE_DIR}/colcon-build.sh"
 run_step 11 a03_vscode bash "${RESOURCE_DIR}/vscode-install.sh"
 
 # --- step 12: 음성 사전 점검 (a04: .env 자격증명 + Docker Hub 로그인 안내) ---
-run_step 12 a04_voice_env bash "${RESOURCE_DIR}/voice-env-check.sh"
+run_step --interactive 12 a04_voice_env bash "${RESOURCE_DIR}/voice-env-check.sh"
 
 state_dump
 echo "install: 전체 12 step 완료 — host 셋업 종료."
