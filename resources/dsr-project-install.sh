@@ -39,6 +39,29 @@ else
     git clone -b "${DSR_BRANCH}" "${DSR_REPO_URL}" "${WS_SRC}/doosan-robot2"
 fi
 
+# 2b) doosan-robot2(jazzy) 소스 호환 패치 — DSR_ROBOT2.py(이 distro clone) 의 두 이름 불일치를
+#     바로잡는다. 둘 다 멱등(이미 맞으면 무동작) → 재실행/재clone 안전.
+DSR_IMP_PY="${WS_SRC}/doosan-robot2/dsr_common2/imp/DSR_ROBOT2.py"
+if [[ -f "${DSR_IMP_PY}" ]]; then
+    # (1) 존재하지 않는 service 클래스 'SetSingularityHandlingForce'(Singular+ity) 참조 →
+    #     모듈 로드 시점 NameError 로 `import DSR_ROBOT2` 자체가 깨진다. dsr_msgs2 가 빌드하는
+    #     실제 클래스명 'SetSingularHandlingForce'(Singular) 로 맞춘다.
+    if grep -q 'SetSingularityHandlingForce' "${DSR_IMP_PY}"; then
+        sed -i 's/SetSingularityHandlingForce/SetSingularHandlingForce/g' "${DSR_IMP_PY}"
+        echo "dsr: DSR_ROBOT2.py service 클래스명 패치 (SetSingularityHandlingForce → SetSingularHandlingForce)"
+    fi
+    # (2) service/topic 이름 prefix 가 비어 있어(''), 클라이언트가 '/<ns>/aux_control/...' 를
+    #     부르는데 실제 컨트롤러(dsr_controller2)는 '/<ns>/dsr_controller2/...' 로 광고한다.
+    #     → 서버 없는 이름이라 get_current_posj 등에서 무한 대기. prefix 를 'dsr_controller2/'
+    #     로 채워 클라이언트가 실서버를 향하게 한다 (모듈 레벨만; 들여쓰기된 class 버전 제외).
+    if grep -qE "^_srv_name_prefix[[:space:]]*=[[:space:]]*''" "${DSR_IMP_PY}"; then
+        sed -i -E "s|^_srv_name_prefix([[:space:]]*)=[[:space:]]*''|_srv_name_prefix\1= 'dsr_controller2/'|" "${DSR_IMP_PY}"
+        echo "dsr: DSR_ROBOT2.py service prefix 패치 ('' → 'dsr_controller2/')"
+    fi
+else
+    echo "dsr: DSR_ROBOT2.py 없음 — 패치 skip (clone 확인 필요)" >&2
+fi
+
 # 3) 레포 host 패키지를 ws src 로 복사 (symlink 아님 — 워크스페이스가 레포/USB 위치에
 #    의존하지 않도록). 레포가 소스 진실원본이므로 재실행 시 레포 기준으로 재동기화:
 #    기존 대상(과거 버전이 만든 symlink 포함)을 지우고 새로 복사 → 재실행 안전.
