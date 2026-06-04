@@ -99,3 +99,12 @@
 - **Why it happened**: short name 은 클라이언트(jog 노드)가 만든 항목일 뿐 서버가 없음. 실서버는 컨트롤러 노드 네임스페이스(`dsr_controller2/`) 아래. service list 에 이름이 보인다고 서버가 있는 게 아니다.
 - **Correction**: DSR 서비스 hang 시 `ros2 node info <노드>` 로 **누가 서버하는지** 먼저 확인. 이름만 보고 서버 존재 단정 금지. DSR_ROBOT2 의 `_srv_name_prefix` 가 컨트롤러 네임스페이스와 맞는지 점검.
 - **Trigger**: DSR/ROS2 service call timeout, get_current_pos*/movej hang, bringup 후 통신 안 될 때.
+
+---
+
+## L-008: `ros2 topic hz` 대용량 토픽 저수치 = 측정/전송 계층 artifact (≠ 카메라·노드 성능) (2026-06-04)
+
+- **Symptom**: RealSense raw 토픽(`color/image_raw`, `depth/image_rect_raw`, `depth/color/points`)을 `ros2 topic hz` 로 재니 30fps 설정인데 4\~14Hz 로 출렁여 카메라/노드 성능 문제로 오판할 뻔. 실제로는 카메라·노드가 30fps 정상 publish — 같은 콜백에서 나오는 `camera_info`(작은 메시지)는 모든 설정에서 29.98Hz 안정.
+- **Why it happened**: (1) `ros2 topic hz`(rclpy 단일 스레드)가 대용량 메시지(color 1프레임 ≈ 2.6MB) 역직렬화를 publish 속도만큼 못 따라가고, 센서 토픽 기본 QoS 가 best-effort 라 놓친 프레임은 드랍 → 실제보다 낮게·측정마다 출렁. (2) CycloneDDS 로 바꾸자 raw 가 아예 0Hz — UDP fragment 재조립용 OS socket 버퍼(`net.core.rmem_max` 기본 ~208KB)가 1프레임보다 작아 전량 유실. (3) 측정 쉘과 노드의 RMW 가 다르면 통신 자체가 안 됨.
+- **Correction**: 대용량 토픽 fps 진단은 **작은 동반 토픽(`camera_info`/`metadata`) hz 로 교차검증** — 작은 메시지는 전송 계층 영향이 없어 실제 프레임레이트를 그대로 반영(image 와 동일 콜백). raw 토픽을 정확히 재야 하면 ① 측정 쉘과 노드의 `RMW_IMPLEMENTATION` 일치, ② CycloneDDS 면 `sudo sysctl -w net.core.rmem_max=2147483647` + `CYCLONEDDS_URI` 의 `SocketReceiveBufferSize` 상향. `RMW_IMPLEMENTATION`·`CYCLONEDDS_URI` 는 **쉘(프로세스)별 환경변수** 라 측정 터미널마다 export 해야 함(한 쉘의 export 가 다른 터미널로 전파 안 됨). "낮은 hz = 카메라 느림" 단정 금지.
+- **Trigger**: `ros2 topic hz` 로 이미지/pointcloud 등 대용량 토픽 측정, RealSense/카메라 fps 검증, RMW 변경(fastrtps ↔ cyclonedds) 후 토픽 수신 이상, 토픽이 "안 보임 / 0Hz" 로 나올 때.
