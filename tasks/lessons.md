@@ -83,3 +83,19 @@
 - `pip install` 을 numpy 재핀 단계 **앞**에 추가하는 경우 (ADR-002 위반)
 - Docker 이미지를 무태그 또는 `latest` 로 두는 경우 (Hard Rule #6 위반)
 - bash 스크립트 최상단에 `set -euo pipefail` 누락 (Hard Rule #5 위반)
+
+---
+
+## L-00X: "hang" 오판 — python stdout block-buffering (2026-06-02)
+
+- **Symptom**: DSR_ROBOT2 prefix 패치 후 `python3 ... | grep ... | tail` 로 검증했더니 "Terminated"만 떠 아직 hang 으로 오판. 실제로는 `get_current_posj()` 성공이었고 출력이 파이프 버퍼에 갇혀 timeout kill 시 유실된 것.
+- **Why it happened**: python stdout 은 tty 가 아니라 파이프로 갈 때 line-buffered 가 아니라 block-buffered. 중간 print 가 flush 안 된 채 프로세스가 죽으면 통째로 사라진다.
+- **Correction**: ROS/로봇 서비스 호출처럼 "hang 인지 성공인지" 가리는 진단은 `python3 -u` + `print(..., flush=True)` 로 강제 unbuffered. "Terminated만 보임 = hang" 으로 단정 금지.
+- **Trigger**: 파이프로 받은 python/ROS 스크립트가 멈춘 듯 보일 때, service call / spin_until_future_complete 진단 시.
+
+## L-00Y: DSR 서비스 "있는데 응답 없음" → short name vs dsr_controller2/ prefix (2026-06-02)
+
+- **Symptom**: `ros2 service list` 에 `/dsr01/aux_control/get_current_posj` 가 보이는데 호출하면 무한 대기. 같은 기능의 `/dsr01/dsr_controller2/aux_control/...` 는 정상 응답.
+- **Why it happened**: short name 은 클라이언트(jog 노드)가 만든 항목일 뿐 서버가 없음. 실서버는 컨트롤러 노드 네임스페이스(`dsr_controller2/`) 아래. service list 에 이름이 보인다고 서버가 있는 게 아니다.
+- **Correction**: DSR 서비스 hang 시 `ros2 node info <노드>` 로 **누가 서버하는지** 먼저 확인. 이름만 보고 서버 존재 단정 금지. DSR_ROBOT2 의 `_srv_name_prefix` 가 컨트롤러 네임스페이스와 맞는지 점검.
+- **Trigger**: DSR/ROS2 service call timeout, get_current_pos*/movej hang, bringup 후 통신 안 될 때.
