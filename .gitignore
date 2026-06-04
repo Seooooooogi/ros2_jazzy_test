@@ -51,3 +51,6 @@ corecode/
 # 실기 jog 검증을 최상위 경로로 실행하려고 둔 것이라 디스크엔 남기되 추적만 제외(중복 drift 방지).
 # 최상위만 anchor — cobot2_ws 안의 원본은 그대로 추적.
 /jog_complete.py
+
+# codegraph 코드 인덱스 — 소스에서 재생성 가능한 산출물이라 추적 제외.
+.codegraph/
