@@ -46,3 +46,8 @@ Thumbs.db
 # claude-migration: 세션 transcript(.jsonl) 등 민감 데이터 포함. corecode: 별도 튜토리얼.
 claude-migration/
 corecode/
+
+# jog 편의 복사본 — cobot2_ws/rokey/rokey/basic/jog_complete.py 와 byte-identical.
+# 실기 jog 검증을 최상위 경로로 실행하려고 둔 것이라 디스크엔 남기되 추적만 제외(중복 drift 방지).
+# 최상위만 anchor — cobot2_ws 안의 원본은 그대로 추적.
+/jog_complete.py
