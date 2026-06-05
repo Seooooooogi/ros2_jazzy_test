@@ -2,7 +2,7 @@
 # shellcheck source-path=SCRIPTDIR
 # install.sh — host 워크스테이션 셋업 단일 진입점 (a01~a04 전체 시퀀스).
 #
-# a01~a04 오케스트레이터의 모든 step 을 하나의 연속 시퀀스([n/12])로 실행한다.
+# a01~a04 오케스트레이터의 모든 step + DDS 튜닝을 하나의 연속 시퀀스([n/13])로 실행한다.
 # 같은 state 파일을 공유하므로 개별 오케스트레이터(bash a0N-...sh)로 이미 완료한 step 은
 # 자동 skip 된다. 특정 스테이지만 다시 돌리려면 해당 a0N 스크립트를 직접 실행하면 된다.
 #
@@ -34,13 +34,13 @@ source "${RESOURCE_DIR}/state.sh"
 source "${RESOURCE_DIR}/confirm.sh"
 config_assert_set
 
-STEPS_TOTAL=12
+STEPS_TOTAL=13
 # shellcheck source=resources/run-step.sh
 source "${RESOURCE_DIR}/run-step.sh"
 
 usage() {
     cat <<'EOF'
-install.sh — host 셋업 단일 진입점 (a01~a04 통합, 전체 12 step)
+install.sh — host 셋업 단일 진입점 (a01~a04 + DDS 튜닝, 전체 13 step)
 
   bash install.sh             전체 시퀀스 실행 (이미 완료된 step 은 skip)
   bash install.sh --verbose   각 step 의 상세 출력(colcon n/total, apt %)을 콘솔에도 표시
@@ -115,7 +115,7 @@ run_step 4 a01_ros2_desktop    bash "${RESOURCE_DIR}/ros2-desktop-main.sh"
 run_step 5 a01_ros2_extras     bash "${RESOURCE_DIR}/ros2-install.sh"
 
 # --- step 6: reboot 경계 (a01) ---
-# run_step 으로 감싸지 못한다: reboot 은 프로세스를 종료하고, 이후 step 7~12 는 재부팅 후
+# run_step 으로 감싸지 못한다: reboot 은 프로세스를 종료하고, 이후 step 7~13 은 재부팅 후
 # 실행되어야 한다. reboot 전에 DONE 을 디스크에 기록해 재부팅 후 재실행이 이 단계를
 # 건너뛰도록 한다 (무한 reboot 루프 방지).
 # confirm 거부/비대화형 abort 시엔 DONE 이 기록되지 않아 a01_reboot 이 RUNNING 으로 남는다.
@@ -149,5 +149,10 @@ run_step 11 a03_vscode bash "${RESOURCE_DIR}/vscode-install.sh"
 # --- step 12: 음성 사전 점검 (a04: .env 자격증명 + Docker Hub 로그인 안내) ---
 run_step --interactive 12 a04_voice_env bash "${RESOURCE_DIR}/voice-env-check.sh"
 
+# --- step 13: DDS 튜닝 (CycloneDDS 버퍼 + 유선 NIC whitelist 자동 설정) ---
+# host 노드·컨테이너 공통 cyclonedds 환경을 결정적으로 구성. a0N 스테이지 스크립트엔
+# 없고 install.sh 또는 단독(bash resources/dds-tuning.sh) 으로만 실행한다.
+run_step 13 dds_tuning bash "${RESOURCE_DIR}/dds-tuning.sh"
+
 state_dump
-echo "install: 전체 12 step 완료 — host 셋업 종료."
+echo "install: 전체 13 step 완료 — host 셋업 종료."
