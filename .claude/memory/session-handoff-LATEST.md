@@ -1,77 +1,86 @@
 # Session Handoff — LATEST
 
-> 매 세션 종료 전 `/session-checkpoint` 로 갱신. 글로벌 `SessionStart` hook 이 자동 로드.
+> 매 세션 종료 전 갱신. 글로벌 `SessionStart` hook 이 자동 로드.
 > Forward-looking only — 본 세션에서 한 일이 아니라 다음 세션이 할 일.
+> 두 머신 공유 — **[실측]** 머신(로봇/카메라 실기) + **[문서]** 머신(git/문서/lessons). 항목에 담당 표기.
 
 ## Last updated
-2026-06-02 — DSR_ROBOT2 jazzy 호환 패치 2종으로 실기 jog 동작까지 도달(읽기 검증 완료). a04 음성 env 를 실패→직접입력 전환. install.sh step 내 heartbeat + `--verbose` 추가. host-only USB export 생성. 변경 전부 **미커밋**.
+2026-06-05 — **[문서]** RealSense/DDS 문서 통합 (Notion 마이그레이션 페이지: bashrc humble↔jazzy 비교 + raw fps 원리·CycloneDDS 커널 튜닝 `/etc/sysctl.d/10-cyclone-max.conf` 정리). **RealSense udev 조사** — 설치 스크립트에 udev 명시 명령 없음, `librealsense2-dkms` 의 Recommends(`librealsense2-udev-rules`)로 자동 유입(공식 distribution_linux.md 근거)이나 hard depend 아님 → **명시설치+검증 패치 보류**(아래 Next Actions). 직전 2026-06-04: origin 동기화 + L-009 푸시(HEAD `55a7890`), RealSense 미인식(케이블 부재).
 
 ---
 
 ## Next Actions (priority order)
 
-1. **이번 세션 변경 커밋** (7개 수정 + jog_complete.py). 논리 단위로 분할 권장:
-   - DSR jazzy 호환 패치 (`resources/dsr-project-install.sh`)
-   - a04 음성 env 직접입력 (`resources/voice-env-check.sh`, `env-load.sh`, `a04-voice-precheck.sh`, `install.sh`, `.gitignore`)
-   - install step 진행 표시 (`resources/run-step.sh`, `install.sh`)
-   - **결정 필요**: `jog_complete.py` 를 레포 최상위에 추적할지. 현재 `cobot2_ws/rokey/rokey/basic/jog_complete.py` 와 byte-identical 복사본. 최상위 추적은 중복 — gitignore 하거나 제거 권장.
-2. **실기 jog 모션 검증** (읽기만 됨, 아직 movej/movel 미실행):
+1. **[실측] RealSense 재연결 + USB 3.x 검증** (케이블 확보 후 — 현재 데이터 케이블 없음):
+   - 현 상태: 카메라 OS 미인식 (`/dev/video*` 없음, `lsusb -t` 트리에 없음, `rs-enumerate-devices` = no device).
+   - 절차: `sudo dmesg -wH` 켜고 재연결 → `new SuperSpeed`(USB3 OK) / `new high-speed`(USB2로 떨어짐) / 무반응(케이블·포트·전원) 구분 → `rs-enumerate-devices` 의 `Usb Type Descriptor`(3.2 vs 2.1) 로 최종 확인.
+   - 머신 USB3 포트는 정상(`lsusb -t` 에 10000M/20000M 다수). 1순위 의심 = 데이터+USB3 지원 케이블(충전 전용 의심).
+2. **[실측] DSR jog 모션 검증** (위치 읽기만 확인됨, movej/movel 미실행):
    - 터미널1: `ros2 launch dsr_bringup2 dsr_bringup2_rviz.launch.py mode:=real host:=192.168.1.100 port:=12345 model:=m0609 name:=dsr01 gui:=false`
-   - 터미널2: `python3 ~/ros2_jazzy_test/jog_complete.py` → 값 채워지면 +/- 버튼으로 소폭 이동 검증. **실기라 비상정지 대기.**
-3. **fleet 머신에 DSR 패치 전파** — 메모 `~/dsr_patch_command.txt`(+USB 사본). 방법 A(전 복사본 sed) 또는 B(src+재빌드).
-4. **Phase 4 컨테이너 build/run 검증** (이전 핸드오프 잔여): `bash containers/build-all.sh`. voice 오디오 패스스루(/dev/snd) + OPENAI_API_KEY 런타임 주입. yolo 카메라는 host 소유로 이미 분리됨.
-5. **브랜치 정리 결정**: `feat/application-containers` vs `feat/application-shell` 중 canonical 선택 + main 병합 시점.
+   - 터미널2: `python3 ~/ros2_jazzy_test/jog_complete.py` → +/- 버튼 소폭 이동. **실기 — 비상정지 대기.**
+3. **[실측] fleet 머신에 DSR 패치 전파** — 메모 `~/dsr_patch_command.txt`(+USB 사본). 이미 설치된 머신은 state DONE 이라 install.sh skip → 직접 sed.
+4. **[실측] Phase 4 컨테이너 build/run 검증**: `bash containers/build-all.sh`. voice 오디오(/dev/snd) + OPENAI_API_KEY 런타임 주입. yolo 카메라는 host 소유로 분리됨.
+5. **[문서] 미정리 git 항목 결정**:
+   - `backup/pre-github-sync-2026-05-29` 브랜치: origin 미push(로컬 전용) — 삭제/보존/push 결정.
+   - 태그 `v0.1.0`: origin 미push — push 여부 결정.
+   - `.gitignore` 에이전트 산출물 4줄(`.agents/`, `.claude/skills/`, `.understand-anything/`, `skills-lock.json`): 실측·문서 머신이 쓰는 에이전트 도구가 달라 **보류 중**. 머신별 처리 vs repo 통합 결정.
+6. **[문서/실측] RealSense udev rule 명시화 패치** (보류 — 사용자 검토 대기): `resources/realsense-sdk-install.sh` SDK 설치 줄에 `librealsense2-udev-rules` 명시 추가 + rule 파일 존재 검증 게이트 + `udevadm control --reload-rules && udevadm trigger`. 현재는 `librealsense2-dkms` 의 **Recommends** 로만 유입 → apt 기본값(Install-Recommends ON)일 때만 자동, `--no-install-recommends` 환경/타 머신 전파 시 silent 누락(카메라 비-root 접근 실패) 가능. 적용 시 `docs/COMPATIBILITY.md` 동반 갱신. 최종 확정은 [실측]에서 `dpkg -l librealsense2-udev-rules` + `ls /lib/udev/rules.d/*realsense*`.
+7. **[공통] 브랜치 canonical 선택**: `feat/application-containers`(현재) vs `feat/application-shell` → main 병합 시점.
 
 ---
 
 ## Open Decisions
 
-- **jog_complete.py 추적 여부**: 최상위 복사본을 추적/gitignore/삭제 중 결정 (cobot2_ws 내부본과 중복).
-- **브랜치 canonical**: containers vs shell — 어느 쪽을 main 에 병합할지.
-- **Phase 4 컨테이너 design 잔여**: base image(GPU), DDS network_mode, compose 자동 up 여부 (이전 핸드오프 ADR 후보 그대로 유효).
+- **브랜치 canonical**: containers vs shell — main 병합 대상.
+- **Phase 4 컨테이너 design 잔여**: base image(GPU), DDS network_mode, compose 자동 up 여부.
+- **미push git 객체**: backup 브랜치 / `v0.1.0` 태그 origin 반영 여부.
+- **.gitignore 에이전트 산출물**: 머신마다 도구가 달라 통합 보류 — 머신별 .gitignore vs repo 통합.
+- **RealSense udev 명시화**: `librealsense2-dkms` Recommends 의존 유지 vs `librealsense2-udev-rules` 명시설치+검증 패치 — silent 누락 위험 대비 (Next Actions #6).
 
 ---
 
 ## Remaining Issues
 
-- DSR jog **모션(movej/movel)** 은 미검증 — 위치 읽기(get_current_posj)만 실기 응답 확인. 실제 팔 이동은 다음 세션에서.
-- DSR 패치는 이 머신 라이브본(src+install 3개) + 설치 스크립트 + 메모에만 반영. **다른 fleet 머신은 아직 미적용**.
+- RealSense **미인식** — 케이블 부재로 진단 중단. 내일 케이블 확보 후 재개.
+- DSR jog **모션(movej/movel)** 미검증 — 위치 읽기(get_current_posj)만 실기 응답 확인.
+- DSR 패치: 이 머신 라이브본 + 설치 스크립트 + **origin 반영 완료**. 다른 fleet 머신은 미적용.
 
 ---
 
 ## Context Notes
 
-### DSR_ROBOT2 jazzy 패치 2종 (이번 세션 핵심 — 재발/타 머신 시 필수)
-doosan-robot2 `-b jazzy` clone 의 `dsr_common2/imp/DSR_ROBOT2.py` 에 이름 불일치 2개. 둘 다 `from DSR_ROBOT2 import` 쓰는 **모든** 레포 스크립트(jog/robot_control/pick_and_place) 공통 영향:
-1. **import NameError**: 코드가 `SetSingularityHandlingForce`(Singular+ity) 참조하나 dsr_msgs2 빌드 클래스는 `SetSingularHandlingForce`(Singular). → 모듈 로드 시점 깨짐. 수정: 이름 치환.
-2. **서비스 무한 대기**: `_srv_name_prefix=''` 라 클라이언트가 `/dsr01/aux_control/...`(서버 없는 죽은 이름) 호출. 실서버는 `/dsr01/dsr_controller2/...`. 수정: prefix `''`→`'dsr_controller2/'` (모듈 레벨; 들여쓰기 class 버전 제외). topic prefix 도 같이 따라감(스트림 토픽도 dsr_controller2/ 아래라 일관).
-- 설치 스크립트 `resources/dsr-project-install.sh` 2b 블록이 clone 직후 둘 다 멱등 patch. colcon 빌드가 install 로 전파.
-- 이미 설치된 머신: state 의 `step_a02_dsr_project`/`step_a02_colcon_build` 가 DONE 이라 install.sh 재실행은 skip → 메모(`~/dsr_patch_command.txt`)의 직접 sed 가 빠름.
+### git 동기화 상태 (2026-06-04 문서 머신)
+- origin `feat/application-containers` 와 완전 동기화 (HEAD `55a7890`). main / feat/application-shell 도 동기화.
+- 2026-06-02 실측 커밋 5건 fast-forward pull: DSR 패치 `c6cd645`, jog gitignore `9f0f243`, a04 음성 `1524617`, heartbeat `6152a3b`, 핸드오프/메모리 `25184e4`.
+- pull 시 로컬 `.gitignore` 의 에이전트 산출물 4줄은 버리고 origin 버전 채택 → 4개 디렉토리 다시 untracked 노출(noise, 커밋 대상 아님).
+- lessons **L-009** 추가·푸시(`55a7890`).
+
+### DSR_ROBOT2 jazzy 패치 2종 (재발/타 머신 시 필수 — origin 반영 완료)
+doosan-robot2 `-b jazzy` clone 의 `dsr_common2/imp/DSR_ROBOT2.py` 이름 불일치 2개. `from DSR_ROBOT2 import` 쓰는 모든 스크립트 공통:
+1. **import NameError**: `SetSingularityHandlingForce`(코드) ↔ `SetSingularHandlingForce`(빌드 클래스). 이름 치환.
+2. **서비스 무한 대기**: `_srv_name_prefix=''` → 죽은 이름 `/dsr01/aux_control/...` 호출. 실서버는 `/dsr01/dsr_controller2/...`. prefix `''`→`'dsr_controller2/'`(모듈 레벨).
+- `resources/dsr-project-install.sh` 가 clone 직후 멱등 sed patch. 이미 설치된 머신은 state DONE → skip → `~/dsr_patch_command.txt` 직접 sed.
 
 ### 실기 로봇 환경 (검증된 값)
 - 모델 `m0609`, 네임스페이스 `dsr01`.
-- 컨트롤러(DRCF) `192.168.1.100:12345`. 툴체인저(그리퍼) `192.168.1.1`. host `enp4s0 192.168.1.30/24`(로봇망), `wlo1 192.168.10.61`(별도).
-- bringup 후 실서버 전부 `/dsr01/dsr_controller2/...` 아래. joint_states 는 `/dsr01/joint_states`(short).
+- 컨트롤러(DRCF) `192.168.1.100:12345`. 그리퍼 `192.168.1.1`. host `enp4s0 192.168.1.30/24`(로봇망), `wlo1 192.168.10.61`.
+- 실서버 전부 `/dsr01/dsr_controller2/...`. joint_states 는 `/dsr01/joint_states`.
 
-### a04 음성 env 동작 변경
-- 키 없으면 fail 대신 그 자리 입력(`read -rs`, 화면 미표시) 후 `.env` 기록. 비대화형은 비치명 경고+exit0.
-- `_set_env_key`(env-load.sh): 순수 bash, 값 외부명령 미전달, `.env` 옆 임시파일 600→원자 rename.
-- a04 는 `run_step --interactive` 로 호출 — heartbeat 끔(입력 프롬프트 보호).
-
-### install.sh step 진행 표시
-- 비-verbose: step 실행 중 경과시간 heartbeat(`⋯ 진행 중 (mm:ss)`), 첫 draw 2초 지연(sudo 프롬프트 충돌 완화), tty 일 때만.
-- `--verbose`/`VERBOSE=1`: step stdout(colcon n/total, apt %) 콘솔로.
+### RealSense / DDS 수신 튜닝 (L-008 / L-009)
+- 대용량 토픽 `ros2 topic hz` 저수치 = 측정/전송 계층 artifact, 카메라 성능 아님. 작은 동반 토픽(`camera_info`)으로 교차검증.
+- CycloneDDS(UDP) raw 0Hz → `net.core.rmem_max`(커널 천장) + `SocketReceiveBufferSize`(rcvbuf, 실제 SO_RCVBUF) **둘 다** 상향(clamp 관계). 버퍼 하한 = 수신 최대 토픽 1프레임: color 2.76MB / depth Z16 1.84MB / **pointcloud ≈14.7MB**(>rcvbuf 10MB면 pointcloud만 0Hz). Fast-DDS 기본(같은 호스트=SHM)엔 socket 버퍼 무효 — SHM segment/QoS depth 가 노브.
+- `RMW_IMPLEMENTATION`·`CYCLONEDDS_URI` 는 **쉘별 환경변수** — 측정/노드 터미널 양쪽 export.
 
 ### 함정 (다음 세션 피하기)
-- python stdout 은 파이프 시 block-buffered → 스크립트가 hang 한 줄 알았는데 실은 성공인데 출력이 안 보인 것일 수 있음. 진단 시 `python3 -u` + `flush=True`.
-- DSR 서비스 "있는데 응답 없음"이면 short name(클라이언트 전용) vs `dsr_controller2/` prefix(실서버) 갈림을 먼저 확인 — `ros2 node info` 로 서버 노드 확인.
+- python stdout 파이프 시 block-buffered → hang 오인. `python3 -u` + `flush=True`.
+- DSR 서비스 "있는데 응답 없음" → short name(클라이언트) vs `dsr_controller2/` prefix(실서버) 갈림. `ros2 node info` 로 서버 노드 확인.
 
-### USB / export
-- host-only USB export: `/media/rokey/Rokey/ros2_jazzy_test_host` (containers 제외, cobot2_ws 전체 포함 — voice_processing 등 컨테이너 패키지는 군더더기지만 무해).
-- DSR 패치 메모: `~/dsr_patch_command.txt` + `/media/rokey/Rokey/dsr_patch_command.txt`.
+### USB / export / 음성 (참고)
+- host-only USB export: `/media/rokey/Rokey/ros2_jazzy_test_host`. DSR 패치 메모: `~/dsr_patch_command.txt`(+USB 사본).
+- a04 음성: 키 없으면 그 자리 입력(`read -rs`) 후 `.env` 기록, 비대화형은 경고+exit0. install.sh: 비-verbose heartbeat, `--verbose`/`VERBOSE=1` 시 step stdout 노출.
 
 ---
 
 ## Current Focus
-- **Top priority**: 이번 세션 변경 커밋(논리 분할) + jog_complete.py 추적 결정.
-- **Friction**: 실기 모션 검증이 남음(읽기만 확인). 다른 fleet 머신 패치 미전파.
+- **[실측] Top priority**: RealSense 케이블 확보 후 재연결+USB3 검증 → DSR jog 모션 검증.
+- **[문서] Friction**: 미push git 객체(backup 브랜치 / `v0.1.0` 태그) + `.gitignore` 에이전트 산출물 + RealSense udev 명시화 패치 결정 대기.
