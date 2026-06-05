@@ -9,6 +9,10 @@
 #   ros2 launch realsense2_camera rs_launch.py align_depth.enable:=true
 # 누락 시 aligned_depth_to_color 가 안 떠 object_detection 의 depth 계산이 실패한다.
 #
+# 전제: dds-tuning.sh(install.sh 마지막 step 또는 단독 실행)가 먼저 끝나 있어야 한다.
+# 그게 host 에 cyclonedds.xml 을 렌더하는데, 아래 서비스가 이 파일을 read-only mount 하므로
+# 없으면 mount 실패로 컨테이너가 안 뜬다.
+#
 # 사용 (host 검증 + 카메라 기동 이후):
 #   cp .env.example .env  # OPENAI_API_KEY / DOCKERHUB_USER / *_TAG 채우기
 #   docker compose -f containers/docker-compose.yml up -d
@@ -27,12 +31,19 @@ services:
       args:
         ROS_DISTRO: ${ROS_DISTRO:-jazzy}
         CUDA_VERSION: ${CUDA_VERSION:-12.8}
-    network_mode: host          # DDS discovery — host robot_control(client)/카메라 토픽 ↔ 컨테이너
+    network_mode: host          # DDS discovery — host robot_control(client)/카메라 토픽 ↔ 컨테이너.
+                                # host net namespace 공유 → 유선 NIC·커널 소켓 버퍼(sysctl)를
+                                # host 와 그대로 공유하므로 cyclonedds.xml 의 NIC whitelist·버퍼가
+                                # 컨테이너에도 적용된다(컨테이너 내 별도 sysctl 불필요).
     restart: unless-stopped
     environment:
-      - ROS_DOMAIN_ID=${ROS_DOMAIN_ID:-0}
-      # host 와 동일 RMW 여야 같은 topic/service 가 보인다 (혼합 시 discovery 실패). jazzy 기본=fastrtps.
-      - RMW_IMPLEMENTATION=${RMW_IMPLEMENTATION:-rmw_fastrtps_cpp}
+      - ROS_DOMAIN_ID=${ROS_DOMAIN_ID:-42}
+      # host 와 동일 RMW 여야 같은 topic/service 가 보인다 (혼합 시 discovery 실패). 표준=cyclonedds.
+      - RMW_IMPLEMENTATION=${RMW_IMPLEMENTATION:-rmw_cyclonedds_cpp}
+      - CYCLONEDDS_URI=file:///cyclonedds.xml
+    volumes:
+      # host 가 dds-tuning.sh 로 렌더한 cyclonedds 설정을 컨테이너에 read-only mount.
+      - ${CYCLONEDDS_XML:-${HOME}/.ros2_jazzy_test/cyclonedds.xml}:/cyclonedds.xml:ro
     deploy:                     # GPU 예약 — 런타임 필드(빌드엔 무영향). nvidia-container-toolkit 필요(host).
       resources:
         reservations:
@@ -52,14 +63,16 @@ services:
       dockerfile: containers/voice-processing/Dockerfile
       args:
         ROS_DISTRO: ${ROS_DISTRO:-jazzy}
-    network_mode: host
+    network_mode: host          # host net namespace 공유 → cyclonedds NIC whitelist·버퍼 상속
     restart: unless-stopped
     env_file: ../.env           # OPENAI_API_KEY 런타임 주입 (이미지에 박지 않음)
     environment:
-      - ROS_DOMAIN_ID=${ROS_DOMAIN_ID:-0}
-      - RMW_IMPLEMENTATION=${RMW_IMPLEMENTATION:-rmw_fastrtps_cpp}
+      - ROS_DOMAIN_ID=${ROS_DOMAIN_ID:-42}
+      - RMW_IMPLEMENTATION=${RMW_IMPLEMENTATION:-rmw_cyclonedds_cpp}
+      - CYCLONEDDS_URI=file:///cyclonedds.xml
+    volumes:
+      - ${CYCLONEDDS_XML:-${HOME}/.ros2_jazzy_test/cyclonedds.xml}:/cyclonedds.xml:ro
     # --- 후속(통합) 단계에서 활성화 ---
-    # volumes:
     #   - ${XDG_RUNTIME_DIR}/pulse:${XDG_RUNTIME_DIR}/pulse:ro   # PipeWire/PulseAudio socket
 
   dsr-emulator:                 # 실기 우선 — 개발/테스트 시에만 명시적 활성화
