@@ -87,7 +87,7 @@ ROS2 Humble installer → ROS2 Jazzy installer 마이그레이션. 1–4주, sol
 
 ## Phase 4: 애플리케이션 컨테이너화 (사용자 요청 2026-05-27)
 
-**목표**: host 에 설치된 jazzy 환경 위에서 두 개의 독립 마이크로서비스를 Docker container 로 분리 실행. 두 컨테이너는 **ROS2 service server** (yolo = `/get_3d_position`, voice = `/get_keyword`) 로 host 의 `robot_control` 노드(client)에 응답한다. yolo 컨테이너는 `realsense2_camera` 노드를 자체 포함해 USB 카메라를 직접 열고 (`--device` passthrough) `/camera/camera/*` 를 컨테이너 안에서 publish/subscribe 한다.
+**목표**: host 에 설치된 jazzy 환경 위에서 두 개의 독립 마이크로서비스를 Docker container 로 분리 실행. 두 컨테이너는 **ROS2 service server** (yolo = `/get_3d_position`, voice = `/get_keyword`) 로 host 의 `robot_control` 노드(client)에 응답한다(robot_control 중심 **star** — 통신 토폴로지 확정 2026-06-05). **카메라는 host 소유**(2026-06-02 결정): host `realsense2_camera` 가 `/camera/camera/*` 를 publish 하고 yolo 컨테이너의 `object_detection` 이 DDS 로 subscribe 한다(컨테이너 안에 카메라 드라이버 없음).
 
 **책임 분리 원칙 (사용자 결정 2026-05-27)**:
 - **System (host) layer = `bash install.sh`** — NVIDIA driver / Docker CE / ROS2 jazzy / DSR colcon 워크스페이스 / RealSense SDK (CUDA toolkit 은 host 미설치 — Phase 4 컨테이너, ADR-006/008)
@@ -100,11 +100,12 @@ ROS2 Humble installer → ROS2 Jazzy installer 마이그레이션. 1–4주, sol
   docker compose up -d               # 컨테이너 layer 기동
   ```
 
-**의도된 아키텍처** (사용자 결정 2026-05-27, service 기반 구조 확정 2026-05-28):
+**의도된 아키텍처** (사용자 결정 2026-05-27, service 기반 구조 확정 2026-05-28, robot_control 중심 star 재확정 2026-06-05):
 ```
 [host (Ubuntu 24.04 + ROS2 jazzy)]
   robot_control 노드 (pick_and_place) ──client──► 아래 두 service
   DSR control 노드 (dsr_bringup2) ──DSR_ROBOT2 API / TCP 12345──► 실기 Cobot
+  realsense2_camera 노드 ──publish──► /camera/camera/* (host 소유 2026-06-02)
         ▲ service response            ▲ service response
         │                             │
 [voice-processing 컨테이너]      [yolo-detection 컨테이너]
@@ -112,20 +113,20 @@ ROS2 Humble installer → ROS2 Jazzy installer 마이그레이션. 1–4주, sol
    (std_srvs/Trigger)               (od_msg/SrvDepthPosition)
  langchain + openai + PyAudio     PyTorch + CUDA + ultralytics
  openwakeword + tflite-runtime    cv_bridge + od_msg
- rclpy (ROS2 노드)                 realsense2_camera + object_detection (컨테이너 내부 /camera/camera/*)
+ rclpy (ROS2 노드)                 object_detection (host /camera/camera/* 를 subscribe)
 
 모두 network_mode: host + 동일 ROS_DOMAIN_ID / RMW_IMPLEMENTATION (DDS discovery)
 ```
-> topic publisher 가 아니라 **service server** 다 — yolo/voice 는 robot_control 의 요청에 응답하는 구조. RealSense 카메라는 yolo 컨테이너가 USB passthrough 로 직접 열고 자기 안에서 처리한다 (host realsense 노드 아님). udev rule·커널 모듈만 host 에 둔다.
+> topic publisher 가 아니라 **service server** 다 — yolo/voice 는 robot_control 의 요청에 응답하는 구조. RealSense 카메라는 **host 가 소유**(2026-06-02 결정): host `realsense2_camera` 가 `/camera/camera/*` 를 publish 하고 yolo 컨테이너 `object_detection` 이 DDS 로 subscribe 한다. udev rule·커널 모듈·드라이버 모두 host 책임 (컨테이너 안에 카메라 없음).
 
 **빌드 게이트 진행 상태 (2026-05-30, ADR-009)**: 컨테이너 "빌드 + 개별(isolated) 검증" 단계 **구현 완료** — yolo/voice multi-stage Dockerfile(base `ros:jazzy-ros-base-noble`), `containers/{entrypoint.sh, docker-compose.yml, build-all.sh}`, 루트 `.dockerignore`, `cobot2_ws` 빌드 버그 수정(object_detection/voice_processing — od_msg 는 원본 보존 + Dockerfile 우회), `config.sh` CUDA_VERSION=12.8, `.env.example` 컨테이너 변수. **acceptance = 빌드 게이트(이미지 빌드 + 컨테이너 내부 import smoke + secret 위생)까지만.** GPU 런타임 / 카메라·마이크 passthrough / service 왕복 / od_msg hash 정합 / Docker Hub publish 는 host e2e(Phase 3) 이후 단계 — 아래 4-1~4-7 의 **빌드 부분만 충족, 통합·런타임 부분은 미충족**(빌드 게이트 통과를 Phase 4 PASS 로 격상 금지, lessons L-004/L-007). 타깃 머신에 compose 플러그인 부재라 build-all.sh 는 `docker build` 직접 사용.
 
-- [ ] 4-1. `containers/yolo-detection/Dockerfile` + 빌드 스크립트 (cobot2_ws `object_detection` + `realsense2_camera`) — *빌드 게이트 부분 완료(2026-05-30): Dockerfile + multi-stage 빌드 + import smoke. 미충족: GPU/카메라 passthrough, 모델 가중치 mount, service 왕복.*
+- [ ] 4-1. `containers/yolo-detection/Dockerfile` + 빌드 스크립트 (cobot2_ws `object_detection` — 카메라는 host 소유) — *빌드 게이트 부분 완료(2026-05-30): Dockerfile + multi-stage 빌드 + import smoke. 미충족: GPU passthrough, 모델 가중치 mount, service 왕복.*
   - Base: `ros:jazzy-ros-base-noble` 명시 핀 (Hard Rule #6)
   - **역할 = service server** `/get_3d_position` (`od_msg/SrvDepthPosition`). client 는 host 의 `robot_control` 노드. topic publish 아님 — request/response 구조.
-  - **카메라 = 컨테이너 자체 포함** (구조 결정 2026-05-28, 기존 host-side 안에서 변경): `realsense2_camera` 노드를 yolo 컨테이너 안에서 실행 → USB 직접 열고 `/camera/camera/*` 를 컨테이너 안에서 publish, `object_detection` 의 ImgNode 가 같은 topic subscribe. 근거 = workflow 단순화 + 카메라/추론 한 이미지로 자기완결 배포.
-  - **USB device passthrough 필요**: 4-3 docker-compose 에 `--device /dev/bus/usb`. udev rule·커널 모듈은 host 책임 (컨테이너로 못 옮김 — a02 설치).
-  - 내부: ultralytics + PyTorch (cu${CUDA_VERSION}) + opencv-python + `cv_bridge` + `ros-jazzy-realsense2-camera` + librealsense2 runtime + `od_msg` (custom interface)
+  - **카메라 = host 소유** (2026-06-02 결정, 종전 컨테이너-내 안을 환원): host `realsense2_camera` 가 `/camera/camera/*` 를 publish, yolo 컨테이너의 `object_detection.realsense.ImgNode` 가 그 topic 을 DDS 로 subscribe. yolo 이미지에서 realsense 드라이버 제거(`object_detection` 은 rclpy/sensor_msgs/cv_bridge 만 의존 — realsense2_camera 무의존). 근거 = 드라이버를 컨테이너에 둘 구조적 이유가 없고 USB passthrough·udev 함정을 host 로 환원하면 단순.
+  - **USB device passthrough 불필요** (카메라 host 소유). udev rule·커널 모듈·드라이버 전부 host 책임 (a02 설치).
+  - 내부: ultralytics + PyTorch (cu${CUDA_VERSION}) + opencv-python + `cv_bridge` + `od_msg` (custom interface). `ros-jazzy-realsense2-camera`·librealsense2 runtime 은 카메라 host 소유라 yolo 이미지에서 제거.
   - **GPU 패스스루**: NVIDIA Container Toolkit 의존 (host a01 에서 driver 설치되어 있다는 전제)
   - 모델 가중치 / 설정은 volume mount (image 안에 안 박음)
   - **`od_msg` 빌드 정합성**: yolo 컨테이너 + host(robot_control) + voice 가 동일 `od_msg` 정의를 빌드해야 service type hash 일치. 단일 source = `cobot2_ws/od_msg`
@@ -155,7 +156,7 @@ ROS2 Humble installer → ROS2 Jazzy installer 마이그레이션. 1–4주, sol
   - 후보 (a) `network_mode: host` — DDS multicast 자연 동작, 보안↓ ← **채택**
   - 후보 (b) custom bridge + `ROS_DOMAIN_ID` 격리 — 보안↑, DDS discovery 설정 필요
   - 후보 (c) `host` 와 동등하나 명시적 (`--network host` + ROS_DOMAIN_ID 고정)
-  - host↔container 통신 = 2개 service (`/get_3d_position`, `/get_keyword`) request/response (DDS). camera topic (`/camera/camera/*`) 은 yolo 컨테이너 내부 (realsense → object_detection). `network_mode: host` 가 service discovery 커버.
+  - host↔container 통신 = 2개 service (`/get_3d_position`, `/get_keyword`) request/response (DDS). camera topic (`/camera/camera/*`) 은 host `realsense2_camera` publish → yolo 컨테이너 `object_detection` subscribe (DDS). `network_mode: host` 가 service·topic discovery 모두 커버.
   - DSR 에뮬레이터 (`doosanrobot/dsr_emulator:3.0.1`) 도 같은 네트워크 안인지 결정
 - [ ] 4-5. Image 태그 핀 + reproducibility (Hard Rule #6, ADR-007 정합)
   - Base image (`ros:jazzy-ros-base-noble`) 명시 태그, 절대 `latest` 금지
@@ -195,6 +196,9 @@ ROS2 Humble installer → ROS2 Jazzy installer 마이그레이션. 1–4주, sol
     - Voice publish: host 에서 `ros2 topic echo /voice/text` 로 wake-word 발화 후 1+ msg 수신
   - **신규 노트북 통팩 검증** (ADR-007 § 5): 다른 노트북에서 host installer 완료 후 `docker compose pull && docker compose up -d` 로 빌드 없이 동일 환경 재현 → ROS2 topic flow 동일 PASS
   - 위 검증 PASS = 본 ROADMAP 전체 완료. `docs/COMPATIBILITY.md` 에 jazzy 최종 매트릭스 + Docker image 기록 (publish 된 image digest 포함).
+- [x] 4-8. 통합 bringup launch — **`cobot2_ws/launch/bringup_all.launch.py` 골격 완료(2026-06-05)**. 로봇 드라이버(dsr_bringup2) + host RealSense + yolo/voice 컨테이너(`docker compose up -d`)를 한 번에 기동. robot_control(실제 모션·무한 루프)은 안전상 기본 제외(`start_robot_control:=true` 옵트인), `mode` 기본 `virtual`(에뮬레이터). 컨테이너 노드는 각 이미지 ENTRYPOINT(ROS source + overlay) + CMD 로 자동 실행 → compose up 한 줄이 노드 기동까지. **통신 토폴로지 = robot_control 중심 star 확정(2026-06-05)** — voice·yolo 는 독립 service server, robot_control 이 둘의 client(노드/계약 무변경).
+  - 실행 전제: 셸에 config.sh + `/opt/ros/jazzy` + `~/cobot2_ws/install` overlay 3개 source(`activate.sh` 는 overlay 미source). `containers:=true` 는 이미지 빌드·`.env`·`cyclonedds.xml` 렌더 선행 — 미빌드 점검은 `containers:=false`.
+  - 미충족(연기): host 소유 카메라 전제로 yolo 이미지 재빌드(realsense 드라이버 제거 반영), service 왕복 E2E, 카메라 토픽 컨테이너 가시성, launch 패키지화(`robot_control/launch/` + setup.py data_files), `activate.sh` overlay source 편의.
 
 **Phase 4 산출물**:
 - `containers/yolo-detection/Dockerfile` + 부속 (entrypoint, requirements, `.dockerignore`)
@@ -204,6 +208,7 @@ ROS2 Humble installer → ROS2 Jazzy installer 마이그레이션. 1–4주, sol
 - `containers/entrypoint.sh` (공유 — ROS2 + `/ws/install` overlay source) — *완료 2026-05-30*
 - 루트 `.dockerignore` (build context 화이트리스트 + secret/모델가중치 제외) — *완료 2026-05-30*
 - `containers/up.sh` (pull-first 분기 wrapper — ADR-007 § 5) — *미작성(런타임 단계)*
+- `cobot2_ws/launch/bringup_all.launch.py` (통합 bringup — 로봇 드라이버 + host 카메라 + 컨테이너 한 번에, standalone launch) — *골격 완료 2026-06-05*
 - **ADR-009** — Phase 4 base image(`ros:jazzy-ros-base-noble` 단일) / 네트워크 모드(`host`) / 소스 수정 정책 / 빌드 게이트 경계 — *완료 2026-05-30* (install.sh 통합은 4-6 의 수동 분리로 결정)
 - Docker Hub publish 된 두 image (ADR-007): `docker.io/${DOCKERHUB_USER}/ros2-jazzy-yolo:<tag>`, `docker.io/${DOCKERHUB_USER}/ros2-jazzy-voice:<tag>`
 - `.env.example` 갱신: `DOCKERHUB_USER`, `DOCKERHUB_TOKEN`, `YOLO_TAG`, `VOICE_TAG` placeholder 추가

@@ -564,3 +564,30 @@
 **Reopen 조건**:
 - 멀티캐스트 차단망/특수 토폴로지에서 enp* 자동탐지가 부적합하면 → `DDS_NETIF` 명시 또는 subnet 기반 선택으로 재설계.
 - dsr-emulator 와 cyclonedds 통신이 필요해지면 → 에뮬레이터 이미지 RMW 정합 결정.
+
+---
+
+### ADR-017: 애플리케이션 통신 토폴로지 = robot_control 중심 star(ROS2 service) 확정 + 통합 bringup launch (2026-06-05)
+
+**Date**: 2026-06-05
+
+**Context**:
+- Phase 4 컨테이너 통합 중 "socket → ROS2 service 전환" 요청이 있었으나, `cobot2_ws` 애플리케이션 코드는 **이미 전부 ROS2 service 기반이고 socket 이 전혀 없음**을 확인. 현행 구조는 host 의 `robot_control`(DSR_ROBOT2) 이 오케스트레이터로서 `/get_keyword`(std_srvs/Trigger, voice 컨테이너) 와 `/get_3d_position`(od_msg/SrvDepthPosition, yolo 컨테이너) 를 **순차 호출하는 star**. voice·yolo 는 서로 직접 통신하지 않는다.
+- Notion 워크플로우 문서 내부가 불일치: 상세도(2-1)는 robot_control 이 두 service 를 모두 호출하는 star(=코드 일치)인데, 간이도(2-1-a)는 `/get_keyword` 엣지를 yolo↔voice 로 그려 chain(voice→yolo 직접)처럼 보였다. 사용자가 간이도 구조를 의도했었다며 star 적합성을 질문.
+- 검토 결과: chain(yolo 가 voice 를 호출)은 robot_control + object_detection + srv 계약 재작성을 요구하면서 기능 이득이 없고, 안전·시퀀스 제어를 모션 주체에서 떼어내며, yolo·voice 의 단일 책임을 깨 결합도를 높인다.
+
+**Decision**:
+- **통신 토폴로지 = star 유지(확정).** robot_control(host) 이 두 service 의 client. yolo("target→3D position")·voice("→keyword") 는 서로를 모르는 독립 service server. **통신 코드·service 계약·인터페이스 변경 없음.**
+  - 근거: ① 안전·시퀀스 소유권을 실제 모션 주체(robot_control)에 집중 ② 단일 책임 디커플링(yolo·voice 단독 테스트/재사용 가능) ③ 멀티타깃 반복 루프가 이미 robot_control 에 존재 ④ ROS2 service 동기 req/resp 의미론이 "로봇이 묻고 서버가 답"하는 star 에 최적(forward chain 은 중첩 동기 호출로 블로킹) ⑤ chain 전환은 변경 비용만 들고 이득 0.
+- 카메라 소유권은 본 결정에서 재결정하지 않음 — **카메라 host 소유 결정(2026-06-02)** 을 그대로 따른다(host realsense2_camera publish → yolo object_detection subscribe).
+- **통합 bringup launch 도입**: `cobot2_ws/launch/bringup_all.launch.py` — 로봇 드라이버(dsr_bringup2) + host RealSense + yolo/voice 컨테이너(`docker compose up -d`)를 한 번에 기동. robot_control(실제 pick 모션 + 무한 루프)은 안전상 기본 제외(`start_robot_control:=true` 옵트인). `mode` 기본 `virtual`(에뮬레이터). 컨테이너 노드는 각 이미지 ENTRYPOINT(ROS source + colcon overlay) + CMD 로 자동 실행되므로 compose up 한 줄이 노드 기동까지 일으킨다.
+- **문서 정합**: Notion 2-1-a 간이도의 `/get_keyword` 엣지를 yolo↔voice → **host↔voice** 로 정정(상세도·코드 일치). 2-1 상세도/3-1 스택의 카메라-in-컨테이너 표기 및 `docs/DEVELOPMENT_ROADMAP.md` Phase 4 의 동일 표기를 **host 소유**로 정정(2026-06-02 카메라 결정이 이미 명시한 "문서 정합 필요"의 후속).
+
+**Consequences**:
+- 노드/서비스 코드 무변경 — 산출물은 launch 파일 + 결정/로드맵/Notion 문서 정합뿐. 회귀 위험 최소.
+- `bringup_all.launch.py` 는 ament 패키지 밖 standalone(절대경로 `ros2 launch`). 실행 셸은 `/opt/ros/jazzy/setup.bash` + `~/cobot2_ws/install/setup.bash`(overlay) + `resources/config.sh` 를 source 해야 한다(`activate.sh` 는 overlay 미source — 실행 전제로 안내). 후속 패키지화 시 `robot_control/launch/` 이동 + setup.py `data_files`.
+- `containers:=true` 는 이미지 빌드·`.env`·`cyclonedds.xml` 렌더 선행 필요. 미빌드 상태 점검은 `containers:=false`.
+- 실기 E2E(이미지 재빌드 후 service 왕복 + 카메라 토픽 컨테이너 가시성)는 후속 단계로 연기.
+
+**Reopen 조건**:
+- yolo·voice 가 중앙 오케스트레이터 없이 event-driven 자율 동작해야 할 요구가 생기면 → topic/action 기반 재설계 재검토.
