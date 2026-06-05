@@ -519,7 +519,7 @@
 - **yolo 컨테이너에서 카메라 드라이버 제거**: `containers/yolo-detection/Dockerfile` runtime 스테이지의 `ros-${ROS_DISTRO}-realsense2-camera` apt 제거. `cv-bridge`/`sensor-msgs` 는 구독·변환에 필수라 유지. builder 스테이지 무변경.
 - **USB passthrough 제거**: `docker-compose.yml` yolo 서비스의 주석 USB `devices` 블록 삭제(카메라가 host 라 불필요). `network_mode: host` 는 유지 — 이제 host↔컨테이너 service 왕복뿐 아니라 **카메라 토픽 구독**도 이 경로로 일어난다.
 - **host 카메라 기동은 운영 절차**: 컨테이너 up 전에 host 에서 `ros2 launch realsense2_camera rs_launch.py align_depth.enable:=true`. `align_depth` 누락 시 `aligned_depth_to_color` 미publish → 노드 depth 계산 실패(TROUBLESHOOTING 카탈로그 + compose 헤더에 명시).
-- **RMW 일관성 명시 핀**: host↔컨테이너가 같은 topic/service 를 보려면 RMW 일치 필요. `config.sh` 가 `RMW_IMPLEMENTATION`(기본 `rmw_fastrtps_cpp`=jazzy 기본)을 export(host 는 activate.sh 경유), compose 두 서비스도 동일 기본값 참조. `ROS_DOMAIN_ID` 와 함께 양쪽 동일해야 discovery 성립.
+- **RMW 일관성 명시 핀**: host↔컨테이너가 같은 topic/service 를 보려면 RMW 일치 필요. `config.sh` 가 `RMW_IMPLEMENTATION`(기본 `rmw_fastrtps_cpp`=jazzy 기본 — **ADR-016 에서 `rmw_cyclonedds_cpp` 로 변경됨**)을 export(host 는 activate.sh 경유), compose 두 서비스도 동일 기본값 참조. `ROS_DOMAIN_ID` 와 함께 양쪽 동일해야 discovery 성립.
 
 **Consequences**:
 - yolo 이미지에서 realsense2_camera + 그 transitive 의존 제거 → 이미지 약간 축소. ADR-009 의 base/네트워크/빌드게이트 결정은 그대로 유효 — 본 ADR 은 카메라 배치만 변경(ADR-009 의 컨테이너-내 카메라 실행 가정을 대체).
@@ -530,4 +530,37 @@
 
 **Reopen 조건**:
 - 카메라를 다시 컨테이너로 넣을 구조적 이유(예: 다중 카메라를 컨테이너별 격리)가 생기면 → USB passthrough + udev 책임 재설계.
-- RMW 를 CycloneDDS 로 표준 변경 시 → config.sh 기본값 + 양쪽 일관성 재점검.
+- RMW 를 CycloneDDS 로 표준 변경 시 → config.sh 기본값 + 양쪽 일관성 재점검. (→ ADR-016 에서 실행)
+
+---
+
+### ADR-016: RMW 표준 = CycloneDDS + 대용량 토픽 커널/소켓 버퍼 + 유선 NIC whitelist 자동화 (2026-06-05)
+
+**Date**: 2026-06-05
+
+**Context**:
+- RealSense raw 토픽(color 1프레임 ≈ 2.6MB, depth/pointcloud)을 안정적으로 수신·측정하려는 과정에서 RMW/버퍼 함정 3종이 드러났다.
+  1. fastrtps + `ros2 topic hz`(rclpy 단일 스레드)는 대용량 메시지 역직렬화가 publish 를 못 따라가 실제 30fps 여도 15Hz 안팎으로 출렁(측정 artifact). 같은 콜백의 작은 토픽(`camera_info`)은 29.98Hz 안정 → 카메라/노드는 정상.
+  2. CycloneDDS 로 바꾸면 UDP fragment 재조립 버퍼(`net.core.rmem_max` 기본 ~208KB)가 한 프레임보다 작아 대용량 토픽이 전량 유실(0Hz).
+  3. CycloneDDS `SocketSendBufferSize` 는 하드 최소값이라 커널 `wmem_max` 가 요청치(64MB)보다 작으면 도메인 생성을 거부하고 노드가 SIGABRT.
+- 커널 sysctl 버퍼 + CycloneDDS XML 버퍼를 함께 올리고, DDS 가 wifi 대신 유선 NIC 만 쓰게 인터페이스를 화이트리스트하니 raw 토픽이 30Hz(camera_info 와 일치)로 복원됐다(실측 검증, 본 머신).
+- 그러나 이 해결책이 전부 일회성 수동 작업이라 (1) 타 머신/재설치 재현 불가, (2) NIC 이름이 머신·포트마다 달라 XML 하드코딩이 깨짐, (3) Phase 4 컨테이너가 fastrtps 기본이라 host(cyclonedds)와 discovery 불가.
+- 사용자 결정(2026-06-05): RMW 표준을 CycloneDDS 로 전환하고 설치 단계에서 NIC·버퍼를 자동 구성.
+
+**Decision**:
+- **RMW 표준 = `rmw_cyclonedds_cpp`**. `resources/config.sh` 기본값을 fastrtps → cyclonedds 로 변경(ADR-015 의 "기본 fastrtps" 핀을 supersede). `CYCLONEDDS_XML`/`CYCLONEDDS_URI`/`DDS_NETIF`/`ROS_DOMAIN_ID`(단일 소스, 기본 42) 를 config.sh 에 추가.
+- **커널 버퍼 영속**: `resources/sysctl-cyclonedds.conf` → `/etc/sysctl.d/60-cyclonedds.conf`. rmem/wmem max·default, ipfrag_time/high/low_thresh, netdev_max_backlog. sysctl 과 XML 은 **세트로 배포**(XML 만 있으면 wmem 부족으로 노드 사망).
+- **유선 NIC whitelist 자동화**: `resources/cyclonedds.xml.in` 템플릿 + `resources/dds-tuning.sh` 가 설치 머신의 물리 유선 NIC 를 carrier 무관하게 전부 탐지(무선/docker/가상 제외)해 `<NetworkInterface presence_required="false"/>` 로 렌더. 로봇 미연결 설치·로봇 포트 변경 모두 견고하고, 목록에 wifi 가 없어 무선 fallback 이 원천 차단된다. `DDS_NETIF` 로 override 가능.
+- **설치 통합**: `install.sh` step 13(`dds_tuning`)로 추가, `STEPS_TOTAL`/`TOTAL_STEPS` 12→13. 단독 실행(`bash resources/dds-tuning.sh`)도 지원(하드웨어 변경 시 재생성).
+- **컨테이너**: `network_mode: host`(ADR-009 유지) 덕분에 컨테이너가 host net namespace 를 공유 → 커널 sysctl 버퍼와 유선 NIC 를 그대로 상속. compose 가 RMW 기본을 cyclonedds 로 바꾸고 `CYCLONEDDS_URI` env + host 의 `cyclonedds.xml` read-only mount 만 추가하면 host↔컨테이너 discovery 성립(docker0 화이트리스트 불필요).
+
+**Consequences**:
+- host·컨테이너가 단일 cyclonedds 환경으로 통일, 대용량 토픽 30Hz 결정적 재현.
+- 렌더된 `cyclonedds.xml` + `/etc/sysctl.d/60-cyclonedds.conf` 는 머신 종속 산출물 → 레포 추적 안 함(템플릿·스크립트만 추적). fleet 타 머신은 같은 installer 가 그 머신 NIC 를 자동 주입.
+- 런타임 전제 추가: 로봇/카메라가 연결된 유선 포트가 up 이어야 cyclonedds 노드가 기동(presence_required=false 지만 전 포트 down 이면 사용가능 인터페이스 0 → 실패, 의도된 동작).
+- COMPATIBILITY 매트릭스의 "기본 fastrtps" 서술을 본 결정이 supersede(cyclonedds 행 추가).
+- **dsr-emulator(dev 전용 3rd-party 이미지)는 미변경** — 이미지가 cyclonedds rmw 를 안 가질 수 있어 RMW 강제 시 기동 실패 위험. dev 프로파일에서 에뮬레이터와 host 통신이 필요하면 그때 RMW 정합을 별도 점검(실기 우선이라 보류).
+
+**Reopen 조건**:
+- 멀티캐스트 차단망/특수 토폴로지에서 enp* 자동탐지가 부적합하면 → `DDS_NETIF` 명시 또는 subnet 기반 선택으로 재설계.
+- dsr-emulator 와 cyclonedds 통신이 필요해지면 → 에뮬레이터 이미지 RMW 정합 결정.
