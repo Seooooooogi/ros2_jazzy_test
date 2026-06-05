@@ -5,7 +5,7 @@
 > 두 머신 공유 — **[실측]** 머신(로봇/카메라 실기) + **[문서]** 머신(git/문서/lessons). 항목에 담당 표기.
 
 ## Last updated
-2026-06-05 — **[문서]** RealSense/DDS 문서 통합 (Notion 마이그레이션 페이지: bashrc humble↔jazzy 비교 + raw fps 원리·CycloneDDS 커널 튜닝 `/etc/sysctl.d/10-cyclone-max.conf` 정리). **RealSense udev 조사** — 설치 스크립트에 udev 명시 명령 없음, `librealsense2-dkms` 의 Recommends(`librealsense2-udev-rules`)로 자동 유입(공식 distribution_linux.md 근거)이나 hard depend 아님 → **명시설치+검증 패치 보류**(아래 Next Actions). 직전 2026-06-04: origin 동기화 + L-009 푸시(HEAD `55a7890`), RealSense 미인식(케이블 부재).
+2026-06-05 — **[문서]** 연속 2작업: (1) **CycloneDDS 프로젝트 표준 전환 + 유선 NIC/커널버퍼 설치 자동화** (`resources/dds-tuning.sh`, install.sh step 13, config.sh 기본 RMW=cyclonedds) push 완료. (2) **Phase 4 — 통신 토폴로지 = robot_control 중심 star 확정**(cobot2_ws 코드가 이미 전부 ROS2 service 기반, socket 없음) + 통합 bringup launch `cobot2_ws/launch/bringup_all.launch.py` 골격(로봇 드라이버 dsr_bringup2 + host 카메라 realsense + yolo/voice 컨테이너 `docker compose up -d` 를 한 번에; robot_control 실모션은 `start_robot_control:=true` 옵트인, `mode` 기본 virtual) + 결정기록(통신 토폴로지 star)·로드맵 Phase 4·Notion 2번 항목을 **카메라 host 소유**로 정합. **(2)는 미커밋** — launch + 신규 ADR + roadmap 편집. 직전 2026-06-04: origin 동기화 + lessons 푸시(`55a7890`), RealSense 미인식(케이블 부재).
 
 ---
 
@@ -19,7 +19,7 @@
    - 터미널1: `ros2 launch dsr_bringup2 dsr_bringup2_rviz.launch.py mode:=real host:=192.168.1.100 port:=12345 model:=m0609 name:=dsr01 gui:=false`
    - 터미널2: `python3 ~/ros2_jazzy_test/jog_complete.py` → +/- 버튼 소폭 이동. **실기 — 비상정지 대기.**
 3. **[실측] fleet 머신에 DSR 패치 전파** — 메모 `~/dsr_patch_command.txt`(+USB 사본). 이미 설치된 머신은 state DONE 이라 install.sh skip → 직접 sed.
-4. **[실측] Phase 4 컨테이너 build/run 검증**: `bash containers/build-all.sh`. voice 오디오(/dev/snd) + OPENAI_API_KEY 런타임 주입. yolo 카메라는 host 소유로 분리됨.
+4. **[실측, 2026-06-08(월) 예정] Phase 4 통합 E2E**: ① `bash containers/build-all.sh` 이미지 빌드 — **yolo 이미지는 host 소유 카메라 전제로 realsense 드라이버 제거 반영 필요**(잔존 시 정리). ② 셸에 `config.sh`+`/opt/ros/jazzy`+`~/cobot2_ws/install` overlay 3개 source + `.env`·`cyclonedds.xml` 준비 후 `ros2 launch <repo>/cobot2_ws/launch/bringup_all.launch.py mode:=real host:=192.168.1.100`. ③ 검증: 컨테이너에서 `/camera/camera/*` 가시 + host `robot_control` 이 `/get_keyword`·`/get_3d_position` 왕복(star). voice 마이크 passthrough + OPENAI_API_KEY 런타임 주입. 미빌드 점검은 `containers:=false`.
 5. **[문서] 미정리 git 항목 결정**:
    - `backup/pre-github-sync-2026-05-29` 브랜치: origin 미push(로컬 전용) — 삭제/보존/push 결정.
    - 태그 `v0.1.0`: origin 미push — push 여부 결정.
@@ -32,7 +32,7 @@
 ## Open Decisions
 
 - **브랜치 canonical**: containers vs shell — main 병합 대상.
-- **Phase 4 컨테이너 design 잔여**: base image(GPU), DDS network_mode, compose 자동 up 여부.
+- **Phase 4 컨테이너 design 잔여**: GPU passthrough 활성화 + 마이크 passthrough + yolo 이미지 realsense 드라이버 제거. (해결됨: DDS=cyclonedds/`network_mode: host`, 통신 토폴로지=star, compose 자동 up=통합 bringup launch.)
 - **미push git 객체**: backup 브랜치 / `v0.1.0` 태그 origin 반영 여부.
 - **.gitignore 에이전트 산출물**: 머신마다 도구가 달라 통합 보류 — 머신별 .gitignore vs repo 통합.
 - **RealSense udev 명시화**: `librealsense2-dkms` Recommends 의존 유지 vs `librealsense2-udev-rules` 명시설치+검증 패치 — silent 누락 위험 대비 (Next Actions #6).
@@ -82,5 +82,5 @@ doosan-robot2 `-b jazzy` clone 의 `dsr_common2/imp/DSR_ROBOT2.py` 이름 불일
 ---
 
 ## Current Focus
-- **[실측] Top priority**: RealSense 케이블 확보 후 재연결+USB3 검증 → DSR jog 모션 검증.
+- **[실측] Top priority**: RealSense 케이블 확보 후 재연결+USB3 검증 → DSR jog 모션 검증. **2026-06-08(월) Phase 4 통합 E2E 예정**(bringup launch + 컨테이너 빌드/왕복).
 - **[문서] Friction**: 미push git 객체(backup 브랜치 / `v0.1.0` 태그) + `.gitignore` 에이전트 산출물 + RealSense udev 명시화 패치 결정 대기.
