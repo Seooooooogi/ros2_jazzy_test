@@ -27,6 +27,16 @@ set +u
 source "/opt/ros/${ROS_DISTRO}/setup.bash"
 set -u
 
+# CycloneDDS RMW 패키지 보장 — config.sh 가 기본 RMW 를 cyclonedds 로 고정하므로 colcon 이
+# 패키지의 기본 RMW 를 해석할 때 rmw_cyclonedds_cpp 가 설치돼 있어야 한다(없으면 dsr_msgs2 등에서
+# "Could not find ROS middleware implementation 'rmw_cyclonedds_cpp'" 로 CMake configure 실패).
+# ROS desktop 은 fastrtps 만 깔고 cyclonedds 는 별도 패키지라 빌드 선행 조건으로 여기서 설치한다.
+# dpkg 가드로 이미 있으면 apt 자체를 건너뜀(멱등 + 재개 시 네트워크 불요).
+if ! dpkg -s "ros-${ROS_DISTRO}-rmw-cyclonedds-cpp" >/dev/null 2>&1; then
+    sudo apt-get update
+    sudo apt-get install -y "ros-${ROS_DISTRO}-rmw-cyclonedds-cpp"
+fi
+
 cd "${DSR_WORKSPACE}"
 
 # rosdep: 워크스페이스 패키지의 선언적 의존 자동 해소 (init 은 a01 에서 완료).
