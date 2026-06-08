@@ -70,11 +70,11 @@ cp .env.example .env
 
 ## 워크스페이스 (cobot2_ws) 빌드 / 위치
 
-- a02 단계(로봇/카메라)가 워크스페이스를 **자동으로 clone + 빌드**한다 — 별도 수동 빌드 불필요
+- a02 단계(로봇/카메라): 워크스페이스 **자동 clone + 빌드** — 별도 수동 빌드 불필요
 - 기본 위치: `~/cobot2_ws` (환경변수 `DSR_WORKSPACE` 로 변경 가능)
 - 구성: `doosan-robot2`(jazzy) clone + host 패키지(`robot_control`, `od_msg`)만 복사 후 `colcon build`
   - app 패키지(`object_detection` / `voice_processing` 등)는 host ws 에 없음 — yolo/voice 컨테이너가 담당
-- doosan-robot2(jazzy) 소스 호환 패치(서비스 이름·prefix)가 a02 에서 자동 적용됨 → **손수 clone 하면 이 패치가 빠져 런타임이 깨진다**
+- doosan-robot2(jazzy) 소스 호환 패치(서비스 이름·prefix) a02 에서 자동 적용 → **손수 clone 시 패치 누락으로 런타임 깨짐**
 
 수정 후 재빌드:
 
@@ -85,7 +85,7 @@ colcon build
 source install/setup.bash
 ```
 
-다른 위치(예: 바탕화면)에 두고 빌드 — `DSR_WORKSPACE` 로 지정해 a02 를 실행(패치 포함 전체 파이프라인이 그 경로에서 수행):
+다른 위치(예: 바탕화면)에 두고 빌드 — `DSR_WORKSPACE` 지정 후 a02 실행 (패치 포함 전체 파이프라인이 그 경로에서 수행):
 
 ```bash
 DSR_WORKSPACE=~/Desktop/cobot2_ws bash a02-robot-camera.sh
@@ -94,9 +94,10 @@ DSR_WORKSPACE=~/Desktop/cobot2_ws bash a02-robot-camera.sh
 
 ## 설치 후 실행 — 로봇 · 카메라 bringup
 
-통합 launch `cobot2_ws/launch/bringup_all.launch.py` 가 로봇 드라이버(`dsr_bringup2`) + RealSense(`realsense2_camera`)를 한 번에 띄운다. ament 패키지 밖 standalone 이라 **레포 경로로 직접** `ros2 launch` 한다.
+- 통합 launch `cobot2_ws/launch/bringup_all.launch.py` — 로봇 드라이버(`dsr_bringup2`) + RealSense(`realsense2_camera`) 한 번에 기동
+- ament 패키지 밖 standalone → **레포 경로로 직접** `ros2 launch`
 
-먼저 셸에 환경 source (새 터미널마다):
+환경 source (새 터미널마다):
 
 ```bash
 REPO=~/ros2_jazzy_test            # 레포 클론 위치에 맞게
@@ -130,8 +131,8 @@ ros2 launch "$REPO/cobot2_ws/launch/bringup_all.launch.py" \
 | `containers` | `true` | yolo/voice 컨테이너 `docker compose up -d` 여부 |
 | `start_robot_control` | `false` | **DANGER**: `true`+`mode:=real` 이면 약 8초 뒤 실기가 물리 이동(movej) |
 
-- **`containers:=true` 는 yolo/voice 이미지가 빌드돼 있어야 한다.** 이 브랜치(설치 전용)는 컨테이너를 빌드하지 않으므로 `containers:=false` 로 실행한다.
-- `start_robot_control:=true` 는 실기를 실제로 움직인다 — 비상정지 대기 상태에서만 사용.
+- **`containers:=true` 는 yolo/voice 이미지 빌드 선행 필요.** 이 브랜치(설치 전용)는 컨테이너 미빌드 → `containers:=false` 로 실행
+- `start_robot_control:=true` — 실기 실제 물리 이동. 비상정지 대기 상태에서만 사용
 
 개별 실행(드라이버/카메라만 따로):
 
