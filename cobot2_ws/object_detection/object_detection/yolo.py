@@ -4,7 +4,6 @@ import json
 import time
 from collections import Counter
 
-import rclpy
 from ament_index_python.packages import get_package_share_directory
 from ultralytics import YOLO
 import numpy as np
@@ -33,7 +32,7 @@ class YoloModel:
         frames = {}
 
         while time.time() < end_time:
-            rclpy.spin_once(img_node)
+            img_node.spin_once()
             frame = img_node.get_color_frame()
             stamp = img_node.get_color_frame_stamp()
             if frame is not None:
@@ -47,7 +46,7 @@ class YoloModel:
         return list(frames.values())
 
     def get_best_detection(self, img_node, target):
-        rclpy.spin_once(img_node)
+        img_node.spin_once()
         frames = self.get_frames(img_node)
         if not frames:  # Check if frames are empty
             return None

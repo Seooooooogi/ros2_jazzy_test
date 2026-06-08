@@ -43,7 +43,7 @@ class ObjectDetectionNode(Node):
 
     def _compute_position(self, target):
         """이미지를 처리해 객체의 카메라 좌표를 계산합니다."""
-        rclpy.spin_once(self.img_node)
+        self.img_node.spin_once()
 
         box, score = self.model.get_best_detection(self.img_node, target)
         if box is None or score is None:
@@ -72,7 +72,7 @@ class ObjectDetectionNode(Node):
         """getter 함수가 유효한 데이터를 반환할 때까지 spin 하며 재시도합니다."""
         data = getter()
         while data is None or (isinstance(data, np.ndarray) and not data.any()):
-            rclpy.spin_once(self.img_node)
+            self.img_node.spin_once()
             self.get_logger().info(f"Retry getting {description}.")
             data = getter()
         return data

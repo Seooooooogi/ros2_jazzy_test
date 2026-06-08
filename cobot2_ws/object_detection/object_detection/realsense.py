@@ -1,4 +1,5 @@
 from rclpy.node import Node
+from rclpy.executors import SingleThreadedExecutor
 from sensor_msgs.msg import Image, CameraInfo
 from cv_bridge import CvBridge
 
@@ -18,6 +19,15 @@ class ImgNode(Node):
         self.camera_info_subscription = self.create_subscription(
             CameraInfo, '/camera/camera/color/camera_info', self.camera_info_callback, 10)
         self.get_logger().info("Waiting for client's call...")
+        # 자기 전용 executor — 서비스 콜백 안에서 on-demand 로 구독을 펌프한다.
+        # 메인 노드는 글로벌 executor(rclpy.spin)로 도는데, 콜백에서 글로벌 rclpy.spin_once 를
+        # 부르면 재진입("Executor is already spinning")으로 깨진다. 별도 executor 면 안전하다.
+        self._img_exec = SingleThreadedExecutor()
+        self._img_exec.add_node(self)
+
+    def spin_once(self, timeout_sec=0.1):
+        """전용 executor 로 구독 콜백을 한 번 펌프(글로벌 spin 과 충돌 없음)."""
+        self._img_exec.spin_once(timeout_sec=timeout_sec)
 
     def camera_info_callback(self, msg):
         self.intrinsics = {"fx": msg.k[0], "fy": msg.k[4], "ppx": msg.k[2], "ppy": msg.k[5]}
