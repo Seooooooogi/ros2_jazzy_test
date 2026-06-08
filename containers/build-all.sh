@@ -6,7 +6,8 @@
 # 이 단계는 GPU / 마이크 / 카메라 / 모델 가중치를 요구하지 않는다 (모듈 import 만).
 # torch.cuda.is_available() / service 왕복 / od_msg hash 정합은 host e2e 이후 단계 — 여기서 검증 안 함.
 #
-# install.sh 는 본 스크립트를 자동 호출하지 않는다 (host / application 책임 분리, ADR-007).
+# 개발 브랜치 install.sh 의 마지막 단계가 본 스크립트를 호출해 빌드+검증을 설치 시퀀스에
+# 포함한다. main(설치 전용)은 호출하지 않으며, 어느 브랜치에서나 단독 실행도 가능하다(아래).
 # 사용: bash containers/build-all.sh
 set -euo pipefail
 
@@ -31,7 +32,7 @@ fi
 TOTAL=5
 step() { printf '\n[%d/%d] %s\n' "$1" "${TOTAL}" "$2"; }
 
-# secret 위생 — 이미지 레이어 history 에 자격증명 흔적 0 (ADR-007 mandatory).
+# secret 위생 — 이미지 레이어 history 에 자격증명 흔적 0(필수). 한 번 박히면 registry 노출이 비가역.
 secret_scan() {
     local image="$1"
     if docker history --no-trunc "${image}" | grep -iE 'OPENAI|API_KEY|TOKEN|SECRET|PASSWORD'; then

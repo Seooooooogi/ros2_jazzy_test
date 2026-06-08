@@ -202,6 +202,8 @@
 
 **Date**: 2026-05-27
 
+**Amended by ADR-019 (2026-06-08)**: 발행 이미지 부재로 개발 브랜치 install.sh 가 아래 Decision 5 의 pull-first 분기 대신 `containers/build-all.sh`(빌드+검증)를 직접 호출한다. pull-first 는 이미지 배포 후로 연기 — 상세는 ADR-019.
+
 **Context**:
 - Phase 4 가 yolo-detection / voice-processing 을 컨테이너로 분리. 두 image 모두 동일 RTX 4060 Laptop 환경에서만 사용 — 한 번 build 성공 시 환경 변화 없으면 안정적. 빌드 비용 큼 (CUDA + PyTorch + ultralytics = 5–10GB / 수 분~수십 분).
 - 사용자 명시 (2026-05-27): 외부 코드 유출 우려 없음 (본 레포는 환경설정 installer, 외부 가치 있는 내부 코드 없음).
@@ -615,3 +617,30 @@
 
 **Reopen 조건**:
 - 컨테이너 배포를 레지스트리(GHCR 등) pull 방식으로 전환하면 → 빌드 정의 소스 추적 대신 이미지 태그 핀 고정으로 재검토.
+
+---
+
+### ADR-019: 개발 브랜치 install.sh 가 컨테이너 빌드+검증을 마지막 단계로 호출 — 검증 안정화 후 이미지 배포→pull/download 전환 (2026-06-08)
+
+**Date**: 2026-06-08
+
+**Context**:
+- containers/ 를 main 추적에 포함한 직후에도 `install.sh` 가 컨테이너를 빌드하지 않아, 어느 브랜치에서도 설치 시 이미지가 만들어지지 않았다(수동 `bash containers/build-all.sh` 만).
+- 초기 컨테이너 배포 전략(2026-05-27)은 `install.sh` 가 pull-first(`docker compose pull` → 없으면 build → `up -d`)로 동작하도록 설계했고, 빌드+검증 게이트(`containers/build-all.sh`)는 host/application 책임 분리를 이유로 install.sh 가 호출하지 않기로 했다. 그러나 **아직 이미지가 어디에도 발행돼 있지 않아 pull-first 는 항상 build 로 폴백**한다 — 현시점에 더 필요한 것은 "fresh 설치에서 두 이미지가 실제로 빌드·검증되는가"의 확인이다.
+- main 은 host 설치 전용으로 유지하기로 했다(컨테이너 단계를 main install.sh 에 넣지 않음). 컨테이너 빌드 단계는 개발 브랜치에서만 검증한다.
+
+**Decision**:
+- **개발 브랜치(feat/application-containers)의 `install.sh` 마지막 단계(step 14)에서 `containers/build-all.sh` 를 호출**한다 — 두 이미지 빌드 + secret 위생 스캔(`docker history`) + import/모델로드 smoke 검증을 설치 시퀀스에 포함. `STEPS_TOTAL` 13→14.
+  - 근거: 발행 이미지가 없어 pull-first 가 무의미한 단계이고, `build-all.sh` 는 GPU·마이크·카메라·모델가중치 불요(모듈 import + .tflite 로드만)라 host 설치 직후 그대로 실행 가능하다. 빌드 게이트가 곧 검증 게이트라 개발 브랜치 설치 검증에 적합.
+  - `build-all.sh` 의 "install.sh 자동 호출 안 함" 전제는 개발 브랜치에서 폐기 — 해당 주석 갱신.
+- **main(설치 전용)에는 이 단계를 넣지 않는다** — main `install.sh` 는 host 설치(a01~a04 + DDS 튜닝, 13 step)까지만. `install.sh` 는 두 브랜치가 컨테이너 단계 유무로 **의도적으로 분기**하며 그 유지 비용을 감수한다.
+- **향후 전환 계획**: `build-all.sh` 검증이 안정화되면 검증 통과 이미지를 Docker Hub(public — runtime env 주입 방식이라 image layer 에 secret 미포함) 또는 Google Drive 에 배포하고, install.sh 컨테이너 단계를 build 에서 **pull/download** 로 전환한다(빌드 수 분~수십 분 절약 + digest 단위 재현성). 이때 main 에도 pull/download 단계를 넣어 fleet 머신이 빌드 없이 이미지를 확보하도록 재검토한다 — 이는 초기 pull-first 설계의 실현이다.
+
+**Consequences**:
+- 개발 브랜치 fresh 설치가 컨테이너 빌드+검증까지 자동 수행 — 설치 한 번으로 host + 두 컨테이너 이미지를 확증.
+- `install.sh` 가 main↔dev 간 영구 분기(step 14 유무). install.sh 의 host 부분 변경을 두 브랜치에 반영할 때 컨테이너 step diff 가 항상 따라붙어 선택적 병합이 필요하다(merge 시 주의 — host 변경만 골라 main 에 반영).
+- `build-all.sh` 는 매 설치마다 빌드(레이어 캐시로 재빌드는 빠름) + 모델로드 smoke 실행. 빌드 실패 시 `set -e` 로 설치 중단하고 state 가 미DONE 으로 남아 재실행 시 step 14 만 재시도한다(앞 13 step 은 skip).
+- 이미지 배포 전까지 `DOCKERHUB_USER` 미설정이면 로컬 dev 태그로 빌드한다(publish 불가, 로컬 검증 전용).
+
+**Reopen 조건**:
+- 이미지가 Docker Hub / Google Drive 에 배포되면 → install.sh 컨테이너 단계를 pull/download 로 전환 + main 통합 재검토(본 ADR 의 향후 전환 계획 실행).

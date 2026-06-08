@@ -2,7 +2,8 @@
 # shellcheck source-path=SCRIPTDIR
 # install.sh — host 워크스테이션 셋업 단일 진입점 (a01~a04 전체 시퀀스).
 #
-# a01~a04 오케스트레이터의 모든 step + DDS 튜닝을 하나의 연속 시퀀스([n/13])로 실행한다.
+# a01~a04 오케스트레이터의 모든 step + DDS 튜닝 + 애플리케이션 컨테이너 빌드를 하나의
+# 연속 시퀀스([n/14])로 실행한다.
 # 같은 state 파일을 공유하므로 개별 오케스트레이터(bash a0N-...sh)로 이미 완료한 step 은
 # 자동 skip 된다. 특정 스테이지만 다시 돌리려면 해당 a0N 스크립트를 직접 실행하면 된다.
 #
@@ -34,13 +35,13 @@ source "${RESOURCE_DIR}/state.sh"
 source "${RESOURCE_DIR}/confirm.sh"
 config_assert_set
 
-STEPS_TOTAL=13
+STEPS_TOTAL=14
 # shellcheck source=resources/run-step.sh
 source "${RESOURCE_DIR}/run-step.sh"
 
 usage() {
     cat <<'EOF'
-install.sh — host 셋업 단일 진입점 (a01~a04 + DDS 튜닝, 전체 13 step)
+install.sh — host 셋업 단일 진입점 (a01~a04 + DDS 튜닝 + 컨테이너 빌드, 전체 14 step)
 
   bash install.sh             전체 시퀀스 실행 (이미 완료된 step 은 skip)
   bash install.sh --verbose   각 step 의 상세 출력(colcon n/total, apt %)을 콘솔에도 표시
@@ -115,8 +116,8 @@ run_step 4 a01_ros2_desktop    bash "${RESOURCE_DIR}/ros2-desktop-main.sh"
 run_step 5 a01_ros2_extras     bash "${RESOURCE_DIR}/ros2-install.sh"
 
 # --- step 6: reboot 경계 (a01) ---
-# run_step 으로 감싸지 못한다: reboot 은 프로세스를 종료하고, 이후 step 7~13 은 재부팅 후
-# 실행되어야 한다. reboot 전에 DONE 을 디스크에 기록해 재부팅 후 재실행이 이 단계를
+# run_step 으로 감싸지 못한다: reboot 은 프로세스를 종료하고, 이후의 모든 후속 step(7 이후)은
+# 재부팅 후 실행되어야 한다. reboot 전에 DONE 을 디스크에 기록해 재부팅 후 재실행이 이 단계를
 # 건너뛰도록 한다 (무한 reboot 루프 방지).
 # confirm 거부/비대화형 abort 시엔 DONE 이 기록되지 않아 a01_reboot 이 RUNNING 으로 남는다.
 # skip 판정은 DONE 만 보므로 다음 실행에서 reboot 를 다시 묻는다 — reboot 동의 전이므로 의도된 동작.
@@ -154,5 +155,13 @@ run_step --interactive 12 a04_voice_env bash "${RESOURCE_DIR}/voice-env-check.sh
 # 없고 install.sh 또는 단독(bash resources/dds-tuning.sh) 으로만 실행한다.
 run_step 13 dds_tuning bash "${RESOURCE_DIR}/dds-tuning.sh"
 
+# --- step 14: 애플리케이션 컨테이너 빌드 + 검증 (yolo / voice 이미지) ---
+# build-all.sh 가 두 이미지를 빌드하고 secret 위생 스캔 + import/모델로드 smoke 로 검증한다.
+# GPU·마이크·카메라 불요(모듈 import + .tflite 로드만) — host 설치 직후 실행 가능하다.
+# 빌드는 도커 레이어 캐시로 재실행이 빠르고, 실패 시 state 미DONE 으로 남아 재실행 시 이
+# step 만 재시도한다. 향후 검증 통과 이미지를 registry/드라이브로 배포하면 이 단계를
+# 빌드에서 pull/download 방식으로 전환한다.
+run_step 14 container_build bash "${SCRIPT_DIR}/containers/build-all.sh"
+
 state_dump
-echo "install: 전체 13 step 완료 — host 셋업 종료."
+echo "install: 전체 14 step 완료 — host 셋업 + 애플리케이션 컨테이너 빌드 종료."
