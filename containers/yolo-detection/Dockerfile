@@ -86,10 +86,15 @@ ARG ROS_DISTRO=jazzy
 # (color/aligned_depth_to_color/camera_info)을 DDS 로 subscribe 한다 → 컨테이너 안에
 # realsense2_camera 드라이버나 USB passthrough 가 필요 없다. cv_bridge(Image↔cv2) 와
 # sensor_msgs(구독 메시지 타입)는 노드 런타임에 필수라 유지.
+# rmw-cyclonedds-cpp: host↔컨테이너가 같은 topic/service 를 보려면 RMW 가 일치해야 한다
+# (compose 가 RMW_IMPLEMENTATION=rmw_cyclonedds_cpp 로 기동). ros-base 기본 RMW 는 fastrtps 라
+# cyclonedds 구현을 명시 설치하지 않으면 런타임에 RMW 로드 실패 → 같은 도메인이어도 host 토픽
+# 미발견. host(설치 단계가 cyclonedds RMW 설치)와 짝을 맞춘다.
 RUN apt-get update \
  && apt-get install -y --no-install-recommends \
       ros-${ROS_DISTRO}-cv-bridge \
       ros-${ROS_DISTRO}-sensor-msgs \
+      ros-${ROS_DISTRO}-rmw-cyclonedds-cpp \
  && rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /opt/venv   /opt/venv

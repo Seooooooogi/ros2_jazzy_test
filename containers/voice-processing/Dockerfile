@@ -75,11 +75,14 @@ ARG DEBIAN_FRONTEND=noninteractive
 ARG ROS_DISTRO=jazzy
 
 # 실행 의존: PyAudio 런타임(libportaudio2) + libsndfile + std_srvs(서비스 인터페이스).
+# rmw-cyclonedds-cpp: host↔컨테이너 RMW 일치용(compose 가 cyclonedds 로 기동). ros-base 기본은
+# fastrtps 라 명시 설치 안 하면 런타임 RMW 로드 실패 → host 토픽/서비스 미발견.
 RUN apt-get update \
  && apt-get install -y --no-install-recommends \
       libportaudio2 \
       libsndfile1 \
       ros-${ROS_DISTRO}-std-srvs \
+      ros-${ROS_DISTRO}-rmw-cyclonedds-cpp \
  && rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /opt/venv   /opt/venv
