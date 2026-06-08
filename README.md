@@ -67,3 +67,80 @@ bash install.sh --help     # 도움말
 cp .env.example .env
 # .env 편집해 실제 키 입력
 ```
+
+## 워크스페이스 (cobot2_ws) 빌드 / 위치
+
+- a02 단계(로봇/카메라)가 워크스페이스를 **자동으로 clone + 빌드**한다 — 별도 수동 빌드 불필요
+- 기본 위치: `~/cobot2_ws` (환경변수 `DSR_WORKSPACE` 로 변경 가능)
+- 구성: `doosan-robot2`(jazzy) clone + host 패키지(`robot_control`, `od_msg`)만 복사 후 `colcon build`
+  - app 패키지(`object_detection` / `voice_processing` 등)는 host ws 에 없음 — yolo/voice 컨테이너가 담당
+- doosan-robot2(jazzy) 소스 호환 패치(서비스 이름·prefix)가 a02 에서 자동 적용됨 → **손수 clone 하면 이 패치가 빠져 런타임이 깨진다**
+
+수정 후 재빌드:
+
+```bash
+cd ~/cobot2_ws
+source /opt/ros/jazzy/setup.bash
+colcon build
+source install/setup.bash
+```
+
+다른 위치(예: 바탕화면)에 두고 빌드 — `DSR_WORKSPACE` 로 지정해 a02 를 실행(패치 포함 전체 파이프라인이 그 경로에서 수행):
+
+```bash
+DSR_WORKSPACE=~/Desktop/cobot2_ws bash a02-robot-camera.sh
+# 이후 재빌드도 같은 경로에서: cd ~/Desktop/cobot2_ws && colcon build
+```
+
+## 설치 후 실행 — 로봇 · 카메라 bringup
+
+통합 launch `cobot2_ws/launch/bringup_all.launch.py` 가 로봇 드라이버(`dsr_bringup2`) + RealSense(`realsense2_camera`)를 한 번에 띄운다. ament 패키지 밖 standalone 이라 **레포 경로로 직접** `ros2 launch` 한다.
+
+먼저 셸에 환경 source (새 터미널마다):
+
+```bash
+REPO=~/ros2_jazzy_test            # 레포 클론 위치에 맞게
+source /opt/ros/jazzy/setup.bash
+source ~/cobot2_ws/install/setup.bash   # overlay (dsr_bringup2 / robot_control 제공)
+source "$REPO/resources/config.sh"      # RMW(CycloneDDS) / domain 등
+```
+
+가상(에뮬레이터) 로봇 + 카메라:
+
+```bash
+ros2 launch "$REPO/cobot2_ws/launch/bringup_all.launch.py" \
+  mode:=virtual camera:=true containers:=false
+```
+
+실로봇 + 카메라 (컨트롤러 IP 지정):
+
+```bash
+ros2 launch "$REPO/cobot2_ws/launch/bringup_all.launch.py" \
+  mode:=real host:=<controller-ip> camera:=true containers:=false
+```
+
+주요 인자:
+
+| 인자 | 기본 | 의미 |
+|------|------|------|
+| `mode` | `virtual` | `virtual`=에뮬레이터 / `real`=실 컨트롤러 연결 |
+| `host` | `127.0.0.1` | `mode:=real` 일 때 DSR 컨트롤러 IP |
+| `port` | `12345` | DSR 컨트롤러 포트(DRFL) |
+| `camera` | `true` | host RealSense 기동 여부 |
+| `containers` | `true` | yolo/voice 컨테이너 `docker compose up -d` 여부 |
+| `start_robot_control` | `false` | **DANGER**: `true`+`mode:=real` 이면 약 8초 뒤 실기가 물리 이동(movej) |
+
+- **`containers:=true` 는 yolo/voice 이미지가 빌드돼 있어야 한다.** 이 브랜치(설치 전용)는 컨테이너를 빌드하지 않으므로 `containers:=false` 로 실행한다.
+- `start_robot_control:=true` 는 실기를 실제로 움직인다 — 비상정지 대기 상태에서만 사용.
+
+개별 실행(드라이버/카메라만 따로):
+
+```bash
+# 로봇 드라이버만
+ros2 launch dsr_bringup2 dsr_bringup2_rviz.launch.py \
+  mode:=real host:=<controller-ip> port:=12345 model:=m0609 name:=dsr01
+# RealSense 카메라만 (bringup_all 과 동일한 검증된 프로파일)
+ros2 launch realsense2_camera rs_align_depth_launch.py \
+  depth_module.depth_profile:=848x480x30 rgb_camera.color_profile:=1280x720x30 \
+  align_depth.enable:=true enable_rgbd:=true pointcloud.enable:=true initial_reset:=true
+```
