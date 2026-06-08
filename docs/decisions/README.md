@@ -591,3 +591,27 @@
 
 **Reopen 조건**:
 - yolo·voice 가 중앙 오케스트레이터 없이 event-driven 자율 동작해야 할 요구가 생기면 → topic/action 기반 재설계 재검토.
+
+---
+
+### ADR-018: containers/ 를 main(배포 소스) 추적에 포함 — Phase 4 컨테이너는 배포 산출물 (2026-06-08)
+
+**Date**: 2026-06-08
+
+**Context**:
+- 2026-05-30 결정으로 main(설치 스크립트 전용 브랜치)에서 `.claude/`·`tasks/`·`docs/`·`containers/`·`CLAUDE.md` 를 추적 제외했다. 당시 근거는 "main = 설치 스크립트 전용, 개발 산출물은 개발 브랜치에서만 추적". 특히 `containers/` 는 그 시점에 아직 작성 중(WIP)이었고 `install.sh` 가 컨테이너를 빌드하지 않아 main 에선 호출되지 않는 dead 파일이었다.
+- 그러나 그 하루 전(2026-05-29) private 원격 허용 결정은 "타 머신 설치 검증 전제로 cobot2_ws/ 와 컨테이너 템플릿을 추적 대상에 포함"이라고 명시했었다. 즉 컨테이너 추적은 하루 만에 별도 결정기록 없이 번복됐고, 근거가 커밋 메시지 한 줄로만 남아 추적성이 약했다.
+- 구조적 모순: yolo/voice 컨테이너는 Phase 4 설계상 **배포 대상의 일부**(host 가 카메라 publish → yolo 가 3D position service, voice 가 keyword service)다. main 이 `containers/` 를 추적하지 않으면 fleet 머신이 main 을 clone 해도 컨테이너를 빌드할 소스가 없어, main 을 "타 머신 설치 검증 소스"로 두려는 목적과 충돌한다.
+
+**Decision**:
+- **`containers/` 를 main 추적에 포함**(2026-05-30 제외 결정 중 컨테이너 부분만 번복). main 의 `.gitignore` 에서 `containers/` 라인 제거. main = host 설치 스크립트 + 컨테이너 빌드 정의를 함께 담는 단일 배포 소스로 재정의.
+- `.claude/`·`tasks/`·`docs/`·`CLAUDE.md` 는 **계속 추적 제외**(배포 산출물이 아닌 개발 도구·내부 문서·AI 작업 지침). 이 부분 정책은 불변 — 결정 로그(docs/decisions)·CLAUDE.md 는 개발 브랜치에서만 추적한다.
+- 본 ADR 이전, 개발 브랜치의 컨테이너 작업 중 설치 스크립트에 해당하는 변경(`install.sh`·`resources/`·`a01~a04`·`cobot2_ws/` 소스)은 이미 main 에 통합(설치 안내 README 신규 포함). 본 결정은 거기에 컨테이너 빌드 정의를 더한다.
+
+**Consequences**:
+- main 단독 clone 으로 host 설치 + 컨테이너 빌드 정의를 모두 확보. fleet 타 머신이 컨테이너 소스를 함께 받는다.
+- **후속 필요**: `install.sh` 에 컨테이너 빌드 단계가 아직 연결돼 있지 않다 — 현재 main 의 `containers/` 는 추적되지만 설치 흐름이 호출하지 않는 상태. fleet 머신이 설치 시 컨테이너까지 빌드하려면 `install.sh` 에 빌드 step(`containers/build-all.sh` 호출) 추가 + 진행률 분모(`STEPS_TOTAL`) 갱신이 필요하다. 그 전까지는 수동 `bash containers/build-all.sh`.
+- 결정 로그(본 파일)·CLAUDE.md 는 여전히 개발 브랜치 전용이라 본 ADR 도 main 에는 나타나지 않는다 — main 단독 독자는 설치 흐름을 README 로만 파악한다.
+
+**Reopen 조건**:
+- 컨테이너 배포를 레지스트리(GHCR 등) pull 방식으로 전환하면 → 빌드 정의 소스 추적 대신 이미지 태그 핀 고정으로 재검토.
