@@ -503,3 +503,38 @@
 - 두 variant 를 단일 브랜치로 통합 요구 / host venv 유지비용 과다 시.
 - openwakeword 가 ai-edge-litert 를 정식 의존으로 채택한 릴리스가 나오면 shim 제거 검토.
 - pymodbus 3.x minor API(`slave`→`device_id`)가 더 바뀌면 onrobot.py 재점검.
+
+---
+
+### ADR-016: RMW 표준 = CycloneDDS + 대용량 토픽 커널/소켓 버퍼 + 유선 NIC whitelist 자동화 (2026-06-05)
+
+**Date**: 2026-06-05 (application-shell 반영 2026-06-08)
+
+> 컨테이너 variant(`feat/application-containers`)와 동일 결정의 host-only(application-shell) 적응본.
+> 이 브랜치는 컨테이너가 없어 모든 노드(로봇/카메라/application)가 host 에서 실행되므로,
+> compose `network_mode: host` 상속 항목은 해당 없음. RMW 단일화·버퍼·NIC 자동화는 동일.
+
+**Context**:
+- RealSense raw 토픽(color 1프레임 ≈ 2.6MB, depth/pointcloud)을 안정적으로 수신·측정하려는 과정에서 RMW/버퍼 함정 3종이 드러났다.
+  1. fastrtps + `ros2 topic hz`(rclpy 단일 스레드)는 대용량 메시지 역직렬화가 publish 를 못 따라가 실제 30fps 여도 15Hz 안팎으로 출렁(측정 artifact). 같은 콜백의 작은 토픽(`camera_info`)은 29.98Hz 안정 → 카메라/노드는 정상.
+  2. CycloneDDS 로 바꾸면 UDP fragment 재조립 버퍼(`net.core.rmem_max` 기본 ~208KB)가 한 프레임보다 작아 대용량 토픽이 전량 유실(0Hz).
+  3. CycloneDDS `SocketSendBufferSize` 는 하드 최소값이라 커널 `wmem_max` 가 요청치(64MB)보다 작으면 도메인 생성을 거부하고 노드가 SIGABRT.
+- 커널 sysctl 버퍼 + CycloneDDS XML 버퍼를 함께 올리고, DDS 가 wifi 대신 유선 NIC 만 쓰게 인터페이스를 화이트리스트하니 raw 토픽이 30Hz(camera_info 와 일치)로 복원됐다(실측 검증).
+- 그러나 이 해결책이 전부 일회성 수동 작업이라 (1) 타 머신/재설치 재현 불가, (2) NIC 이름이 머신·포트마다 달라 XML 하드코딩이 깨짐.
+- 추가로, config.sh 가 기본 RMW 를 cyclonedds 로 고정하지만 ROS desktop 은 fastrtps 만 깔아, cyclonedds rmw 패키지가 없으면 colcon 빌드가 `dsr_msgs2` 의 기본 RMW 를 해석하다 CMake configure 단계에서 실패한다.
+
+**Decision**:
+- **RMW 표준 = `rmw_cyclonedds_cpp`**. `resources/config.sh` 기본값을 cyclonedds 로 설정(이 브랜치는 종전 RMW 핀이 없었음 → 본 결정이 최초 RMW 표준). `CYCLONEDDS_XML`/`CYCLONEDDS_URI`/`DDS_NETIF`/`ROS_DOMAIN_ID`(단일 소스, 기본 42)를 config.sh 에 추가.
+- **rmw 패키지 설치를 colcon 빌드 선행 조건으로**: `resources/colcon-build.sh` 가 빌드 직전 `ros-${ROS_DISTRO}-rmw-cyclonedds-cpp` 를 dpkg 가드(멱등)로 apt 설치. host venv 활성화 전에 둠(apt/dpkg 시스템 설치라 venv 와 무관).
+- **커널 버퍼 영속**: `resources/sysctl-cyclonedds.conf` → `/etc/sysctl.d/60-cyclonedds.conf`. rmem/wmem max·default, ipfrag_time/high/low_thresh, netdev_max_backlog. sysctl 과 XML 은 **세트로 배포**(XML 만 있으면 wmem 부족으로 노드 사망).
+- **유선 NIC whitelist 자동화**: `resources/cyclonedds.xml.in` 템플릿 + `resources/dds-tuning.sh` 가 설치 머신의 물리 유선 NIC 를 carrier 무관하게 전부 탐지(무선/docker/가상 제외)해 `<NetworkInterface presence_required="false"/>` 로 렌더. 로봇 미연결 설치·로봇 포트 변경 모두 견고하고, 목록에 wifi 가 없어 무선 fallback 이 원천 차단된다. `DDS_NETIF` 로 override 가능.
+- **설치 통합**: `install.sh` 마지막 step(`dds_tuning`)로 추가, `STEPS_TOTAL`/`TOTAL_STEPS` 13→14. 단독 실행(`bash resources/dds-tuning.sh`)도 지원(하드웨어 변경 시 재생성).
+
+**Consequences**:
+- host 의 모든 노드가 단일 cyclonedds 환경으로 통일, 대용량 토픽 30Hz 결정적 재현.
+- 렌더된 `cyclonedds.xml` + `/etc/sysctl.d/60-cyclonedds.conf` 는 머신 종속 산출물 → 레포 추적 안 함(템플릿·스크립트만 추적). fleet 타 머신은 같은 installer 가 그 머신 NIC 를 자동 주입.
+- 런타임 전제 추가: 로봇/카메라가 연결된 유선 포트가 up 이어야 cyclonedds 노드가 기동(presence_required=false 지만 전 포트 down 이면 사용가능 인터페이스 0 → 실패, 의도된 동작).
+- COMPATIBILITY 매트릭스에 cyclonedds 행 추가.
+
+**Reopen 조건**:
+- 멀티캐스트 차단망/특수 토폴로지에서 enp* 자동탐지가 부적합하면 → `DDS_NETIF` 명시 또는 subnet 기반 선택으로 재설계.

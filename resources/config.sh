@@ -86,17 +86,43 @@ export DEBIAN_FRONTEND=noninteractive
 # --- apt keyring (모든 외부 repo 키링을 한 경로로 통일) ----
 : "${KEYRING_DIR:=/etc/apt/keyrings}"
 
+# --- ROS2 DDS / RMW (host 노드끼리 동일해야 discovery 성립) -----------
+# 로봇 드라이버·카메라·application(yolo/voice) 노드가 같은 topic/service 를 보려면 RMW 가
+# 일치해야 한다 (Fast-DDS ↔ CycloneDDS 혼합 시 같은 topic 도 안 보임). CycloneDDS 로 표준 핀해
+# 오염된 셸에서도 결정적. activate.sh 가 이 값을 host 환경에 싣는다. override 시엔 모든 노드
+# 기동 전 동일 값 export 할 것.
+#
+# CycloneDDS 채택 이유: RealSense raw 같은 대용량 토픽(color 1프레임 ≈ 2.6MB)을
+# 안정 수신하려면 OS 소켓 버퍼와 DDS 요청 버퍼를 함께 키워야 하는데, CycloneDDS 는
+# XML(CYCLONEDDS_URI)로 버퍼/인터페이스를 명시 제어할 수 있어 결정적 튜닝이 가능하다.
+# 커널 버퍼(sysctl)와 XML 버퍼는 세트 — dds-tuning.sh 가 둘 다 설치한다.
+export RMW_IMPLEMENTATION="${RMW_IMPLEMENTATION:-rmw_cyclonedds_cpp}"
+
+# CycloneDDS 설정 XML 경로 + URI. dds-tuning.sh 가 설치 머신의 유선 NIC 를 탐지해
+# 이 경로에 렌더한다(머신 종속 산출물이라 레포 추적 안 함). 비-CycloneDDS RMW 에선
+# 무시되므로 항상 export 해도 무해.
+: "${CYCLONEDDS_XML:=${STATE_DIR}/cyclonedds.xml}"
+export CYCLONEDDS_URI="${CYCLONEDDS_URI:-file://${CYCLONEDDS_XML}}"
+
+# DDS 가 사용할 NIC override (콤마구분 허용). 비우면 dds-tuning.sh 가 물리 유선 NIC 를
+# 전부 자동 탐지(무선/docker/가상 제외). CI / 특수망에서만 명시 지정.
+: "${DDS_NETIF:=}"
+
+# ROS_DOMAIN_ID 단일 진실 소스. host 의 모든 노드가 같은 값을 봐야 discovery 성립.
+# 미설정 셸에서도 결정적이도록 명시 핀.
+export ROS_DOMAIN_ID="${ROS_DOMAIN_ID:-42}"
+
 # --- Progress 표시 ([n/total] 시각화) ---------------------
-# 통합 진입점 install.sh 의 전체 단계 수 (a01:6 + a02:5 + a03:1 + a04:1).
-# a02 에 host-python-deps(host venv 설치) 단계가 추가되어 12 → 13 (application-shell variant).
-# run-step.sh 의 STEPS_TOTAL fallback 으로도 쓰인다. 단계 추가 시 함께 갱신.
-: "${TOTAL_STEPS:=13}"
+# 통합 진입점 install.sh 의 전체 단계 수 (a01:6 + a02:5 + a03:1 + a04:1 + dds-tuning:1).
+# a02 에 host-python-deps(host venv 설치) 단계가 추가되어 12 → 13, DDS 튜닝으로 13 → 14
+# (application-shell variant). run-step.sh 의 STEPS_TOTAL fallback 으로도 쓰인다. 단계 추가 시 함께 갱신.
+: "${TOTAL_STEPS:=14}"
 
 # --- Self-check ----------------------------------------------------------
 # 자식 스크립트가 진입 직후 호출하면 필수 변수 누락 즉시 catch.
 config_assert_set() {
     local var missing=0
-    for var in ROS_DISTRO UBUNTU_CODENAME STATE_FILE KEYRING_DIR KERNEL_META KERNEL_HEADERS_META DSR_WORKSPACE; do
+    for var in ROS_DISTRO UBUNTU_CODENAME STATE_FILE KEYRING_DIR KERNEL_META KERNEL_HEADERS_META DSR_WORKSPACE RMW_IMPLEMENTATION CYCLONEDDS_XML; do
         if [[ -z "${!var:-}" ]]; then
             echo "config: required variable '$var' is empty" >&2
             missing=1

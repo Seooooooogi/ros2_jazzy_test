@@ -79,3 +79,31 @@
 **원인**: noble apt / 최신 pip 의 pymodbus 는 3.x 라 `pymodbus.client.sync` 모듈이 없고(→`pymodbus.client`), 메서드 인자가 `unit=`→`slave=` 로 바뀌었다. 3.x 는 통신 실패 시 예외 대신 에러 응답 객체를 반환해 `result.registers[0]` 직접 접근이 AttributeError 가 된다.
 
 **복구 / 예방**: onrobot.py 3개를 3.x API 로 이관 완료(`from pymodbus.client import ...`, `slave=`, read·write 후 `isError()` 가드 — write 실패 silent 진행 차단). ⚠️ **안전**: register write 의미는 import smoke 로 검증 안 됨 — 실 RG gripper 에서 open/close/move 하드웨어 재검증 없이 실로봇 운용 금지. 설치되는 3.x minor 에 따라 `slave=`→`device_id=` 일 수 있어 실기에서 인자명 확인. 상세 = ADR-014.
+
+## CycloneDDS 로 RealSense raw 토픽이 0Hz / `SocketSendBufferSize` 지정 후 노드가 SIGABRT 로 죽음
+
+**증상**: `RMW_IMPLEMENTATION=rmw_cyclonedds_cpp` 로 바꾸자 (1) `color/image_raw` 등 대용량 토픽이 `ros2 topic hz` 에서 0Hz, 또는 (2) `CYCLONEDDS_URI` 의 `SocketSendBufferSize` 를 키운 뒤 노드 기동이 `failed to increase socket send buffer size to at least N bytes` → `rmw_create_node: failed to create domain` → `failed to initialize rcl node` 로 즉사(exit -6). 같은 fastrtps 환경에선 멀쩡했다.
+
+**원인**: 대용량 프레임(color 1280x720 RGB8 ≈ 2.6MB)은 UDP fragment 로 쪼개져 전송된다. CycloneDDS 가 소켓 수신 버퍼(`SocketReceiveBufferSize`)·송신 버퍼(`SocketSendBufferSize`)를 요청해도 **실효치는 커널 `net.core.rmem_max` / `net.core.wmem_max` 에 캡**된다. 둘의 기본값은 ~208KB 라 한 프레임보다 작아 fragment 재조립이 실패 → 수신측은 전량 유실(0Hz). 게다가 `SocketSendBufferSize` 는 **하드 최소값**이라 커널 `wmem_max` 가 요청치를 못 주면 CycloneDDS 가 도메인 생성을 거부하고 노드가 죽는다(`SocketReceiveBufferSize` 도 같은 캡을 받지만 `rmem_max` 만 올려두면 통과해 증상이 송신쪽에서만 즉사로 드러날 수 있다).
+
+**복구 / 예방**:
+- 커널 소켓 버퍼를 먼저 올리고 영속화(재부팅 유지). DDS XML 의 버퍼 요청은 이 한도 안에서만 성립하므로 **sysctl 과 XML 은 세트** — XML 만 다른 머신에 복사하면 `wmem_max` 부족으로 노드가 죽는다. 본 installer 는 `resources/dds-tuning.sh`(install.sh 마지막 step)가 둘 다 자동 설치한다.
+  ```bash
+  # /etc/sysctl.d/60-cyclonedds.conf (root). 적용: sudo sysctl --system
+  net.core.rmem_max = 2147483647
+  net.core.wmem_max = 2147483647
+  net.core.rmem_default = 268435456
+  net.core.wmem_default = 67108864
+  net.ipv4.ipfrag_time = 3
+  net.ipv4.ipfrag_high_thresh = 134217728
+  net.ipv4.ipfrag_low_thresh = 98304000
+  net.core.netdev_max_backlog = 30000
+  ```
+- DDS 버퍼 요청은 `CYCLONEDDS_URI` 가 가리키는 XML 의 `Domain/Internal` 에:
+  ```xml
+  <SocketReceiveBufferSize min="64MB"/>
+  <SocketSendBufferSize min="64MB"/>
+  ```
+- 노드·측정 셸 **모두** 같은 RMW + 같은 `CYCLONEDDS_URI` 를 export 해야 한다(쉘별 환경변수라 한 터미널의 export 가 다른 터미널로 전파 안 됨). 한쪽만 cyclonedds 면 topic 자체가 discovery 안 됨. `resources/dds-tuning.sh` 가 `~/.bashrc` 에 멱등 주입하므로 새 터미널은 자동 적용.
+- 검증: 노드 기동 로그에 `failed to increase socket ... buffer` 경고가 없어야 하고, 대용량 토픽 hz 는 작은 동반 토픽(`camera_info`)과 일치해야 한다(예: `color/image_raw` 30Hz ↔ `color/camera_info` 30Hz). `ros2 topic hz` 가 SIGTERM 으로 죽으면 파이프 버퍼가 유실되니 `stdbuf -oL ... | grep -m4 'average rate'` 로 받는다.
+- 주의: 대용량 토픽의 낮은 hz 가 항상 버퍼 문제는 아니다 — fastrtps + `ros2 topic hz`(rclpy 단일 스레드) 조합은 역직렬화가 publish 를 못 따라가 실제 30fps 여도 15Hz 안팎으로 출렁인다(측정 artifact). 작은 동반 토픽 hz 로 실제 프레임레이트를 교차검증할 것.
