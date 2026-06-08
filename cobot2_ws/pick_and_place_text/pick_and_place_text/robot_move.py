@@ -11,7 +11,9 @@ from od_msg.srv import SrvDepthPosition
 from ament_index_python.packages import get_package_share_directory
 from pick_and_place_text.onrobot import RG
 
-PACKAGE_NAME = "pick_and_place_voice"
+# 보정행렬(T_gripper2camera.npy)은 자기 패키지 share 에서 로드한다. (이전엔 pick_and_place_voice
+# 를 가리켜, voice 패키지를 빌드해야만 동작하는 숨은 결합이 있었다.)
+PACKAGE_NAME = "pick_and_place_text"
 PACKAGE_PATH = get_package_share_directory(PACKAGE_NAME)
 
 tool_dict = {1: "drill", 2: "hammer", 3: "pliers", 4: "screwdriver", 5: "wrench"}
@@ -116,7 +118,7 @@ class RobotController(Node):
                 td_coord = self.transform_to_base(result, gripper2cam_path, robot_posx)
 
                 if td_coord[2] and sum(td_coord) != 0:
-                    td_coord[2] += -5  # DEPTH_OFFSET
+                    td_coord[2] += -25  # DEPTH_OFFSET (그리퍼가 약 2cm 위에서 멈춰 더 내림)
                     td_coord[2] = max(td_coord[2], 2)  # MIN_DEPTH: float = 2.0
 
                 target_pos = list(td_coord[:3]) + robot_posx[3:]
