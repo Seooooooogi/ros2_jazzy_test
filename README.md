@@ -92,56 +92,31 @@ DSR_WORKSPACE=~/Desktop/cobot2_ws bash a02-robot-camera.sh
 # 이후 재빌드도 같은 경로에서: cd ~/Desktop/cobot2_ws && colcon build
 ```
 
-## 설치 후 실행 — 로봇 · 카메라 bringup
-
-- 통합 launch `cobot2_ws/launch/bringup_all.launch.py` — 로봇 드라이버(`dsr_bringup2`) + RealSense(`realsense2_camera`) 한 번에 기동
-- ament 패키지 밖 standalone → **레포 경로로 직접** `ros2 launch`
+## 설치 후 실행 — 로봇 · 카메라 (개별 실행)
 
 환경 source (새 터미널마다):
 
 ```bash
-REPO=~/ros2_jazzy_test            # 레포 클론 위치에 맞게
 source /opt/ros/jazzy/setup.bash
 source ~/cobot2_ws/install/setup.bash   # overlay (dsr_bringup2 / robot_control 제공)
-source "$REPO/resources/config.sh"      # RMW(CycloneDDS) / domain 등
+set -a; source ~/ros2_jazzy_test/resources/config.sh; set +a   # RMW(CycloneDDS) / domain
 ```
 
-가상(에뮬레이터) 로봇 + 카메라:
+로봇 드라이버 (실로봇 — 컨트롤러 IP 지정):
 
 ```bash
-ros2 launch "$REPO/cobot2_ws/launch/bringup_all.launch.py" \
-  mode:=virtual camera:=true containers:=false
-```
-
-실로봇 + 카메라 (컨트롤러 IP 지정):
-
-```bash
-ros2 launch "$REPO/cobot2_ws/launch/bringup_all.launch.py" \
-  mode:=real host:=<controller-ip> camera:=true containers:=false
-```
-
-주요 인자:
-
-| 인자 | 기본 | 의미 |
-|------|------|------|
-| `mode` | `virtual` | `virtual`=에뮬레이터 / `real`=실 컨트롤러 연결 |
-| `host` | `127.0.0.1` | `mode:=real` 일 때 DSR 컨트롤러 IP |
-| `port` | `12345` | DSR 컨트롤러 포트(DRFL) |
-| `camera` | `true` | host RealSense 기동 여부 |
-| `containers` | `true` | yolo/voice 컨테이너 `docker compose up -d` 여부 |
-| `start_robot_control` | `false` | **DANGER**: `true`+`mode:=real` 이면 약 8초 뒤 실기가 물리 이동(movej) |
-
-- **`containers:=true` 는 yolo/voice 이미지 빌드 선행 필요.** 이 브랜치(설치 전용)는 컨테이너 미빌드 → `containers:=false` 로 실행
-- `start_robot_control:=true` — 실기 실제 물리 이동. 비상정지 대기 상태에서만 사용
-
-개별 실행(드라이버/카메라만 따로):
-
-```bash
-# 로봇 드라이버만
 ros2 launch dsr_bringup2 dsr_bringup2_rviz.launch.py \
   mode:=real host:=<controller-ip> port:=12345 model:=m0609 name:=dsr01
-# RealSense 카메라만 (bringup_all 과 동일한 검증된 프로파일)
+```
+
+- 에뮬레이터로 띄우려면 `mode:=virtual` (컨트롤러 연결 없이)
+
+RealSense 카메라 (검증된 프로파일):
+
+```bash
 ros2 launch realsense2_camera rs_align_depth_launch.py \
   depth_module.depth_profile:=848x480x30 rgb_camera.color_profile:=1280x720x30 \
   align_depth.enable:=true enable_rgbd:=true pointcloud.enable:=true initial_reset:=true
 ```
+
+- `align_depth.enable:=true` 필수 — 없으면 `aligned_depth_to_color` 미publish
