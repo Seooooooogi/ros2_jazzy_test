@@ -13,7 +13,7 @@
 
 ```bash
 # 1) 저장소 클론 후 디렉토리 진입
-git clone <repo-url> ros2_jazzy_test
+git clone https://github.com/Seooooooogi/ros2_jazzy_test.git ros2_jazzy_test
 cd ros2_jazzy_test
 
 # 2) 전체 설치 시작 (a01 단계에서 시스템 준비 후 reboot 필요 가능)
