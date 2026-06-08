@@ -8,7 +8,7 @@ from rclpy.node import Node
 from ament_index_python.packages import get_package_share_directory
 from dotenv import load_dotenv
 from langchain_openai import ChatOpenAI
-from langchain.prompts import PromptTemplate  # d2 이거를 langchain_core로 바꿈
+from langchain_core.prompts import PromptTemplate  # langchain 0.3+ 에서 langchain.prompts 제거됨
 # from langchain.chains import LLMChain
 
 from std_srvs.srv import Trigger

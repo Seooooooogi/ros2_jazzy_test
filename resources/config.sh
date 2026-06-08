@@ -31,16 +31,35 @@ export DEBIAN_FRONTEND=noninteractive
 : "${DSR_EMULATOR_VERSION:=3.0.1}"
 : "${DSR_WORKSPACE:=${HOME}/cobot2_ws}"
 
-# --- NVIDIA / CUDA -------------------------------------------------------
-# 빈 문자열 = nvidia-driver-install.sh 가 `ubuntu-drivers install` 로 noble 권장
-# 드라이버를 자동 선택 (RTX 4060 에서 ≈580) 후 apt-mark hold. 사용자 결정 2026-05-28.
-# 숫자 (예: 580) 를 명시하면 그 버전을 force-pin 설치 (override, CI/특수 GPU 용).
-# 하드핀을 기본값으로 두지 않는 이유: 추후 결정할 CUDA 메이저가 요구하는 최소
-# 드라이버를 자동으로 만족시키기 위함.
-: "${NVIDIA_DRIVER_VERSION:=}"
-# 추후 결정 (Noble repo 에 12-4 부재, 12-6/12-8/13-x 가용).
-# 빈 문자열 = 미결정. 자식 스크립트가 사용 시 비어 있으면 에러.
-: "${CUDA_VERSION:=}"
+# --- Kernel track (HWE) --------------------------------------------------
+# HWE 커널 메타를 명시 설치해 커널 이미지 + 헤더 + modules-extra 를 항상 함께 보장한다.
+# 이 메타가 빠지면 다른 패키지(예: nvidia 모듈)가 커널 이미지만 끌어와 modules-extra
+# (wifi / 일부 USB 입력 드라이버 수록) 가 누락 → 부팅은 되나 wifi·USB 키보드가 사라지는
+# 반쪽 커널이 된다. nvidia / librealsense2-dkms 모두 이 헤더 메타로 커널 업데이트를 추적.
+# 주의: nvidia-driver-install.sh 의 커널-모듈 메타 계산이 KERNEL_META 의 'linux-' 접두사
+# 제거에 의존한다 (linux-generic-hwe-24.04 → generic-hwe-24.04). 접두사 형식을 바꾸면
+# 그쪽 module_meta 명명도 함께 점검할 것.
+: "${KERNEL_META:=linux-generic-hwe-24.04}"
+: "${KERNEL_HEADERS_META:=linux-headers-generic-hwe-24.04}"
+
+# --- NVIDIA driver -------------------------------------------------------
+# 드라이버를 버전 + 변형으로 명시 핀 고정한다. 과거 `ubuntu-drivers install` 자동선택은
+# 머신/시점마다 다른 드라이버를 골랐고, 그 드라이버가 modules-extra 없는 반쪽 HWE 커널을
+# 의존성으로 끌어와 재부팅 시 검은 화면(wifi/USB 입력 소실)으로 이어졌다. 작업 머신의
+# 검증된 known-good 구성을 결정적으로 재현하기 위해 핀.
+#   설치 패키지 = nvidia-driver-${NVIDIA_DRIVER_VERSION}${NVIDIA_DRIVER_FLAVOR}
+#   FLAVOR = "" (closed, 기본) 또는 "-open" (오픈 커널 모듈).
+#   closed 를 기본으로: Optimus(하이브리드) 노트북에서 -open + KMS 가 내장 패널 디스플레이를
+#   못 올려 검은 화면(gdm 세션 실패)이 나는 사례가 있어, 디스플레이가 더 안정적인 closed 로 핀.
+#   VERSION 을 빈값으로 두면 nvidia-driver-install.sh 가 ubuntu-drivers 자동선택으로
+#   폴백한다 (override 용 — 비결정성 감수).
+: "${NVIDIA_DRIVER_VERSION:=595}"
+: "${NVIDIA_DRIVER_FLAVOR:=}"
+# CUDA 메이저 = 12.8 (PyTorch cu128). host 에는 설치하지 않는다 (host 콜콘 패키지에
+# CUDA 소비자 없음) — 이 값을 읽는 유일한 소비자는 Phase 4 yolo 컨테이너 Dockerfile 의
+# build-arg 다. pip index 는 cu${CUDA_VERSION//./} 로 cu128 을 구성.
+# Noble apt repo 에 12-4 부재 + PyTorch wheel 가용성 (cu118/cu126/cu128) 으로 12.8 선택.
+: "${CUDA_VERSION:=12.8}"
 
 # --- Docker --------------------------------------------------------------
 # 빈 문자열 = docker-install.sh 가 noble 용 latest stable 설치 후 apt-mark hold.
@@ -62,16 +81,42 @@ export DEBIAN_FRONTEND=noninteractive
 # --- apt keyring (모든 외부 repo 키링을 한 경로로 통일) ----
 : "${KEYRING_DIR:=/etc/apt/keyrings}"
 
+# --- ROS2 DDS / RMW (host ↔ 컨테이너 동일해야 discovery 성립) -----------
+# host 노드와 yolo/voice 컨테이너가 같은 topic/service 를 보려면 RMW 가 일치해야 한다
+# (Fast-DDS ↔ CycloneDDS 혼합 시 같은 topic 도 안 보임). CycloneDDS 로 표준 핀해
+# 오염된 셸에서도 결정적. activate.sh 가 이 값을 host 환경에 싣고, docker-compose 의
+# 두 서비스도 같은 기본값을 참조 → 양쪽 일치. override 시엔 compose 실행 전 동일 값 export 할 것.
+#
+# CycloneDDS 채택 이유: RealSense raw 같은 대용량 토픽(color 1프레임 ≈ 2.6MB)을
+# 안정 수신하려면 OS 소켓 버퍼와 DDS 요청 버퍼를 함께 키워야 하는데, CycloneDDS 는
+# XML(CYCLONEDDS_URI)로 버퍼/인터페이스를 명시 제어할 수 있어 결정적 튜닝이 가능하다.
+# 커널 버퍼(sysctl)와 XML 버퍼는 세트 — dds-tuning.sh 가 둘 다 설치한다.
+export RMW_IMPLEMENTATION="${RMW_IMPLEMENTATION:-rmw_cyclonedds_cpp}"
+
+# CycloneDDS 설정 XML 경로 + URI. dds-tuning.sh 가 설치 머신의 유선 NIC 를 탐지해
+# 이 경로에 렌더한다(머신 종속 산출물이라 레포 추적 안 함). 비-CycloneDDS RMW 에선
+# 무시되므로 항상 export 해도 무해. 컨테이너는 compose 가 이 파일을 mount 한다.
+: "${CYCLONEDDS_XML:=${STATE_DIR}/cyclonedds.xml}"
+export CYCLONEDDS_URI="${CYCLONEDDS_URI:-file://${CYCLONEDDS_XML}}"
+
+# DDS 가 사용할 NIC override (콤마구분 허용). 비우면 dds-tuning.sh 가 물리 유선 NIC 를
+# 전부 자동 탐지(무선/docker/가상 제외). CI / 특수망에서만 명시 지정.
+: "${DDS_NETIF:=}"
+
+# ROS_DOMAIN_ID 단일 진실 소스. host(activate.sh)와 compose 두 서비스가 같은 값을
+# 봐야 discovery 성립. 미설정 셸에서도 결정적이도록 명시 핀.
+export ROS_DOMAIN_ID="${ROS_DOMAIN_ID:-42}"
+
 # --- Progress 표시 ([n/total] 시각화) ---------------------
-# 통합 진입점 install.sh 의 전체 단계 수 (a01:5 + a02:4 + a03:1 + a04:1).
+# 통합 진입점 install.sh 의 전체 단계 수 (a01:6 + a02:4 + a03:1 + a04:1 + dds-tuning:1).
 # run-step.sh 의 STEPS_TOTAL fallback 으로도 쓰인다. 단계 추가 시 함께 갱신.
-: "${TOTAL_STEPS:=11}"
+: "${TOTAL_STEPS:=13}"
 
 # --- Self-check ----------------------------------------------------------
 # 자식 스크립트가 진입 직후 호출하면 필수 변수 누락 즉시 catch.
 config_assert_set() {
     local var missing=0
-    for var in ROS_DISTRO UBUNTU_CODENAME STATE_FILE KEYRING_DIR; do
+    for var in ROS_DISTRO UBUNTU_CODENAME STATE_FILE KEYRING_DIR KERNEL_META KERNEL_HEADERS_META DSR_WORKSPACE RMW_IMPLEMENTATION CYCLONEDDS_XML; do
         if [[ -z "${!var:-}" ]]; then
             echo "config: required variable '$var' is empty" >&2
             missing=1
