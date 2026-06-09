@@ -70,10 +70,21 @@ services:
       - ROS_DOMAIN_ID=${ROS_DOMAIN_ID:-42}
       - RMW_IMPLEMENTATION=${RMW_IMPLEMENTATION:-rmw_cyclonedds_cpp}
       - CYCLONEDDS_URI=file:///cyclonedds.xml
+      # 음성 파이프라인은 print() 로 wakeword confidence/STT 결과를 stdout 에 찍는다.
+      # 컨테이너 stdout 은 block-buffered 라 미설정 시 docker logs 에 실시간 안 뜬다.
+      - PYTHONUNBUFFERED=1
     volumes:
       - ${CYCLONEDDS_XML:-${HOME}/.ros2_jazzy_test/cyclonedds.xml}:/cyclonedds.xml:ro
-    # --- 후속(통합) 단계에서 활성화 ---
-    #   - ${XDG_RUNTIME_DIR}/pulse:${XDG_RUNTIME_DIR}/pulse:ro   # PipeWire/PulseAudio socket
+      # ALSA 기본 캡처를 실제 마이크(DMIC)로 고정. 컨테이너 raw 기본값은 마이크 미연결 아날로그
+      # 입력이라 무음만 잡힌다. wakeword/STT 둘 다 sounddevice 기본 장치를 쓰므로 이 매핑이 필요.
+      - ./voice-processing/asound.conf:/etc/asound.conf:ro
+    # host net 은 네트워크 namespace 만 공유 → 오디오 디바이스는 별도 패스스루 필요.
+    # /dev/snd 직결(ALSA) — libportaudio2 의 ALSA 백엔드로 PyAudio(wakeword)+sounddevice(STT) 둘 다 동작.
+    # PipeWire/Pulse 소켓 경유보다 이미지 추가 의존 0(libpulse 불요).
+    devices:
+      - /dev/snd:/dev/snd
+    group_add:
+      - audio                  # /dev/snd 가 root:audio 0660 → audio 그룹 권한 필요
 
   dsr-emulator:                 # 실기 우선 — 개발/테스트 시에만 명시적 활성화
     image: doosanrobot/dsr_emulator:3.0.1
