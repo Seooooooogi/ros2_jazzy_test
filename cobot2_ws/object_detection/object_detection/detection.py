@@ -59,14 +59,26 @@ class ObjectDetectionNode(Node):
 
         return self._pixel_to_camera_coords(cx, cy, cz)
 
-    def _get_depth(self, x, y):
-        """픽셀 좌표의 depth 값을 안전하게 읽어옵니다."""
+    def _get_depth(self, x, y, win=5):
+        """픽셀 좌표의 depth 값을 안전하게 읽어옵니다.
+
+        중심 단일 픽셀은 반사 표면(금속)·모서리에서 depth 드롭아웃(0)이 잦다. 그 한 점만
+        읽으면 객체가 보여도 0 이 나와 위치 계산이 실패한다. 중심 주변 (2*win+1) 윈도우의
+        유효(non-zero) depth 중앙값을 써서 단일 픽셀 dropout 에 강건하게 만든다.
+        """
         frame = self._wait_for_valid_data(self.img_node.get_depth_frame, "depth frame")
-        try:
-            return frame[y, x]
-        except IndexError:
+        h, w = frame.shape[:2]
+        if not (0 <= x < w and 0 <= y < h):
             self.get_logger().warn(f"Coordinates ({x},{y}) out of range.")
             return None
+        x0, x1 = max(0, x - win), min(w, x + win + 1)
+        y0, y1 = max(0, y - win), min(h, y + win + 1)
+        patch = frame[y0:y1, x0:x1]
+        valid = patch[patch > 0]
+        if valid.size == 0:
+            self.get_logger().warn(f"No valid depth around ({x},{y}).")
+            return None
+        return float(np.median(valid))
 
     def _wait_for_valid_data(self, getter, description):
         """getter 함수가 유효한 데이터를 반환할 때까지 spin 하며 재시도합니다."""
