@@ -28,7 +28,7 @@ source "${RESOURCE_DIR}/state.sh"
 source "${RESOURCE_DIR}/confirm.sh"
 config_assert_set
 
-# 단독 실행 시 스테이지-로컬 진행률 ([n/6]). 통합 실행(install.sh)은 자체 STEPS_TOTAL=12 사용.
+# 단독 실행 시 스테이지-로컬 진행률 ([n/6]). 통합 실행(install.sh)은 자체 STEPS_TOTAL=14 사용.
 STEPS_TOTAL=6
 # shellcheck source=resources/run-step.sh
 source "${RESOURCE_DIR}/run-step.sh"

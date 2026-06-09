@@ -6,8 +6,9 @@
 # 먼저 source 되어 있어야 한다. 직접 실행하지 않는다.
 #
 # 진행률 분모(total)는 호출자가 설정하는 STEPS_TOTAL 을 호출 시점에 읽는다.
-# install.sh 는 STEPS_TOTAL=12 (전체 통합), 각 a0N 오케스트레이터는 스테이지-로컬 값
-# (a01=6 / a02=4 / a03=1 / a04=1) 을 설정한다. 미설정 시 config.sh 의 TOTAL_STEPS 로 fallback.
+# install.sh 는 STEPS_TOTAL=14 (전체 통합: a01 5 + reboot 1 + a02 4 + a03 1 + a04 1 + dds 1
+# + container 1), 각 a0N 오케스트레이터는 스테이지-로컬 값 (a01=6 / a02=4 / a03=1 / a04=1) 을
+# 설정한다. 미설정 시 config.sh 의 TOTAL_STEPS 로 fallback.
 #
 # state 마킹/조회는 state.sh 가 전담하고, 본 파일은 skip 판정 + begin/end 호출만 묶는다.
 #
