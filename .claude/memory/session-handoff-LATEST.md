@@ -5,37 +5,35 @@
 > 두 머신 공유 — **[실측]** 머신(로봇/카메라 실기) + **[문서]** 머신(git/문서/lessons). 항목에 담당 표기.
 
 ## Last updated
-2026-06-09 — **[실측/문서]** ① voice 컨테이너 e2e(wakeword→STT→LLM→service `/get_keyword`→실로봇 pick&place + pos1/2/3 목적지 배치) 검증 완료. ② 통합 bringup 을 전용 `cobot2_bringup` 패키지로 분리(robot_control 제외, host IP 192.168.1.100 고정). ③ install.sh step14 를 빌드→**공개 구글 드라이브에서 이미지 tar 받아 docker load**(`fetch-images.sh`)로 전환 — voice fetch 실측 통과. 직전 2026-06-08: YOLO 컨테이너 e2e + 실로봇 pick.
+2026-06-09 — **[실측/문서]** ① voice 컨테이너 e2e(wakeword→STT→LLM→service `/get_keyword`→실로봇 pick&place + pos1/2/3 목적지 배치) 검증 완료. ② 통합 bringup 을 전용 `cobot2_bringup` 패키지로 분리(robot_control 제외, host IP 192.168.1.100 고정). ③ install.sh step14 를 빌드→**공개 구글 드라이브에서 이미지 tar 받아 docker load**(`fetch-images.sh`)로 전환 — voice fetch 실측 통과. ④ nvidia-container-toolkit 을 `docker-install.sh` 끝(nvidia-smi 가드)에 편입 — 클린설치가 GPU 런타임까지 자동. **클린설치 검증은 이 머신 아닌 다른 노트북(fleet)에서 진행 예정.** 직전 2026-06-08: YOLO 컨테이너 e2e + 실로봇 pick.
 
 ---
 
 ## Next Actions (priority order)
 
-1. **[실측] 전체 클린설치 검증** (예정) — `bash install.sh --reset` → `bash install.sh`. **step14 fetch 다운로드 경로를 실측하려면 클린설치 전 `docker rmi local/ros2-jazzy-yolo:dev local/ros2-jazzy-voice:dev`** (이미지 잔존 시 fetch 가 skip — Docker 이미지는 `--reset` 무관 잔존). yolo tar(4.4GB) 드라이브 다운로드는 **미실측**(voice 433MB 만 검증) → 클린설치가 첫 실측. a01(step1~6) NVIDIA+reboot destructive, step12 `.env` OPENAI_API_KEY interactive.
+1. **[실측] 전체 클린설치 검증 — 다른 노트북(fleet 머신)에서 진행** — 최신 origin `git clone` → `bash install.sh`. 새 머신엔 이미지가 없어 **step14 가 드라이브에서 실제 다운로드**(yolo 4.4GB 첫 실측 자연 발생 — `docker rmi` 불요). nvidia-container-toolkit 은 step3(docker-install.sh 끝, nvidia-smi 가드)에서 자동 설치. a01(step1~6) NVIDIA+reboot destructive, step12 `.env` OPENAI_API_KEY interactive. **점검: 드라이브 파일 2개가 "링크 있는 사람 보기" 공유여야 다른 네트워크/무계정에서 무인 curl 가능**(이 머신 fetch 성공은 동일 계정/네트워크 영향 배제 못 함).
 
-2. **[실측/문서] cobot2_bringup 클린설치 자동 빌드 검증** — `dsr-project-install.sh` HOST_PKGS 에 등록됨(cp -a 복사 경로). 이 머신은 검증용 **symlink**(`~/cobot2_ws/src/cobot2_bringup`→repo)라, 클린설치가 cp 로 재생성하는지 확인.
+2. **[실측/문서] cobot2_bringup 클린설치 자동 빌드 검증** — `dsr-project-install.sh` HOST_PKGS 에 등록됨(cp -a 복사 경로). 다른 노트북은 cp 경로 그대로 — clone → 빌드 시 `ros2 launch cobot2_bringup bringup_all.launch.py` resolve 확인. (이 머신은 검증용 symlink 라 무관.)
 
-3. **[문서] 설치 흐름에 nvidia-container-toolkit 편입** — `resources/nvidia-container-toolkit-install.sh`(멱등, host GPU 런타임) 를 `docker-install.sh` 끝에서 호출하도록 편입 + `docs/COMPATIBILITY.md`. toolkit 은 컨테이너 운영 머신만 필요 — main(host 전용)에도 넣을지 결정.
+3. **[문서] Dockerfile 레이어 재정렬** — `containers/yolo-detection/Dockerfile`: `COPY object_detection` 이 torch pip 레이어보다 앞 → 노드 코드만 고쳐도 torch 재다운로드. 무거운 pip 레이어를 소스 COPY 앞으로. **이미지 재빌드 시 드라이브 tar/SHA256 갱신 동반**(config.sh `*_IMAGE_SHA256` + 재업로드 — 안 하면 fetch 체크섬 불일치로 실패).
 
-4. **[문서] Dockerfile 레이어 재정렬** — `containers/yolo-detection/Dockerfile`: `COPY object_detection` 이 torch pip 레이어보다 앞 → 노드 코드만 고쳐도 torch 재다운로드. 무거운 pip 레이어를 소스 COPY 앞으로. (이미지 재빌드 시 드라이브 tar/SHA256 갱신 동반 — config.sh + 재업로드.)
+4. **[문서] pick_and_place_text spin 버그** — `pick_and_place_text/{detection.py,yolo.py}` 에 `rclpy.spin_once` 재진입 버그 잔존(object_detection 만 수정). 동일 패치 vs 레거시화 결정.
 
-5. **[문서] pick_and_place_text spin 버그** — `pick_and_place_text/{detection.py,yolo.py}` 에 `rclpy.spin_once` 재진입 버그 잔존(object_detection 만 수정). 동일 패치 vs 레거시화 결정.
+5. **[문서] 모델 가중치 중복** — `object_detection/resource/yolov8n_tools_0122.pt`(6.3MB) + `pick_and_place_text/resource/` 동일본. dedup vs pick_and_place_text 레거시화.
 
-6. **[문서] 모델 가중치 중복** — `object_detection/resource/yolov8n_tools_0122.pt`(6.3MB) + `pick_and_place_text/resource/` 동일본. dedup vs pick_and_place_text 레거시화.
+6. **[실측] fleet 기존(DONE) 머신 deps 전파** — toolkit 은 이제 install.sh 자동이나 **step3 가 이미 DONE 인 머신엔 미반영** → 수동 `bash resources/nvidia-container-toolkit-install.sh`. 동일 패턴: DSR 패치(`~/dsr_patch_command.txt`), python3-pymodbus. (새 노트북 처음부터 설치면 모두 자동.)
 
-7. **[실측] fleet 머신 deps 전파** — (a) DSR 패치(`~/dsr_patch_command.txt`), (b) **python3-pymodbus**, (c) nvidia-container-toolkit. 공통 원인: DONE step 에 나중에 추가된 패키지는 기존 머신에 미반영.
+7. **[문서] 미정리 git** — backup 브랜치 `backup/pre-github-sync-2026-05-29`(origin 미push), 태그 `v0.1.0`(미push).
 
-8. **[문서] 미정리 git** — backup 브랜치 `backup/pre-github-sync-2026-05-29`(origin 미push), 태그 `v0.1.0`(미push).
+8. **[문서] RealSense udev rule 명시화 패치**(보류) — `realsense-sdk-install.sh` 에 `librealsense2-udev-rules` 명시 + 검증 게이트.
 
-9. **[문서] RealSense udev rule 명시화 패치**(보류) — `realsense-sdk-install.sh` 에 `librealsense2-udev-rules` 명시 + 검증 게이트.
-
-10. **[공통] 브랜치 canonical** — `feat/application-containers` vs `feat/application-shell` → main 병합 시점.
+9. **[공통] 브랜치 canonical** — `feat/application-containers` vs `feat/application-shell` → main 병합 시점.
 
 ---
 
 ## Open Decisions
 
-- nvidia-container-toolkit: `docker-install.sh` 편입 위치 + main(host 전용)에도 설치할지.
+- nvidia-container-toolkit: 편입 완료(2026-06-09 — `docker-install.sh` 끝, nvidia-smi 가드). 잔여: main(host 전용) 병합 시 포함 여부.
 - 모델 중복(object_detection vs pick_and_place_text) dedup vs 레거시화.
 - pick_and_place_text detection/yolo spin 버그: 동일 패치 vs 레거시화.
 - 브랜치 canonical (containers vs shell) — main 병합 대상.
@@ -98,6 +96,6 @@
 ---
 
 ## Current Focus
-- **[실측] Top priority**: 전체 클린설치 검증(step14 드라이브 fetch 실측 — 사전 `docker rmi` 필요, yolo 4.4GB 첫 다운로드).
-- **[문서]**: nvidia-container-toolkit `docker-install.sh` 편입(+COMPATIBILITY), Dockerfile 레이어 재정렬.
+- **[실측] Top priority**: **다른 노트북(fleet)에서 전체 클린설치 검증** — 새 머신이라 step14 가 드라이브에서 실제 다운로드(yolo 4.4GB 첫 실측), toolkit step3 자동. 드라이브 공유 설정("링크 있는 사람") 확인 필요.
+- **[문서]**: Dockerfile 레이어 재정렬(재빌드 시 드라이브 tar/SHA256 갱신 동반).
 - **Friction**: 미push git 객체 + 브랜치 canonical + 모델/패키지 중복 정리 결정 대기.
