@@ -65,14 +65,6 @@ echo "docker: installed & held ->"
 docker --version
 docker compose version
 
-# 9) NVIDIA Container Toolkit — 컨테이너(yolo)가 host GPU 를 쓰려면 필요하다(compose 의 nvidia
-#    device reservation / `docker run --gpus`). 없으면 yolo 컨테이너가 GPU 로 못 떠 compose up 이
-#    실패한다. nvidia 드라이버(step2)+docker(여기) 선행 충족. 멱등.
-#    nvidia-smi 가드: GPU 없는 host 전용 구성에선 toolkit 이 불필요하고 모듈이 fail-loud 하므로
-#    드라이버가 있는 머신에서만 설치한다. 비대화 흐름이라 docker 재시작 동의를 자동 승인
-#    (ASSUME_YES=1) — daemon.json 의 nvidia 런타임 등록을 즉시 반영(step6 reboot 전 검증 통과).
-if command -v nvidia-smi >/dev/null 2>&1; then
-    ASSUME_YES=1 bash "${SCRIPT_DIR}/nvidia-container-toolkit-install.sh"
-else
-    echo "docker: nvidia-smi 없음 — NVIDIA Container Toolkit 설치 skip (host 전용 구성)"
-fi
+# NVIDIA Container Toolkit 는 여기서 설치하지 않는다 — docker-install 은 a01(step3)으로 reboot
+# 이전이라 GPU 드라이버 커널 모듈이 아직 로드되지 않았고, 그 상태에서 toolkit 작업이 실패한다.
+# reboot 이후 단계(install.sh step14)에서 nvidia-container-toolkit-install.sh 를 별도 실행한다.

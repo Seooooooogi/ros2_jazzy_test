@@ -25,7 +25,13 @@ TOOLKIT_LIST=/etc/apt/sources.list.d/nvidia-container-toolkit.list
 TOOLKIT_KEY="${KEYRING_DIR}/nvidia-container-toolkit.gpg"
 
 # 0) 전제 점검 — 드라이버 + docker 없으면 fail-loud (절반 설치 방지).
+#    SKIP_IF_NO_GPU=1 (install.sh 통합 흐름): GPU 없는 host 전용 머신은 toolkit 이 불필요하므로
+#    드라이버 부재를 에러가 아닌 정상 skip 으로 처리(step DONE 마킹). 단독 실행 기본은 fail-loud.
 if ! command -v nvidia-smi >/dev/null 2>&1; then
+    if [[ "${SKIP_IF_NO_GPU:-0}" == "1" ]]; then
+        echo "nvidia-toolkit: nvidia-smi 없음 — GPU 없는 host 전용 구성으로 보고 skip."
+        exit 0
+    fi
     echo "nvidia-toolkit: nvidia-smi 없음 — nvidia 드라이버 설치 선행 필요." >&2
     exit 1
 fi

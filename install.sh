@@ -2,7 +2,7 @@
 # shellcheck source-path=SCRIPTDIR
 # install.sh — host 워크스테이션 셋업 단일 진입점 (a01~a04 전체 시퀀스).
 #
-# a01~a04 오케스트레이터의 모든 step + DDS 튜닝 + 애플리케이션 컨테이너 빌드를 하나의
+# a01~a04 오케스트레이터의 모든 step + DDS 튜닝 + NVIDIA Container Toolkit + 컨테이너 이미지 확보를 하나의
 # 연속 시퀀스([n/14])로 실행한다.
 # 같은 state 파일을 공유하므로 개별 오케스트레이터(bash a0N-...sh)로 이미 완료한 step 은
 # 자동 skip 된다. 특정 스테이지만 다시 돌리려면 해당 a0N 스크립트를 직접 실행하면 된다.
@@ -35,13 +35,13 @@ source "${RESOURCE_DIR}/state.sh"
 source "${RESOURCE_DIR}/confirm.sh"
 config_assert_set
 
-STEPS_TOTAL=14
+STEPS_TOTAL=15
 # shellcheck source=resources/run-step.sh
 source "${RESOURCE_DIR}/run-step.sh"
 
 usage() {
     cat <<'EOF'
-install.sh — host 셋업 단일 진입점 (a01~a04 + DDS 튜닝 + 컨테이너 빌드, 전체 14 step)
+install.sh — host 셋업 단일 진입점 (a01~a04 + DDS 튜닝 + NVIDIA Container Toolkit + 컨테이너 이미지 확보, 전체 15 step)
 
   bash install.sh             전체 시퀀스 실행 (이미 완료된 step 은 skip)
   bash install.sh --verbose   각 step 의 상세 출력(colcon n/total, apt %)을 콘솔에도 표시
@@ -155,14 +155,23 @@ run_step --interactive 12 a04_voice_env bash "${RESOURCE_DIR}/voice-env-check.sh
 # 없고 install.sh 또는 단독(bash resources/dds-tuning.sh) 으로만 실행한다.
 run_step 13 dds_tuning bash "${RESOURCE_DIR}/dds-tuning.sh"
 
-# --- step 14: 애플리케이션 컨테이너 이미지 확보 (yolo / voice) ---
+# --- step 14: NVIDIA Container Toolkit (reboot 이후 — GPU 드라이버 모듈 로드 완료 상태) ---
+# reboot 전(a01/docker-install)에 설치하면 드라이버 커널 모듈이 미로드라 toolkit 작업이
+# 실패한다. 그래서 step6 reboot 뒤로 분리해 GPU 동작이 보장된 상태에서 설치한다.
+# 컨테이너(yolo)가 host GPU 를 쓰려면 필요(compose nvidia device reservation / `--gpus`).
+# SKIP_IF_NO_GPU=1: GPU 없는 host 전용 머신은 정상 skip(드라이버 부재를 에러로 안 봄).
+# ASSUME_YES=1: docker 재시작 동의 자동(비대화 흐름).
+run_step 14 nvidia_container_toolkit \
+    env ASSUME_YES=1 SKIP_IF_NO_GPU=1 bash "${SCRIPT_DIR}/resources/nvidia-container-toolkit-install.sh"
+
+# --- step 15: 애플리케이션 컨테이너 이미지 확보 (yolo / voice) ---
 # fetch-images.sh 가 공개 구글 드라이브에서 빌드 산출물(docker save tar)을 받아 SHA256 검증 후
 # docker load 한다(빌드 없이 빠른 재현). 이미지가 이미 로컬에 있으면 skip(멱등). 실패 시 state
 # 미DONE 으로 남아 재실행 시 이 step 만 재시도한다.
 # 이미지를 직접 빌드/검증하는 제작 머신은 별도로 `bash containers/build-all.sh` 를 쓴다
 # (두 이미지 빌드 + secret 위생 스캔 + import/모델로드 smoke). 그 산출물을 드라이브에 올리면
 # 다른 머신은 본 step 으로 받아 재현한다. file ID/SHA256 은 resources/config.sh 에 핀.
-run_step 14 container_fetch bash "${SCRIPT_DIR}/containers/fetch-images.sh"
+run_step 15 container_fetch bash "${SCRIPT_DIR}/containers/fetch-images.sh"
 
 state_dump
-echo "install: 전체 14 step 완료 — host 셋업 + 애플리케이션 컨테이너 이미지 확보 종료."
+echo "install: 전체 15 step 완료 — host 셋업 + 애플리케이션 컨테이너 이미지 확보 종료."

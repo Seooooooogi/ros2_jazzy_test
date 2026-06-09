@@ -5,13 +5,13 @@
 > 두 머신 공유 — **[실측]** 머신(로봇/카메라 실기) + **[문서]** 머신(git/문서/lessons). 항목에 담당 표기.
 
 ## Last updated
-2026-06-09 — **[실측/문서]** ① voice 컨테이너 e2e(wakeword→STT→LLM→service `/get_keyword`→실로봇 pick&place + pos1/2/3 목적지 배치) 검증 완료. ② 통합 bringup 을 전용 `cobot2_bringup` 패키지로 분리(robot_control 제외, host IP 192.168.1.100 고정). ③ install.sh step14 를 빌드→**공개 구글 드라이브에서 이미지 tar 받아 docker load**(`fetch-images.sh`)로 전환 — voice fetch 실측 통과. ④ nvidia-container-toolkit 을 `docker-install.sh` 끝(nvidia-smi 가드)에 편입 — 클린설치가 GPU 런타임까지 자동. **클린설치 검증은 이 머신 아닌 다른 노트북(fleet)에서 진행 예정.** 직전 2026-06-08: YOLO 컨테이너 e2e + 실로봇 pick.
+2026-06-09 — **[실측/문서]** ① voice 컨테이너 e2e(wakeword→STT→LLM→service `/get_keyword`→실로봇 pick&place + pos1/2/3 목적지 배치) 검증 완료. ② 통합 bringup 을 전용 `cobot2_bringup` 패키지로 분리(robot_control 제외, host IP 192.168.1.100 고정). ③ install.sh step14 를 빌드→**공개 구글 드라이브에서 이미지 tar 받아 docker load**(`fetch-images.sh`)로 전환 — voice fetch 실측 통과. ④ nvidia-container-toolkit 을 install.sh **step14(reboot 이후)** 에서 설치 — 클린설치가 GPU 런타임까지 자동(reboot 전 설치는 드라이버 모듈 미로드로 실패해 reboot 뒤로 분리). 전체 **15 step**(toolkit 추가). **클린설치 검증은 이 머신 아닌 다른 노트북(fleet)에서 진행 예정.** 직전 2026-06-08: YOLO 컨테이너 e2e + 실로봇 pick.
 
 ---
 
 ## Next Actions (priority order)
 
-1. **[실측] 전체 클린설치 검증 — 다른 노트북(fleet 머신)에서 진행** — 최신 origin `git clone` → `bash install.sh`. 새 머신엔 이미지가 없어 **step14 가 드라이브에서 실제 다운로드**(yolo 4.4GB 첫 실측 자연 발생 — `docker rmi` 불요). nvidia-container-toolkit 은 step3(docker-install.sh 끝, nvidia-smi 가드)에서 자동 설치. a01(step1~6) NVIDIA+reboot destructive, step12 `.env` OPENAI_API_KEY interactive. **점검: 드라이브 파일 2개가 "링크 있는 사람 보기" 공유여야 다른 네트워크/무계정에서 무인 curl 가능**(이 머신 fetch 성공은 동일 계정/네트워크 영향 배제 못 함).
+1. **[실측] 전체 클린설치 검증 — 다른 노트북(fleet 머신)에서 진행** — 최신 origin `git clone` → `bash install.sh`. 새 머신엔 이미지가 없어 **step14 가 드라이브에서 실제 다운로드**(yolo 4.4GB 첫 실측 자연 발생 — `docker rmi` 불요). nvidia-container-toolkit 은 step14(reboot 이후)에서 자동 설치(SKIP_IF_NO_GPU=1 — GPU 없으면 정상 skip). a01(step1~6) NVIDIA+reboot destructive, step12 `.env` OPENAI_API_KEY interactive. **점검: 드라이브 파일 2개가 "링크 있는 사람 보기" 공유여야 다른 네트워크/무계정에서 무인 curl 가능**(이 머신 fetch 성공은 동일 계정/네트워크 영향 배제 못 함).
 
 2. **[실측/문서] cobot2_bringup 클린설치 자동 빌드 검증** — `dsr-project-install.sh` HOST_PKGS 에 등록됨(cp -a 복사 경로). 다른 노트북은 cp 경로 그대로 — clone → 빌드 시 `ros2 launch cobot2_bringup bringup_all.launch.py` resolve 확인. (이 머신은 검증용 symlink 라 무관.)
 
@@ -33,7 +33,7 @@
 
 ## Open Decisions
 
-- nvidia-container-toolkit: 편입 완료(2026-06-09 — `docker-install.sh` 끝, nvidia-smi 가드). 잔여: main(host 전용) 병합 시 포함 여부.
+- nvidia-container-toolkit: 편입 완료(2026-06-09 — install.sh step14, **reboot 이후**; reboot 전 설치가 드라이버 모듈 미로드로 실패해 이동). 잔여: main(host 전용) 병합 시 포함 여부.
 - 모델 중복(object_detection vs pick_and_place_text) dedup vs 레거시화.
 - pick_and_place_text detection/yolo spin 버그: 동일 패치 vs 레거시화.
 - 브랜치 canonical (containers vs shell) — main 병합 대상.

@@ -127,9 +127,10 @@ export CYCLONEDDS_URI="${CYCLONEDDS_URI:-file://${CYCLONEDDS_XML}}"
 export ROS_DOMAIN_ID="${ROS_DOMAIN_ID:-42}"
 
 # --- Progress 표시 ([n/total] 시각화) ---------------------
-# 통합 진입점 install.sh 의 전체 단계 수 (a01:6 + a02:4 + a03:1 + a04:1 + dds-tuning:1 + container-build:1).
+# 통합 진입점 install.sh 의 전체 단계 수 (a01:6 + a02:4 + a03:1 + a04:1 + dds-tuning:1
+# + nvidia-container-toolkit:1 + container-fetch:1).
 # install.sh 의 STEPS_TOTAL 과 일치해야 한다(run-step.sh 의 fallback 으로도 쓰임). 단계 추가 시 함께 갱신.
-: "${TOTAL_STEPS:=14}"
+: "${TOTAL_STEPS:=15}"
 
 # --- Self-check ----------------------------------------------------------
 # 자식 스크립트가 진입 직후 호출하면 필수 변수 누락 즉시 catch.
