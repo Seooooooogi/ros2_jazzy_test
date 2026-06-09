@@ -155,13 +155,14 @@ run_step --interactive 12 a04_voice_env bash "${RESOURCE_DIR}/voice-env-check.sh
 # 없고 install.sh 또는 단독(bash resources/dds-tuning.sh) 으로만 실행한다.
 run_step 13 dds_tuning bash "${RESOURCE_DIR}/dds-tuning.sh"
 
-# --- step 14: 애플리케이션 컨테이너 빌드 + 검증 (yolo / voice 이미지) ---
-# build-all.sh 가 두 이미지를 빌드하고 secret 위생 스캔 + import/모델로드 smoke 로 검증한다.
-# GPU·마이크·카메라 불요(모듈 import + .tflite 로드만) — host 설치 직후 실행 가능하다.
-# 빌드는 도커 레이어 캐시로 재실행이 빠르고, 실패 시 state 미DONE 으로 남아 재실행 시 이
-# step 만 재시도한다. 향후 검증 통과 이미지를 registry/드라이브로 배포하면 이 단계를
-# 빌드에서 pull/download 방식으로 전환한다.
-run_step 14 container_build bash "${SCRIPT_DIR}/containers/build-all.sh"
+# --- step 14: 애플리케이션 컨테이너 이미지 확보 (yolo / voice) ---
+# fetch-images.sh 가 공개 구글 드라이브에서 빌드 산출물(docker save tar)을 받아 SHA256 검증 후
+# docker load 한다(빌드 없이 빠른 재현). 이미지가 이미 로컬에 있으면 skip(멱등). 실패 시 state
+# 미DONE 으로 남아 재실행 시 이 step 만 재시도한다.
+# 이미지를 직접 빌드/검증하는 제작 머신은 별도로 `bash containers/build-all.sh` 를 쓴다
+# (두 이미지 빌드 + secret 위생 스캔 + import/모델로드 smoke). 그 산출물을 드라이브에 올리면
+# 다른 머신은 본 step 으로 받아 재현한다. file ID/SHA256 은 resources/config.sh 에 핀.
+run_step 14 container_fetch bash "${SCRIPT_DIR}/containers/fetch-images.sh"
 
 state_dump
-echo "install: 전체 14 step 완료 — host 셋업 + 애플리케이션 컨테이너 빌드 종료."
+echo "install: 전체 14 step 완료 — host 셋업 + 애플리케이션 컨테이너 이미지 확보 종료."

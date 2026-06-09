@@ -74,6 +74,18 @@ export ROS2_JAZZY_TEST_REPO
 # 사용자 결정 2026-05-28. 시스템 레이어 설치에서 이 변수를 읽는 코드는 없음.
 : "${DOCKER_VERSION_STRING:=}"
 
+# --- Phase 4 이미지 배포 (공개 구글 드라이브에서 받아 docker load) ----------
+# 클린설치(install.sh step14)는 이미지를 빌드하지 않고 아래 공개 드라이브 file ID 로 tar 를
+# 받아 load 한다(빠른 재현). 직접 빌드/검증(이미지 제작 머신)은 containers/build-all.sh.
+#
+# file ID = 공개 링크 식별자(secret 아님) — 업로드 후 채운다. 비우면 fetch 가 명확히 실패.
+# SHA256 = `docker save` tar 의 무결성 해시. 반드시 레포(여기)에 핀하고 드라이브엔 tar 만 올린다
+# — 해시를 tar 와 같은 출처에서 받으면 둘 다 변조 시 검증이 무의미하기 때문(신뢰 출처=레포).
+: "${YOLO_IMAGE_GDRIVE_ID:=1pbWlfFb3d5L6E_S5XrN9_7s_OLsg_YvC}"
+: "${VOICE_IMAGE_GDRIVE_ID:=1iKKLyreAawlDVBcFKqXlyNCG0JNnogYp}"
+: "${YOLO_IMAGE_SHA256:=b720f006b0e5b0b650820e80f2f7c6d924f1aa4b38792475c84af6668793c22d}"
+: "${VOICE_IMAGE_SHA256:=092b8138e14b7568d7dbaeb27c875867b2a16083f4ee6a0c9b2c1658bb9c2d0b}"
+
 # --- State file (resumable 재실행, 구조화 포맷 2026-05-27) ----
 : "${STATE_DIR:=${HOME}/.ros2_jazzy_test}"
 : "${STATE_FILE:=${STATE_DIR}/state}"
