@@ -32,8 +32,8 @@ robot_control(실제 pick 모션 + 무한 루프)은 이 launch 에 포함하지
 사용 예 (robot_control 패키지에 설치됨 — colcon overlay source 후 패키지명으로 호출):
   # 에뮬레이터 + 카메라/컨테이너 없이 드라이버만(이미지·카메라 불필요한 점검)
   ros2 launch robot_control bringup_all.launch.py mode:=virtual camera:=false containers:=false
-  # 실기 + 카메라 + 컨테이너(이미지 빌드/.env/cyclonedds.xml 준비 후)
-  ros2 launch robot_control bringup_all.launch.py mode:=real host:=192.168.1.100
+  # 실기 + 카메라 + 컨테이너(이미지/.env/cyclonedds.xml 준비 후). host 기본=실기 192.168.1.100
+  ros2 launch robot_control bringup_all.launch.py mode:=real
   # 인프라 기동 후, 별도 터미널에서 음성 pick&place 시작:
   ros2 run robot_control robot_control
 """
@@ -82,8 +82,8 @@ def generate_launch_description():
             description="virtual=에뮬레이터(안전 기본) | real=실기 컨트롤러 연결",
         ),
         DeclareLaunchArgument(
-            "host", default_value="127.0.0.1",
-            description="로봇 IP. 실기는 192.168.1.100",
+            "host", default_value="192.168.1.100",
+            description="로봇 IP(실기 고정 192.168.1.100). virtual 에뮬레이터에선 미사용",
         ),
         DeclareLaunchArgument("port", default_value="12345", description="DSR 컨트롤러 포트(DRFL). 기본 12345"),
         DeclareLaunchArgument(

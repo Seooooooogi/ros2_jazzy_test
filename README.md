@@ -128,9 +128,10 @@ ros2 launch realsense2_camera rs_align_depth_launch.py \
 드라이버 + RealSense + yolo/voice 컨테이너를 한 줄로 기동 (robot_control 패키지에 포함 — colcon overlay source 후 패키지명으로 호출):
 
 ```bash
-ros2 launch robot_control bringup_all.launch.py mode:=real host:=<controller-ip>
+ros2 launch robot_control bringup_all.launch.py mode:=real
 ```
 
+- 실기 IP는 `192.168.1.100` 고정 (launch 기본값) — 다른 컨트롤러면 `host:=<ip>`
 - `mode:=virtual` — 에뮬레이터 (컨트롤러 연결 없이)
 - `camera:=false` — RealSense 제외 / `containers:=false` — 컨테이너 제외
 - Ctrl+C 시 컨테이너 자동 정리 (`docker compose down`)
@@ -146,7 +147,7 @@ docker compose -f ~/ros2_jazzy_test/containers/docker-compose.yml up -d
 
 컨테이너 포함 시 전제:
 
-- 이미지 빌드/pull 완료 — `bash containers/build-all.sh`
+- 이미지 확보 — `install.sh` step14 가 공개 드라이브에서 받아 `docker load`(자동). 수동은 `bash containers/fetch-images.sh`, 직접 빌드는 `bash containers/build-all.sh`
 - `.env` 존재 (voice 의 `OPENAI_API_KEY` 런타임 주입)
 - `~/.ros2_jazzy_test/cyclonedds.xml` 렌더 완료 (dds-tuning — install.sh 마지막 단계)
 - 카메라는 host 소유 → yolo 컨테이너가 host RealSense 토픽을 DDS 로 구독 (컨테이너 안에 카메라 없음)
