@@ -28,6 +28,11 @@ RUN apt-get update \
 
 COPY cobot2_ws/voice_processing /ws/src/voice_processing
 
+# openwakeword feature 모델(melspectrogram/embedding/VAD)을 레포에 vendoring 해 COPY.
+# 빌드 중 download_models 는 GitHub 릴리스에서 받는데, 504 등 transient 실패 시 에러 HTML 을
+# 검증 없이 .tflite 로 저장 → 런타임 'should be TFL3' 크래시. 오프라인·재현 가능하게 동봉본 사용.
+COPY containers/voice-processing/oww_models /tmp/oww_models
+
 WORKDIR /ws
 # voice_processing 의 선언적 의존(rclpy/std_srvs)을 rosdep 으로 해소.
 RUN rosdep init 2>/dev/null || true \
@@ -53,8 +58,9 @@ ENV PATH="/opt/venv/bin:${PATH}"
 # tflite-runtime 자리에 후속작 ai-edge-litert(cp312 wheel, 동일 Interpreter API)를 넣고,
 # openwakeword 코드가 `import tflite_runtime.interpreter` 를 하드 호출하므로 ai_edge_litert 로 잇는
 # 최소 shim 패키지를 site-packages 에 생성한다. 이로써 .tflite 모델/코드를 그대로 유지한 채 3.12 에서 동작.
-# feature 모델(melspectrogram/embedding/VAD)은 wheel 에 미동봉 → download_models 로 받는다.
-# 더미 model_names(['__feature_only__'])로 공식 사전학습 wakeword 모델 일괄 다운로드는 건너뛴다(커스텀 모델 사용).
+# feature 모델(melspectrogram/embedding/VAD)은 wheel 에 미동봉 → 동봉본(/tmp/oww_models)을 복사.
+# 과거 download_models 는 transient 504 시 에러 HTML 을 .tflite 로 저장해 런타임 크래시했다.
+# 복사 후 .tflite 의 'TFL3' 식별자(offset 4)를 검증해 손상본 유입을 빌드 시점에 차단.
 RUN pip install --no-cache-dir --upgrade pip \
  && pip install --no-cache-dir \
       "langchain<2" "langchain-openai<2" "openai<3" \
@@ -64,7 +70,7 @@ RUN pip install --no-cache-dir --upgrade pip \
       "onnxruntime<2,>=1.10.0" "tqdm<5,>=4.0" "scikit-learn<2,>=1" "requests<3,>=2.0" \
       "ai-edge-litert>=2.0.2,<3" \
  && python3 -c "import os,ai_edge_litert as a; d=os.path.join(os.path.dirname(os.path.dirname(a.__file__)),'tflite_runtime'); os.makedirs(d,exist_ok=True); open(os.path.join(d,'__init__.py'),'w').close(); open(os.path.join(d,'interpreter.py'),'w').write('from ai_edge_litert.interpreter import Interpreter  # noqa: F401\n')" \
- && python3 -c "import openwakeword.utils as u; u.download_models(['__feature_only__'])" \
+ && python3 -c "import os,shutil,openwakeword; d=os.path.join(os.path.dirname(openwakeword.__file__),'resources','models'); os.makedirs(d,exist_ok=True); [shutil.copy(os.path.join('/tmp/oww_models',f),d) for f in os.listdir('/tmp/oww_models')]; [open(os.path.join(d,f),'rb').read(8)[4:8]==b'TFL3' or (_ for _ in ()).throw(SystemExit('corrupt tflite: '+f)) for f in os.listdir(d) if f.endswith('.tflite')]; print('feature models OK:', sorted(os.listdir(d)))" \
  && pip install --no-cache-dir --force-reinstall "numpy<2" \
  && python3 -c "import numpy, langchain, langchain_openai, openai, pyaudio, sounddevice, scipy, openwakeword, ai_edge_litert, tflite_runtime.interpreter, dotenv; assert numpy.__version__.startswith('1.'), numpy.__version__"
 
