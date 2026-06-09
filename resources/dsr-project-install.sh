@@ -5,7 +5,7 @@
 # backup/dsr-project-install{,_25}.sh 의 jazzy 마이그레이션 + idempotency.
 #   - clone 브랜치 -b ${DSR_BRANCH}(=jazzy). 이미 받은 경우 skip (재현성 — git pull 안 함).
 #   - 워크스페이스 = ${DSR_WORKSPACE}(=~/cobot2_ws). 레포 cobot2_ws/ 의 host 패키지
-#     (robot_control, od_msg) 만 src/ 로 복사 — app/container 패키지
+#     (robot_control, od_msg, cobot2_bringup) 만 src/ 로 복사 — app/container 패키지
 #     (object_detection / voice_processing / pick_and_place_* / rokey) 는 별도(yolo/voice) 컨테이너가
 #     담당하므로 host ws 에서 제외. src/ 에 든 패키지만 빌드되어 범위가 자연히 한정됨.
 #     복사(symlink 아님): 워크스페이스가 레포 위치에 의존하지 않게 — 탈착식 미디어(USB)에서
@@ -27,7 +27,8 @@ WS_SRC="${DSR_WORKSPACE}/src"
 DSR_REPO_URL="https://github.com/doosan-robotics/doosan-robot2.git"
 
 # host colcon 빌드 대상 패키지 (CUDA/voice 의존 패키지는 컨테이너로 제외).
-HOST_PKGS=(robot_control od_msg)
+# cobot2_bringup = 통합 bringup launch 패키지(드라이버+카메라+컨테이너 기동, robot_control 제외).
+HOST_PKGS=(robot_control od_msg cobot2_bringup)
 
 # 1) 워크스페이스 src 디렉토리.
 mkdir -p "${WS_SRC}"

@@ -125,10 +125,10 @@ ros2 launch realsense2_camera rs_align_depth_launch.py \
 
 환경 source 는 위 "개별 실행" 절과 동일 (새 터미널마다 3줄).
 
-드라이버 + RealSense + yolo/voice 컨테이너를 한 줄로 기동 (robot_control 패키지에 포함 — colcon overlay source 후 패키지명으로 호출):
+드라이버 + RealSense + yolo/voice 컨테이너를 한 줄로 기동 (`cobot2_bringup` 패키지 — colcon overlay source 후 패키지명으로 호출):
 
 ```bash
-ros2 launch robot_control bringup_all.launch.py mode:=real
+ros2 launch cobot2_bringup bringup_all.launch.py mode:=real
 ```
 
 - 실기 IP는 `192.168.1.100` 고정 (launch 기본값) — 다른 컨트롤러면 `host:=<ip>`

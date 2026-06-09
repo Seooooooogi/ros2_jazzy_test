@@ -2,7 +2,7 @@ from setuptools import find_packages, setup
 from glob import glob
 import os
 
-package_name = 'robot_control'
+package_name = 'cobot2_bringup'
 
 setup(
     name=package_name,
@@ -12,13 +12,13 @@ setup(
         ('share/ament_index/resource_index/packages',
             ['resource/' + package_name]),
         ('share/' + package_name, ['package.xml']),
-        (os.path.join('share', package_name, 'resource'), glob('resource/*')),
+        (os.path.join('share', package_name, 'launch'), glob('launch/*.launch.py')),
     ],
     install_requires=['setuptools'],
     zip_safe=True,
     maintainer='rokey',
     maintainer_email='rokey@todo.todo',
-    description='TODO: Package description',
+    description='Cobot2 통합 bringup — 로봇 드라이버 + RealSense + 애플리케이션 컨테이너 기동 launch',
     license='TODO: License declaration',
     extras_require={
         'test': [
@@ -26,8 +26,6 @@ setup(
         ],
     },
     entry_points={
-        'console_scripts': [
-            'robot_control = robot_control.robot_control:main',
-        ],
+        'console_scripts': [],
     },
 )

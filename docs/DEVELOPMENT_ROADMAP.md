@@ -199,7 +199,7 @@ ROS2 Humble installer → ROS2 Jazzy installer 마이그레이션. 1–4주, sol
 - [x] 4-8. 통합 bringup launch — **`cobot2_ws/launch/bringup_all.launch.py` 골격 완료(2026-06-05)**. 로봇 드라이버(dsr_bringup2) + host RealSense + yolo/voice 컨테이너(`docker compose up -d`)를 한 번에 기동. robot_control(실제 모션·무한 루프)은 안전상 기본 제외(`start_robot_control:=true` 옵트인), `mode` 기본 `virtual`(에뮬레이터). 컨테이너 노드는 각 이미지 ENTRYPOINT(ROS source + overlay) + CMD 로 자동 실행 → compose up 한 줄이 노드 기동까지. **통신 토폴로지 = robot_control 중심 star 확정(2026-06-05)** — voice·yolo 는 독립 service server, robot_control 이 둘의 client(노드/계약 무변경).
   - 실행 전제: 셸에 config.sh + `/opt/ros/jazzy` + `~/cobot2_ws/install` overlay 3개 source(`activate.sh` 는 overlay 미source). `containers:=true` 는 이미지 빌드·`.env`·`cyclonedds.xml` 렌더 선행 — 미빌드 점검은 `containers:=false`.
   - 미충족(연기): host 소유 카메라 전제로 yolo 이미지 재빌드(realsense 드라이버 제거 반영), service 왕복 E2E, 카메라 토픽 컨테이너 가시성, `activate.sh` overlay source 편의.
-  - **Update (2026-06-09)**: launch 패키지화 완료 — `robot_control/launch/bringup_all.launch.py` + `setup.py` `data_files` → `ros2 launch robot_control bringup_all.launch.py`(절대경로 불요). 레포 경로는 `config.sh` 의 `ROS2_JAZZY_TEST_REPO` export 로 해결(install 후 `__file__` 무력). robot_control 은 launch 에서 제거(`start_robot_control` 옵트인 삭제) — 인프라만, pick 모션은 `ros2 run robot_control robot_control` 분리.
+  - **Update (2026-06-09)**: launch 패키지화 완료 — 전용 `cobot2_bringup` 패키지(`launch/` + `setup.py data_files`) → `ros2 launch cobot2_bringup bringup_all.launch.py`(절대경로 불요). (처음엔 robot_control 에 뒀다가, bringup 이 robot_control 을 제외하는 설계와의 정합 + ROS 관례를 위해 전용 패키지로 분리.) 레포 경로는 `config.sh` 의 `ROS2_JAZZY_TEST_REPO` export 로 해결(install 후 `__file__` 무력). robot_control 은 launch 에서 제거(`start_robot_control` 옵트인 삭제) — 인프라만, pick 모션은 `ros2 run robot_control robot_control` 분리. `dsr-project-install.sh` HOST_PKGS 에 cobot2_bringup 등록.
 
 **Phase 4 산출물**:
 - `containers/yolo-detection/Dockerfile` + 부속 (entrypoint, requirements, `.dockerignore`)
@@ -209,7 +209,7 @@ ROS2 Humble installer → ROS2 Jazzy installer 마이그레이션. 1–4주, sol
 - `containers/entrypoint.sh` (공유 — ROS2 + `/ws/install` overlay source) — *완료 2026-05-30*
 - 루트 `.dockerignore` (build context 화이트리스트 + secret/모델가중치 제외) — *완료 2026-05-30*
 - `containers/up.sh` (pull-first 분기 wrapper — ADR-007 § 5) — *미작성(런타임 단계)*
-- `cobot2_ws/robot_control/launch/bringup_all.launch.py` (통합 bringup — 로봇 드라이버 + host 카메라 + 컨테이너 한 번에, robot_control 패키지에 설치) — *골격 2026-06-05, 패키지화 2026-06-09*
+- `cobot2_ws/cobot2_bringup/launch/bringup_all.launch.py` (통합 bringup — 로봇 드라이버 + host 카메라 + 컨테이너 한 번에, 전용 cobot2_bringup 패키지) — *골격 2026-06-05, 전용 패키지화 2026-06-09*
 - **ADR-009** — Phase 4 base image(`ros:jazzy-ros-base-noble` 단일) / 네트워크 모드(`host`) / 소스 수정 정책 / 빌드 게이트 경계 — *완료 2026-05-30* (install.sh 통합은 4-6 의 수동 분리로 결정)
 - Docker Hub publish 된 두 image (ADR-007): `docker.io/${DOCKERHUB_USER}/ros2-jazzy-yolo:<tag>`, `docker.io/${DOCKERHUB_USER}/ros2-jazzy-voice:<tag>`
 - `.env.example` 갱신: `DOCKERHUB_USER`, `DOCKERHUB_TOKEN`, `YOLO_TAG`, `VOICE_TAG` placeholder 추가

@@ -29,11 +29,11 @@ robot_control(실제 pick 모션 + 무한 루프)은 이 launch 에 포함하지
   - 이 launch 는 드라이버/카메라/컨테이너만 올린다 — 자율 모션 없음. 실제 pick 모션은
     robot_control 을 수동 실행할 때 시작된다(아래 사용 예 참조).
 
-사용 예 (robot_control 패키지에 설치됨 — colcon overlay source 후 패키지명으로 호출):
+사용 예 (cobot2_bringup 패키지에 설치됨 — colcon overlay source 후 패키지명으로 호출):
   # 에뮬레이터 + 카메라/컨테이너 없이 드라이버만(이미지·카메라 불필요한 점검)
-  ros2 launch robot_control bringup_all.launch.py mode:=virtual camera:=false containers:=false
+  ros2 launch cobot2_bringup bringup_all.launch.py mode:=virtual camera:=false containers:=false
   # 실기 + 카메라 + 컨테이너(이미지/.env/cyclonedds.xml 준비 후). host 기본=실기 192.168.1.100
-  ros2 launch robot_control bringup_all.launch.py mode:=real
+  ros2 launch cobot2_bringup bringup_all.launch.py mode:=real
   # 인프라 기동 후, 별도 터미널에서 음성 pick&place 시작:
   ros2 run robot_control robot_control
 """
@@ -53,7 +53,7 @@ from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
 
 # 레포 소스 트리 루트 — compose 파일(containers/)과 config.sh(resources/)는 colcon 이
-# install 하지 않는 레포 자산이라 여기서 직접 참조한다. 이 launch 는 robot_control 패키지로
+# install 하지 않는 레포 자산이라 여기서 직접 참조한다. 이 launch 는 cobot2_bringup 패키지로
 # 설치되므로 __file__ 은 install/share/ 를 가리켜 레포를 못 찾는다. 대신 config.sh 가 export
 # 하는 ROS2_JAZZY_TEST_REPO 를 쓴다(config.sh 를 source 하면 자동 설정 — 실행 전제). 미설정 시
 # 표준 클론 위치로 폴백. 레포 경로는 한 곳(config.sh, 자기 위치에서 계산)에서만 정의된다.

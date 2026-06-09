@@ -588,7 +588,7 @@
 **Consequences**:
 - 노드/서비스 코드 무변경 — 산출물은 launch 파일 + 결정/로드맵/Notion 문서 정합뿐. 회귀 위험 최소.
 - `bringup_all.launch.py` 는 ament 패키지 밖 standalone(절대경로 `ros2 launch`). 실행 셸은 `/opt/ros/jazzy/setup.bash` + `~/cobot2_ws/install/setup.bash`(overlay) + `resources/config.sh` 를 source 해야 한다(`activate.sh` 는 overlay 미source — 실행 전제로 안내). 후속 패키지화 시 `robot_control/launch/` 이동 + setup.py `data_files`.
-- **Update (2026-06-09)**: 위 후속 패키지화 완료 — launch 를 `robot_control/launch/bringup_all.launch.py` 로 이동, `setup.py` `data_files` 에 `launch/` 추가 → `ros2 launch robot_control bringup_all.launch.py` 로 호출(절대경로 불요). 설치 후 `__file__` 이 레포를 못 가리키므로 compose/config 경로는 `config.sh` 가 export 하는 `ROS2_JAZZY_TEST_REPO`(자기 위치에서 계산)로 해결. robot_control 의 launch 내장(`start_robot_control` 옵트인)도 제거 — bringup 은 인프라(드라이버+카메라+컨테이너)만, 실제 pick 모션은 `ros2 run robot_control robot_control` 분리 실행.
+- **Update (2026-06-09)**: 위 후속 패키지화 완료 — **전용 `cobot2_bringup` 패키지** 신설(launch/ + setup.py data_files, dsr-project-install.sh HOST_PKGS 등록) → `ros2 launch cobot2_bringup bringup_all.launch.py`(절대경로 불요). (당초 robot_control 에 넣었으나, bringup 이 robot_control 을 의도적으로 제외하는 설계와 ROS 관례(`*_bringup`, 예: dsr_bringup2)에 맞춰 전용 패키지로 분리.) 설치 후 `__file__` 이 레포를 못 가리키므로 compose/config 경로는 `config.sh` 가 export 하는 `ROS2_JAZZY_TEST_REPO`(자기 위치에서 계산)로 해결. robot_control 의 launch 내장(`start_robot_control` 옵트인)도 제거 — bringup 은 인프라(드라이버+카메라+컨테이너)만, 실제 pick 모션은 `ros2 run robot_control robot_control` 분리 실행.
 - `containers:=true` 는 이미지 빌드·`.env`·`cyclonedds.xml` 렌더 선행 필요. 미빌드 상태 점검은 `containers:=false`.
 - 실기 E2E(이미지 재빌드 후 service 왕복 + 카메라 토픽 컨테이너 가시성)는 후속 단계로 연기.
 
