@@ -26,6 +26,13 @@ export DEBIAN_FRONTEND=noninteractive
 # (PyTorch / ultralytics / langchain / openai 등) 는 모두 별도(yolo/voice) 컨테이너 안에만 존재.
 # host 는 system Python (apt) + colcon 워크스페이스만 책임.
 
+# --- 레포 소스 트리 루트 ------------------------------------------------
+# 이 파일(resources/config.sh)의 부모 = 레포 루트. 클론 위치에 무관하게 자기 위치에서 계산해
+# 단일 진실 소스로 export 한다. bringup launch 가 colcon install 후 __file__ 로 레포(컨테이너
+# compose / config.sh)를 못 찾으므로 이 값을 참조한다. override 허용(`:=`).
+: "${ROS2_JAZZY_TEST_REPO:=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
+export ROS2_JAZZY_TEST_REPO
+
 # --- DSR (jazzy 브랜치 활성 확인 완료 2026-05-26) ---------------
 : "${DSR_BRANCH:=${ROS_DISTRO}}"
 : "${DSR_EMULATOR_VERSION:=3.0.1}"

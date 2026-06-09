@@ -120,3 +120,42 @@ ros2 launch realsense2_camera rs_align_depth_launch.py \
 ```
 
 - `align_depth.enable:=true` 필수 — 없으면 `aligned_depth_to_color` 미publish
+
+## 설치 후 실행 — 통합 bringup (로봇 + 카메라 + 컨테이너 한 번에)
+
+환경 source 는 위 "개별 실행" 절과 동일 (새 터미널마다 3줄).
+
+드라이버 + RealSense + yolo/voice 컨테이너를 한 줄로 기동 (robot_control 패키지에 포함 — colcon overlay source 후 패키지명으로 호출):
+
+```bash
+ros2 launch robot_control bringup_all.launch.py mode:=real host:=<controller-ip>
+```
+
+- `mode:=virtual` — 에뮬레이터 (컨트롤러 연결 없이)
+- `camera:=false` — RealSense 제외 / `containers:=false` — 컨테이너 제외
+- Ctrl+C 시 컨테이너 자동 정리 (`docker compose down`)
+
+컨테이너만 따로 띄우려면:
+
+```bash
+docker compose -f ~/ros2_jazzy_test/containers/docker-compose.yml up -d
+```
+
+- **각 컨테이너는 기동과 동시에 노드를 자동 실행** — yolo=`object_detection`, voice=`get_keyword`. 별도 `ros2 run` 불필요
+- 노드 로그 확인: `docker compose -f ~/ros2_jazzy_test/containers/docker-compose.yml logs -f`
+
+컨테이너 포함 시 전제:
+
+- 이미지 빌드/pull 완료 — `bash containers/build-all.sh`
+- `.env` 존재 (voice 의 `OPENAI_API_KEY` 런타임 주입)
+- `~/.ros2_jazzy_test/cyclonedds.xml` 렌더 완료 (dds-tuning — install.sh 마지막 단계)
+- 카메라는 host 소유 → yolo 컨테이너가 host RealSense 토픽을 DDS 로 구독 (컨테이너 안에 카메라 없음)
+
+**robot_control(실제 pick 모션)은 분리 실행** — bringup/컨테이너로 인프라를 올린 뒤 별도 터미널에서:
+
+```bash
+ros2 run robot_control robot_control
+```
+
+- 음성 명령 흐름이라 Ctrl+C 로 자주 재기동 → 전용 터미널 권장
+- bringup launch 는 인프라만 올리고 자율 모션을 일으키지 않음 — 작업 시작은 이 명령으로 분리
