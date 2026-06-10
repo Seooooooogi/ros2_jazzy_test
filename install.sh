@@ -3,7 +3,7 @@
 # install.sh — host 워크스테이션 셋업 단일 진입점 (a01~a04 전체 시퀀스).
 #
 # a01~a04 오케스트레이터의 모든 step + DDS 튜닝 + NVIDIA Container Toolkit + 컨테이너 이미지 확보를 하나의
-# 연속 시퀀스([n/14])로 실행한다.
+# 연속 시퀀스([n/16])로 실행한다.
 # 같은 state 파일을 공유하므로 개별 오케스트레이터(bash a0N-...sh)로 이미 완료한 step 은
 # 자동 skip 된다. 특정 스테이지만 다시 돌리려면 해당 a0N 스크립트를 직접 실행하면 된다.
 #
@@ -14,6 +14,7 @@
 #   bash install.sh --help
 #
 # reboot(step 6) 후에는 다시 'bash install.sh' 를 실행하면 step 7 부터 이어진다.
+# (--unattended 면 reboot·재개가 자동이라 수동 재실행 불필요 — GUI 세션 전제.)
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -33,17 +34,23 @@ source "${RESOURCE_DIR}/config.sh"
 source "${RESOURCE_DIR}/state.sh"
 # shellcheck source=resources/confirm.sh
 source "${RESOURCE_DIR}/confirm.sh"
+# shellcheck source=resources/env-load.sh
+source "${RESOURCE_DIR}/env-load.sh"
+# shellcheck source=resources/unattended.sh
+source "${RESOURCE_DIR}/unattended.sh"
 config_assert_set
 
-STEPS_TOTAL=15
+STEPS_TOTAL=16
 # shellcheck source=resources/run-step.sh
 source "${RESOURCE_DIR}/run-step.sh"
 
 usage() {
     cat <<'EOF'
-install.sh — host 셋업 단일 진입점 (a01~a04 + DDS 튜닝 + NVIDIA Container Toolkit + 컨테이너 이미지 확보, 전체 15 step)
+install.sh — host 셋업 단일 진입점 (a01~a04 + DDS 튜닝 + NVIDIA Container Toolkit + 컨테이너 이미지 + 네트워크 고정 IP, 전체 16 step)
 
   bash install.sh             전체 시퀀스 실행 (이미 완료된 step 은 skip)
+  bash install.sh --unattended  무인 설치 — 시작 시 OPENAI_API_KEY + confirm 1회 후 reboot 까지
+                                자동 진행, 복귀 시 자동 재개(GUI 세션 필요, 복귀 후 sudo 비번 1회)
   bash install.sh --verbose   각 step 의 상세 출력(colcon n/total, apt %)을 콘솔에도 표시
   bash install.sh --status    현재 진행 상태(state) 출력
   bash install.sh --reset     state 초기화 (confirm 후 — 모든 step 재실행)
@@ -62,14 +69,16 @@ EOF
 # --verbose/-v 는 서브커맨드와 직교하므로 먼저 분리해 VERBOSE 로 흡수하고 나머지만 남긴다.
 # run-step.sh 가 같은 셸에서 VERBOSE 를 읽는다(export 는 자식 resource 스크립트 대비).
 VERBOSE="${VERBOSE:-0}"
+UNATTENDED="${UNATTENDED:-0}"
 __args=()
 for __a in "$@"; do
     case "$__a" in
         -v|--verbose) VERBOSE=1 ;;
+        --unattended) UNATTENDED=1 ;;
         *) __args+=("$__a") ;;
     esac
 done
-export VERBOSE
+export VERBOSE UNATTENDED
 # 빈 배열 + set -u → unbound var 오류(bash<4.4) 방지용 확장 guard. "${__args[@]}" 로 단순화 금지.
 set -- "${__args[@]+"${__args[@]}"}"
 
@@ -103,8 +112,34 @@ if ! sudo -v; then
     exit 1
 fi
 
+# sudo keepalive — 긴 step(드라이버/colcon) 중 sudo 캐시를 60s 마다 갱신해 재입력을 막는다.
+# 무인 재개(복귀 후 sudo 비번 1회) 흐름에서도 끝까지 비번 재입력이 없게 한다. 종료 시 정리.
+# subshell 안에서 set +e — sudo -n 일시 실패나 sleep 인터럽트로 keepalive 가 조용히 죽지
+# 않게 한다. 부모가 살아있는 동안만 돌고, 부모 종료 시 아래 EXIT trap 으로 정리.
+( set +e; while kill -0 "$$" 2>/dev/null; do sudo -n true 2>/dev/null; sleep 60; done ) &
+_SUDO_KA_PID=$!
+trap 'kill "${_SUDO_KA_PID}" 2>/dev/null || true' EXIT
+
 # 자식 본문 내부의 예기치 못한 실패 위치를 보강 (run_step 의 step_end_fail 과 직교).
 trap 'echo "[install] 실패: line $LINENO" >&2' ERR
+
+# --- 무인 설치(--unattended) 사전/재개 처리 ----------------------------
+# 첫 실행(reboot 전): OPENAI_API_KEY 선수집 + 진행 confirm 1회 + 복귀 자동재개 등록.
+#   → step 6 reboot 후 step12(voice)는 키가 이미 있어 비대화 통과, reboot 도 재confirm 없음.
+# 재개(reboot 후): autostart 항목을 즉시 제거(1회용 — 로그인마다 재발화 방지). sudo 는 이 터미널
+#   에서 위 sudo -v 로 1회 입력됨.
+if [[ "${UNATTENDED}" == "1" ]]; then
+    if step_should_skip a01_reboot; then
+        unattended_remove_resume
+    elif [[ -t 0 ]]; then
+        unattended_collect_secrets "${SCRIPT_DIR}" || true
+        confirm_or_abort "무인 설치를 진행합니다 — 중간에 1회 자동 재부팅하고, 복귀(로그인) 시 자동으로 이어집니다(터미널 자동 오픈, sudo 비번 1회). 계속할까요?"
+        unattended_register_resume "${SCRIPT_DIR}"
+    else
+        echo "[install] 경고: --unattended 인데 비대화형 셸 — 자동 재개를 등록할 수 없습니다." >&2
+        echo "          GUI 세션에서 실행하거나 reboot 후 수동 재실행하세요." >&2
+    fi
+fi
 
 # --- step 1~5: 사전준비 (a01: 커널 베이스라인 / NVIDIA / Docker / ROS2 jazzy / extras) ---
 # kernel-baseline 을 nvidia 보다 먼저: HWE 커널 메타 + 헤더 + modules-extra 를 보장해야
@@ -123,10 +158,18 @@ run_step 5 a01_ros2_extras     bash "${RESOURCE_DIR}/ros2-install.sh"
 # skip 판정은 DONE 만 보므로 다음 실행에서 reboot 를 다시 묻는다 — reboot 동의 전이므로 의도된 동작.
 if ! step_should_skip a01_reboot; then
     step_begin 6 "${STEPS_TOTAL}" a01_reboot
-    confirm_or_abort "사전준비(커널/드라이버/Docker/ROS2) 완료. 드라이버·docker 그룹 적용을 위해 지금 재부팅할까요?"
+    if [[ "${UNATTENDED}" == "1" ]]; then
+        echo "[install] 무인 모드: 자동 재부팅합니다(시작 시 동의 적용)."
+    else
+        confirm_or_abort "사전준비(커널/드라이버/Docker/ROS2) 완료. 드라이버·docker 그룹 적용을 위해 지금 재부팅할까요?"
+    fi
     step_end_ok
     echo
-    echo ">>> 재부팅합니다. 복귀 후 'bash install.sh' 를 다시 실행하면 step 7 부터 이어집니다."
+    if [[ "${UNATTENDED}" == "1" ]]; then
+        echo ">>> 재부팅합니다. 복귀(로그인) 시 자동 재개됩니다 — 수동 실행 불필요."
+    else
+        echo ">>> 재부팅합니다. 복귀 후 'bash install.sh' 를 다시 실행하면 step 7 부터 이어집니다."
+    fi
     sudo reboot
 fi
 
@@ -173,5 +216,13 @@ run_step 14 nvidia_container_toolkit \
 # 다른 머신은 본 step 으로 받아 재현한다. file ID/SHA256 은 resources/config.sh 에 핀.
 run_step 15 container_fetch bash "${SCRIPT_DIR}/containers/fetch-images.sh"
 
+# --- step 16: ethernet 고정 IP (로봇 LAN: .1 그리퍼 / .100 로봇 / .30 host) ---
+# 모든 설치 후 유선 NIC 를 로봇 LAN 고정 IP 로 설정(nmcli). 게이트웨이/DNS 없음 → wifi
+# 인터넷 유지. 멱등. confirm 없음(reversible; 무인 모드는 시작 시 1회 동의로 포괄).
+run_step 16 network_static_ip bash "${RESOURCE_DIR}/network-static-ip.sh"
+
+# 무인 재개 autostart 정리(재개 진입 시 이미 제거됐으면 no-op — 멱등).
+unattended_remove_resume 2>/dev/null || true
+
 state_dump
-echo "install: 전체 15 step 완료 — host 셋업 + 애플리케이션 컨테이너 이미지 확보 종료."
+echo "install: 전체 16 step 완료 — host 셋업 + 컨테이너 이미지 + 네트워크 고정 IP 종료."

@@ -122,15 +122,24 @@ export CYCLONEDDS_URI="${CYCLONEDDS_URI:-file://${CYCLONEDDS_XML}}"
 # 전부 자동 탐지(무선/docker/가상 제외). CI / 특수망에서만 명시 지정.
 : "${DDS_NETIF:=}"
 
+# --- host ethernet 고정 IP (로봇 장비 LAN) ------------------------------
+# install.sh 마지막 step(network_static_ip)이 nmcli 로 유선 NIC 에 이 IP 를 고정한다.
+# 로봇 LAN 구성: .1=OnRobot 그리퍼 / .100=로봇 컨트롤러 / .30=host. 로봇·그리퍼와 같은
+# 서브넷이어야 통신 가능. 게이트웨이/DNS 는 두지 않는다 — 인터넷은 wifi 로 나가며, 이
+# 연결이 기본 경로를 잡으면 인터넷이 끊긴다(never-default). HOST_ETH_NETIF 비우면 자동 탐지.
+: "${HOST_ETH_IP:=192.168.1.30}"
+: "${HOST_ETH_PREFIX:=24}"
+: "${HOST_ETH_NETIF:=}"
+
 # ROS_DOMAIN_ID 단일 진실 소스. host(activate.sh)와 compose 두 서비스가 같은 값을
 # 봐야 discovery 성립. 미설정 셸에서도 결정적이도록 명시 핀.
 export ROS_DOMAIN_ID="${ROS_DOMAIN_ID:-42}"
 
 # --- Progress 표시 ([n/total] 시각화) ---------------------
 # 통합 진입점 install.sh 의 전체 단계 수 (a01:6 + a02:4 + a03:1 + a04:1 + dds-tuning:1
-# + nvidia-container-toolkit:1 + container-fetch:1).
+# + nvidia-container-toolkit:1 + container-fetch:1 + network-static-ip:1).
 # install.sh 의 STEPS_TOTAL 과 일치해야 한다(run-step.sh 의 fallback 으로도 쓰임). 단계 추가 시 함께 갱신.
-: "${TOTAL_STEPS:=15}"
+: "${TOTAL_STEPS:=16}"
 
 # --- Self-check ----------------------------------------------------------
 # 자식 스크립트가 진입 직후 호출하면 필수 변수 누락 즉시 catch.
