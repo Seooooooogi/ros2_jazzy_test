@@ -36,9 +36,12 @@ fi
 # 2) OPENAI_API_KEY 확보 — 이미 설정돼 있으면 통과, 비어 있으면 그 자리에서 직접 입력받아
 #    .env 에 기록한다. 입력값은 화면에 표시하지 않고(read -s) 콘솔/로그에도 출력하지 않는다.
 #    음성 컨테이너가 이 .env 를 runtime mount 로 사용.
-_load_env "${ENV_FILE}"
-if _require_env OPENAI_API_KEY 2>/dev/null; then
-    echo "voice: OPENAI_API_KEY 확인됨 (음성 컨테이너가 .env mount 로 사용)." >&2
+# 실수로 추적 파일(.env.example)에 넣은 실제 키가 있으면 .env 로 옮기고 example 복원(secret 방지).
+_relocate_example_secret "${ENV_FILE}" "${ENV_EXAMPLE}" OPENAI_API_KEY
+# 키 존재 판단은 "쉘 환경변수" 가 아니라 ".env 파일 내용" 으로 한다 — 컨테이너는 .env 만 읽으므로
+# (쉘 env 를 상속하지 않음), 쉘에 export 돼 있어도 .env 가 비면 컨테이너에서 키 누락으로 죽는다.
+if grep -qE '^[[:space:]]*OPENAI_API_KEY=.+' "${ENV_FILE}"; then
+    echo "voice: OPENAI_API_KEY 확인됨 (.env — 음성 컨테이너가 mount 로 사용)." >&2
 elif [[ -t 0 ]]; then
     echo "voice: OPENAI_API_KEY 가 .env 에 없습니다. 지금 입력하면 ${ENV_FILE} 에 저장합니다." >&2
     echo "       입력값은 화면에 표시되지 않습니다. 비워 두고 Enter 하면 건너뜁니다." >&2

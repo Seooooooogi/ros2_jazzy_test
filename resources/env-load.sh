@@ -71,3 +71,37 @@ _set_env_key() {
     mv "$tmp" "$file"
     chmod 600 "$file"
 }
+
+# Public: 추적 파일(.env.example)에 실수로 넣은 실제 KEY 값을 .env 로 옮기고 example 은
+# placeholder 로 복원한다. .env.example 은 git 추적 대상이라 실제 값이 남으면 secret 유출.
+# 값은 절대 화면/로그에 출력하지 않는다. 멱등 — example 에 값이 없으면 아무것도 안 한다.
+# 인자: <env_file> <env_example> <key>
+_relocate_example_secret() {
+    local env_file="$1" example="$2" key="$3"
+    [[ "$key" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] || { echo "env-load: invalid key name" >&2; return 1; }
+    [[ -f "$example" ]] || return 0
+    # example 에서 값이 있는('=' 뒤 내용 존재) KEY 줄을 찾는다(주석 처리 여부 무관). 값 미출력.
+    local line val
+    line="$(grep -E "^[[:space:]]*#?[[:space:]]*${key}=.+" "$example" 2>/dev/null | head -1)" || true
+    [[ -z "$line" ]] && return 0
+    val="${line#*=}"
+    [[ "$val" =~ ^[[:space:]]*$ ]] && return 0   # 빈/공백 placeholder 는 무시
+    echo "env-load: 경고 — 추적 파일 ${example} 에 ${key} 의 실제 값이 있습니다(secret 유출 위험)." >&2
+    echo "          ${env_file} 로 옮기고 ${example} 을 placeholder 로 되돌립니다(값 미표시)." >&2
+    # .env 보장 후 키 이전(_set_env_key 는 값을 출력하지 않음).
+    [[ -f "$env_file" ]] || { : > "$env_file"; chmod 600 "$env_file"; }
+    _set_env_key "$env_file" "$key" "$val"
+    # example 의 해당 줄을 빈 placeholder('# KEY=')로 복원해 값 제거.
+    local tmp l
+    tmp="$(mktemp "${example}.XXXXXX")" || return 1
+    chmod 600 "$tmp"
+    while IFS= read -r l || [[ -n "$l" ]]; do
+        if [[ "$l" =~ ^[[:space:]]*#?[[:space:]]*${key}= ]]; then
+            printf '# %s=\n' "$key" >> "$tmp"
+        else
+            printf '%s\n' "$l" >> "$tmp"
+        fi
+    done < "$example"
+    mv "$tmp" "$example"
+    echo "env-load: ${key} 이전 완료 — 노출됐던 키는 rotate 를 권장합니다." >&2
+}

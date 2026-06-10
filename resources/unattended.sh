@@ -24,9 +24,11 @@ unattended_collect_secrets() {
             return 1
         fi
     fi
-    _load_env "${env_file}" 2>/dev/null || true
-    if _require_env OPENAI_API_KEY 2>/dev/null; then
-        echo "[unattended] OPENAI_API_KEY 확인됨 — voice step 비대화 통과." >&2
+    # 추적 파일(.env.example)에 실제 키가 있으면 .env 로 옮기고 example 복원(secret 방지).
+    _relocate_example_secret "${env_file}" "${env_example}" OPENAI_API_KEY
+    # 키 존재 판단은 .env 파일 내용으로(쉘 env 아님) — 컨테이너는 .env 만 읽는다.
+    if grep -qE '^[[:space:]]*OPENAI_API_KEY=.+' "${env_file}"; then
+        echo "[unattended] OPENAI_API_KEY 확인됨 (.env) — voice step 비대화 통과." >&2
         return 0
     fi
     echo "[unattended] OPENAI_API_KEY 입력(화면 미표시, 비우고 Enter=건너뜀):" >&2
