@@ -538,6 +538,8 @@
 
 ### ADR-016: RMW 표준 = CycloneDDS + 대용량 토픽 커널/소켓 버퍼 + 유선 NIC whitelist 자동화 (2026-06-05)
 
+> **부분 supersede (2026-06-10, ADR-020)**: "유선 NIC 만 whitelist(wifi 제외)" 부분은 폐기 — 인터페이스를 loopback + 전체 물리 NIC 로 변경(같은 호스트는 loopback 우선). RMW=cyclonedds 와 커널/소켓 버퍼 결정은 유효.
+
 **Date**: 2026-06-05
 
 **Context**:
@@ -645,3 +647,37 @@
 
 **Reopen 조건**:
 - 이미지가 Docker Hub / Google Drive 에 배포되면 → install.sh 컨테이너 단계를 pull/download 로 전환 + main 통합 재검토(본 ADR 의 향후 전환 계획 실행).
+
+---
+
+### ADR-020: cyclonedds 인터페이스 = loopback + 전체 물리 NIC(유선·무선) — ADR-016 의 "유선 only whitelist" supersede (2026-06-10)
+
+**Date**: 2026-06-10
+
+**Context**:
+- 다른 노트북(fleet) 클린설치로 robot_move 검증 중, 로봇(유선 연결)·카메라는 떠도 host `pick_and_place` 가 yolo 컨테이너의 `get_depth_position` service 를 못 보고 무한 대기. voice 컨테이너 로그엔 `ddsi_udp_conn_write to udp/192.168.1.35:<port> failed with retcode -1` 도배(노트북 유선 IP = 192.168.1.35).
+- 원인 분리(본 머신 재현으로 확정):
+  1. 이 배포는 **모든 DDS 참가자가 같은 호스트**다 — 로봇은 DSR API(TCP)라 DDS 가 아니고, 카메라는 host USB, 두 컨테이너는 `network_mode: host`(같은 netns). 즉 host↔컨테이너는 본래 loopback 으로 붙는다.
+  2. ADR-016 의 `cyclonedds.xml` 이 **유선 NIC 만 whitelist** → 모든 참가자가 자기 locator 를 유선 IP(192.168.1.35) 하나로만 광고. discovery(멀티캐스트)는 되지만 data unicast 를 192.168.1.35 로 보내다 실패(노트북의 wifi 가 같은 192.168.1.0/24 → 커널이 자기 IP 를 wifi 로 내보내 송신 -1). 같은 호스트인데 loopback fallback 이 없어 전멸.
+  3. 본 머신은 유선이 carrier-down 이라 cyclonedds 가 loopback 으로 떨어져 멀쩡했다(= 증상이 노트북에서만 발현, "유선 up" 차이).
+- "docker NIC 제외가 원인" 가설은 반증(컨테이너 `network_mode: host` 라 docker0 은 DDS 경로 아님 — 유선-only xml + 컨테이너 mount 그대로도 same-host 통신 정상 재현).
+- 사용자 결정(2026-06-10): 향후 여러 머신 간 통신 가능성까지 고려해 인터페이스를 전체 허용으로 전환.
+
+**Decision**:
+- **cyclonedds `<Interfaces>` = loopback(lo) + 전체 물리 외부 NIC(유선·무선).** `resources/cyclonedds.xml.in` + `resources/dds-tuning.sh`:
+  - `lo` 를 항상 선두에 `priority="default" multicast="true"` 로 추가. cyclonedds 가 loopback 에 더 높은 우선순위를 줘 **같은 호스트 매칭엔 127.0.0.1 을 선택**(실측: writer addrset 이 udp/127.0.0.1 로 해석, data 송신의 대부분이 127.0.0.1) → 외부 IP unicast-to-self 라우팅 실패를 원천 회피.
+  - 물리 외부 NIC 는 유선·무선 **모두** 자동 탐지(과거의 무선 제외 라인 삭제)해 cross-host 경로로 함께 화이트리스트, `presence_required="false"`.
+  - `docker*/veth*/br-*/virbr*/bond*/tap*/tun*` 가상은 계속 제외 — 타 머신 경로가 아니고 쓸모없는 locator 만 늘려 -1 노이즈를 만든다.
+  - `<General><AllowMulticast>true` 추가(loopback SPDP discovery 동작 조건).
+- **외부 NIC 0개여도 exit 1 하지 않는다** — lo 단독으로 same-host 는 동작. cross-host 필요 시 `DDS_NETIF` 로 명시(경고만 출력). ADR-016 의 "전 포트 down → 실패(의도)" 전제를 완화.
+- ADR-016 의 **커널/소켓 버퍼(sysctl + XML 64MB)는 그대로 유지** — 본 결정은 인터페이스 선택만 바꾼다.
+
+**Consequences**:
+- 노트북·fleet 어디서든 host↔컨테이너가 유선/무선 carrier·서브넷 상태와 무관하게 항상 붙는다(loopback). 여러 머신 간 통신은 외부 NIC 로 가능.
+- 대용량 토픽(카메라)도 같은 호스트라 loopback(MTU 65536)로 전달 → fragment 가 적어 오히려 유리. 단 **카메라 30Hz 실기 재확인은 후속(OPEN)** — loopback 경로라 통과 예상이나 단정 안 함. **close 조건: cobot2_ws 실기에서 RealSense raw 토픽 30Hz @ loopback 확인**(미확인 시 이 항목 OPEN 유지).
+- 렌더 산출물(`cyclonedds.xml`)은 여전히 머신 종속 → 레포 미추적(템플릿·스크립트만).
+- COMPATIBILITY 의 "유선 NIC 자동 whitelist(wifi 제외)" 서술을 본 결정이 supersede.
+
+**Reopen 조건**:
+- loopback 우선순위가 안 먹는 cyclonedds 버전/토폴로지가 나오면 → `priority` 명시값 상향 또는 same-host 전용 `<Discovery><Peers>` 재설계.
+- 멀티캐스트 차단망에서 외부 NIC discovery 가 안 되면 → unicast peer 목록 기반으로 전환.
