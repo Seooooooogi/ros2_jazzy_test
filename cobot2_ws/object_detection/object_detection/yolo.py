@@ -55,7 +55,13 @@ class YoloModel:
         print("classes: ")
         print(results[0].names)
         detections = self._aggregate_detections(results)
-        label_id = self.reversed_class_dict[target]
+        # 학습 클래스에 없는 target 은 KeyError 로 노드를 죽이지 않고 미검출로 처리한다
+        # (voice 가 추출한 키워드가 모델 클래스 밖일 수 있음). 호출부(detection.py)는
+        # (None, None) 을 "No detection found" 로 받아 depth_position=[0,0,0] 을 응답한다.
+        label_id = self.reversed_class_dict.get(target)
+        if label_id is None:
+            print(f"Unknown target '{target}' — not in model classes {list(self.reversed_class_dict.keys())}")
+            return None, None
         print("label_id: ", label_id)
         print("detections: ", detections)
 
