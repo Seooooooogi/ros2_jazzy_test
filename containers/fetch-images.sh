@@ -37,14 +37,16 @@ gdrive_download() {
     local base="https://drive.usercontent.google.com/download"
     local cookie; cookie="$(mktemp)"
     local html; html="$(curl -sL -c "${cookie}" "${base}?id=${id}&export=download")"
+    # --no-progress-meter: 진행률 막대(curl 은 stderr 로 출력)를 끈다. run-step.sh 가 stderr 를
+    # 콘솔에도 보내므로 기존 -# 진행바('###..%')가 콘솔에 노출됐다. -s 와 달리 에러는 그대로 남는다.
     if printf '%s' "${html}" | grep -q 'name="confirm"'; then
         local confirm uuid
         confirm="$(printf '%s' "${html}" | grep -o 'name="confirm" value="[^"]*"' | sed -E 's/.*value="([^"]*)".*/\1/')"
         uuid="$(printf '%s' "${html}" | grep -o 'name="uuid" value="[^"]*"' | sed -E 's/.*value="([^"]*)".*/\1/')"
-        curl -fL -# --retry 3 --retry-delay 5 -c "${cookie}" -o "${out}" \
+        curl -fL --no-progress-meter --retry 3 --retry-delay 5 -c "${cookie}" -o "${out}" \
             "${base}?id=${id}&export=download&confirm=${confirm}&uuid=${uuid}"
     else
-        curl -fL -# --retry 3 --retry-delay 5 -c "${cookie}" -o "${out}" \
+        curl -fL --no-progress-meter --retry 3 --retry-delay 5 -c "${cookie}" -o "${out}" \
             "${base}?id=${id}&export=download"
     fi
     rm -f "${cookie}"
