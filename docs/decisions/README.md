@@ -681,3 +681,36 @@
 **Reopen 조건**:
 - loopback 우선순위가 안 먹는 cyclonedds 버전/토폴로지가 나오면 → `priority` 명시값 상향 또는 same-host 전용 `<Discovery><Peers>` 재설계.
 - 멀티캐스트 차단망에서 외부 NIC discovery 가 안 되면 → unicast peer 목록 기반으로 전환.
+
+---
+
+### ADR-021: host 유선 NIC 로봇 LAN 고정 IP 자동화 + 무인 설치(`--unattended`) (2026-06-10)
+
+**Date**: 2026-06-10
+
+**Context**:
+- 로봇 장비는 유선 LAN `192.168.1.0/24` 에 묶인다: `.1`=OnRobot 그리퍼, `.100`=로봇 컨트롤러, host=그 외(사용자 선택 `.30`). host 유선 NIC 가 같은 서브넷 고정 IP 여야 그리퍼·로봇과 통신. 인터넷은 wifi 로 나가므로 유선엔 게이트웨이/DNS 를 두면 안 된다(기본 경로를 유선이 잡으면 인터넷 끊김).
+- 그동안 고정 IP 설정은 수동(GUI)이라 클린설치마다 누락·실수 여지. 또 install.sh 는 step 6 reboot 후 사용자가 `bash install.sh` 를 다시 쳐야 이어져, 클린설치가 hands-off 가 아니었다.
+- 사용자 결정(2026-06-10): ① 설치 마지막에 고정 IP 자동 설정, ② reboot 전후를 무인으로(시작 시 자격증명·동의만 받고 자동 재개).
+
+**Decision**:
+- **고정 IP 자동화** — `resources/network-static-ip.sh`(install.sh step 16). `nmcli`(NetworkManager. netplan 은 NM 에 위임)로 유선 NIC 의 기존 ethernet 프로필을 찾아(활성 없으면 저장 프로필, 그래도 없으면 생성) `ipv4.method manual` + `${HOST_ETH_IP}/${HOST_ETH_PREFIX}` + **gateway/DNS 없음 + `never-default yes`**(wifi 인터넷 보호) + `interface-name`/`autoconnect` 핀. 멱등. 케이블 미연결이어도 설정 영속(`con up` best-effort). 값은 `config.sh` 단일 소스(`HOST_ETH_IP=192.168.1.30`/`HOST_ETH_PREFIX=24`/`HOST_ETH_NETIF=`).
+  - **per-step confirm 없음**(사용자 결정): nmcli IP 변경은 reversible 이라 "되돌릴 수 없는 작업" confirm 범위 밖. 무인 모드는 시작 시 1회 동의로 포괄.
+- **무인 설치** `bash install.sh --unattended`(opt-in 플래그, 무플래그=기존 수동 동작 불변). 메커니즘:
+  - 시작 시(첫 실행·tty): `OPENAI_API_KEY` 선수집(→`.env`, 화면/로그 미표시) + 진행 confirm 1회 + GUI autostart 등록. → step 12(voice)는 키가 이미 있어 비대화 통과, step 6 reboot 도 재confirm 없음(시작 동의로 포괄).
+  - reboot 후: GNOME autostart(`~/.config/autostart/*.desktop`)가 로그인 시 터미널에서 `install-resume-launcher.sh` → `install.sh --unattended` 재기동. 재개 진입 시 autostart 를 **즉시 제거(one-shot)** — 로그인마다 재발화·실패 시 재발화 방지. 완료 시에도 제거(멱등).
+  - sudo: 재개 터미널에서 `sudo -v` 1회 입력 + **keepalive**(60s 갱신, 전 모드 공통)로 긴 step 중 재입력 없음. → 임시 NOPASSWD 같은 권한 상승 없음(대안 A 기각).
+  - 총 사용자 입력: **OPENAI_API_KEY 1 + confirm 1 + (복귀 후) sudo 비번 1**.
+- 헬퍼 분리: `resources/unattended.sh`(자격증명 선수집·autostart 등록/제거), `resources/install-resume-launcher.sh`(autostart 가 호출하는 1회용 런처 — .desktop Exec 중첩 따옴표 회피).
+
+**Consequences**:
+- 클린설치 한 번으로 host 셋업+컨테이너 이미지+네트워크 고정 IP 완성, reboot 도 사람 손 거의 없이 통과. `STEPS_TOTAL 15→16`(config.sh `TOTAL_STEPS` 동기).
+- 렌더/생성물 중 머신 종속(autostart .desktop, NM 연결, .env)은 추적 안 함. 스크립트·config 만 추적.
+- **전제**: GUI(GNOME) 세션 + 터미널(gnome-terminal/x-terminal-emulator). 비 GUI/비대화형 `--unattended` 는 자동 재개 불가 → 경고 후 수동 재개 안내. auto-login 미설정 시 복귀 후 로그인 1회 필요.
+- 무인 재개 실패 시 자동 재시도 없음(one-shot 의도) — 터미널은 열려 결과 표시, 사용자가 수동 재개/`--reset`.
+- 물리 유선 NIC 가 아예 없는 머신에선 step 16 이 benign skip 으로 **완료(DONE) 기록**된다(설치 전체를 막지 않기 위함 — 케이블만 미연결인 경우는 NIC 가 탐지되어 설정이 영속). 이후 NIC 연결 시 `bash resources/network-static-ip.sh` 단독 재실행으로 적용한다(install.sh 재실행은 step skip).
+- main 브랜치 편입은 후속(install.sh 브랜치 분기 정책 ADR-019).
+
+**Reopen 조건**:
+- 완전 무인(복귀 후 sudo 비번도 제거)이 필요하면 → 임시 NOPASSWD sudoers + systemd 부팅 서비스(대안 A) 재검토(보안 트레이드오프·cleanup 신중).
+- DHCP/복수 로봇 LAN 동시 구성, headless 서버 무인이 필요하면 → 해당 케이스 별도 설계.

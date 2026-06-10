@@ -21,6 +21,10 @@ bash install.sh
 
 # 3) reboot 발생 시 부팅 후 같은 명령 재실행 → 멈춘 다음 단계부터 이어서 진행
 bash install.sh
+
+# (선택) 무인 설치 — 시작 시 OPENAI_API_KEY + 진행 동의만 받고 reboot·재개를 자동 처리.
+#   reboot 후 GUI 로그인 시 터미널이 자동으로 떠 이어진다(복귀 후 sudo 비번 1회). GUI 세션 필요.
+bash install.sh --unattended
 ```
 
 - **재개 가능(resumable)** — 실패/리부트로 끊겨도 마지막 성공 단계 기록
@@ -48,6 +52,7 @@ bash a04-voice-precheck.sh    # 음성 점검
 ## 자주 쓰는 옵션
 
 ```bash
+bash install.sh --unattended  # 무인 설치 (reboot 자동·복귀 시 자동 재개; GUI 세션 필요)
 bash install.sh --status   # 어느 단계까지 끝났는지 상태 출력
 bash install.sh --reset    # 설치 상태 초기화 (처음부터 다시)
 bash install.sh --help     # 도움말

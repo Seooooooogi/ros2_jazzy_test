@@ -54,3 +54,6 @@ corecode/
 
 # codegraph 코드 인덱스 — 소스에서 재생성 가능한 산출물이라 추적 제외.
 .codegraph/
+
+# 브레인스토밍/스펙 설계 산출물 (로컬 작업물 — 배포 대상 아님)
+docs/superpowers/
