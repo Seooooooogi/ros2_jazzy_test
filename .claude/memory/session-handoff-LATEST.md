@@ -4,20 +4,37 @@
 > Forward-looking only — 본 세션에서 한 일이 아니라 다음 세션이 할 일.
 > 두 머신 공유 — **[실측]** 머신(로봇/카메라 실기) + **[문서]** 머신(git/문서/lessons). 항목에 담당 표기.
 
+## ⚠ 다음 세션 — 무엇보다 먼저 (사용자 지시 2026-06-10)
+**사용자가 내일 어떤 명령/요청으로 시작하든, 본론 전에 먼저 이걸 안내하고 확인받은 뒤 진행한다:**
+
+→ **YOLO 이미지 재빌드 + 드라이브 재업로드.** yolo.py KeyError 수정(`1de572b`)이 소스엔 반영됐지만 **드라이브의 yolo 이미지는 옛 버전** → 클린설치 fetch(step 15)가 옛 이미지를 받아 수정 미반영. 적용 절차:
+1. `set -a; source resources/config.sh; set +a; bash containers/build-all.sh` — yolo 재빌드(Dockerfile 레이어상 torch 재다운로드 가능, 수십 분).
+2. `docker save local/ros2-jazzy-yolo:dev -o /tmp/yolo.tar` — tar ≈ 4.3GB(`DOCKERHUB_USER` 설정 시 그 태그로).
+3. `sha256sum /tmp/yolo.tar` → `resources/config.sh` 의 `YOLO_IMAGE_SHA256` 갱신(새 파일로 올리면 `YOLO_IMAGE_GDRIVE_ID` 도). 변경 커밋/푸시.
+4. **`/tmp/yolo.tar` 를 공개 구글 드라이브에 업로드 — 사용자 Drive 계정 작업(AI 가 4.3GB 업로드 못 함).** 기존 file ID 자리에 교체 또는 새 파일+ID 갱신. "링크 있는 사람 보기" 공유 확인.
+- **대안**: 검증 머신에서 fetch 대신 `bash containers/build-all.sh` 로 로컬 빌드(드라이브 round-trip 회피, 더 빠를 수 있음).
+
 ## Last updated
-2026-06-09 — **[실측/문서]** ① voice 컨테이너 e2e(wakeword→STT→LLM→service `/get_keyword`→실로봇 pick&place + pos1/2/3 목적지 배치) 검증 완료. ② 통합 bringup 을 전용 `cobot2_bringup` 패키지로 분리(robot_control 제외, host IP 192.168.1.100 고정). ③ install.sh step14 를 빌드→**공개 구글 드라이브에서 이미지 tar 받아 docker load**(`fetch-images.sh`)로 전환 — voice fetch 실측 통과. ④ nvidia-container-toolkit 을 install.sh **step14(reboot 이후)** 에서 설치 — 클린설치가 GPU 런타임까지 자동(reboot 전 설치는 드라이버 모듈 미로드로 실패해 reboot 뒤로 분리). 전체 **15 step**(toolkit 추가). **클린설치 검증은 이 머신 아닌 다른 노트북(fleet)에서 진행 예정.** 직전 2026-06-08: YOLO 컨테이너 e2e + 실로봇 pick.
+2026-06-10 — **[문서]** 전부 origin push 완료(branch `feat/application-containers`):
+① **DDS 인터페이스 = loopback + 전체 물리 NIC**(ADR-020) — 같은 호스트 노드끼리 유선 IP 만 locator 로 광고해 unicast-to-self 가 라우팅 충돌로 실패(`ddsi_udp_conn_write retcode -1`)하던 문제 수정. `lo` 를 우선순위로 추가(같은 호스트=127.0.0.1), 외부 NIC 는 cross-host 경로. `dds-tuning.sh`+`cyclonedds.xml.in`. **ADR-016 의 "유선 only whitelist" 부분 supersede.**
+② **ethernet 고정 IP 자동화**(install.sh **step 16**, `network-static-ip.sh`, ADR-021) — nmcli 로 유선 NIC 를 `192.168.1.30/24`(config.sh `HOST_ETH_IP`) 고정, gateway/DNS 없음(`never-default`→wifi 인터넷 유지). 로봇 LAN: .1 그리퍼/.100 컨트롤러/.30 host. **STEPS_TOTAL 15→16.**
+③ **무인 설치 `bash install.sh --unattended`**(ADR-021) — 시작 시 OPENAI_API_KEY+confirm 1회 → 자동 reboot → GNOME autostart 가 복귀 시 자동 재개(one-shot)+sudo keepalive. 무플래그=기존 수동 동작 유지.
+④ **OPENAI_API_KEY 처리 버그 수정** — voice 컨테이너 crash-loop(키 없음→무한재시작→`/get_keyword` 미존재→"통신 안 됨")의 근본 원인. (a) 키 검사를 쉘 env 가 아니라 **`.env` 파일 내용** 기준으로(voice-env-check + unattended), (b) `.env.example`(추적 파일)에 실수로 넣은 실제 키 감지 시 `.env` 로 자동 이전+placeholder 복원(`_relocate_example_secret`). **노출됐던 OPENAI 키 rotate 권장.**
+⑤ **컨테이너 다운로드 진행바 콘솔 제거**(`fetch-images.sh` `-#`→`--no-progress-meter`).
+⑥ **YOLO KeyError 수정** — 학습 클래스 밖 target 에 `reversed_class_dict[target]` KeyError 로 노드 사망 → `.get()`+미검출(None,None). 3 copies(object_detection + 레거시 2). **단 이미지 재빌드 전엔 fetch 가 옛 이미지라 런타임 미반영(아래 Next Action).**
+직전 2026-06-09: voice 컨테이너 e2e + cobot2_bringup 분리 + 드라이브 이미지 fetch 전환.
 
 ---
 
 ## Next Actions (priority order)
 
-1. **[실측] 전체 클린설치 검증 — 다른 노트북(fleet 머신)에서 진행** — 최신 origin `git clone` → `bash install.sh`. 새 머신엔 이미지가 없어 **step14 가 드라이브에서 실제 다운로드**(yolo 4.4GB 첫 실측 자연 발생 — `docker rmi` 불요). nvidia-container-toolkit 은 step14(reboot 이후)에서 자동 설치(SKIP_IF_NO_GPU=1 — GPU 없으면 정상 skip). a01(step1~6) NVIDIA+reboot destructive, step12 `.env` OPENAI_API_KEY interactive. **점검: 드라이브 파일 2개가 "링크 있는 사람 보기" 공유여야 다른 네트워크/무계정에서 무인 curl 가능**(이 머신 fetch 성공은 동일 계정/네트워크 영향 배제 못 함).
+1. **[실측] 전체 클린설치 검증 — 다른 노트북(fleet 머신)에서 진행** — 최신 origin `git clone` → `bash install.sh`. 새 머신엔 이미지가 없어 **step14 가 드라이브에서 실제 다운로드**(yolo 4.4GB 첫 실측 자연 발생 — `docker rmi` 불요). nvidia-container-toolkit 은 step14(reboot 이후)에서 자동 설치(SKIP_IF_NO_GPU=1 — GPU 없으면 정상 skip). a01(step1~6) NVIDIA+reboot destructive, step12 `.env` OPENAI_API_KEY interactive. **점검: 드라이브 파일 2개가 "링크 있는 사람 보기" 공유여야 다른 네트워크/무계정에서 무인 curl 가능**(이 머신 fetch 성공은 동일 계정/네트워크 영향 배제 못 함). **(2026-06-10 갱신)** 이제 **전체 16 step**(step 15 드라이브 fetch, **step 16 ethernet 고정 IP** `192.168.1.30/24` 자동). `bash install.sh --unattended` 로 reboot·재개 무인 가능(GUI 세션, 복귀 후 sudo 비번 1회). **OPENAI_API_KEY 처리 버그 수정됨** — 쉘 env 에 키가 있든 `.env.example` 에 잘못 넣든 자동 처리 → 지난번 voice crash-loop 재발 안 함. yolo KeyError 도 미검출 처리(단 이미지 재빌드 전엔 옛 이미지 — 상단 배너 참조).
 
 2. **[실측/문서] cobot2_bringup 클린설치 자동 빌드 검증** — `dsr-project-install.sh` HOST_PKGS 에 등록됨(cp -a 복사 경로). 다른 노트북은 cp 경로 그대로 — clone → 빌드 시 `ros2 launch cobot2_bringup bringup_all.launch.py` resolve 확인. (이 머신은 검증용 symlink 라 무관.)
 
 3. **[문서] Dockerfile 레이어 재정렬** — `containers/yolo-detection/Dockerfile`: `COPY object_detection` 이 torch pip 레이어보다 앞 → 노드 코드만 고쳐도 torch 재다운로드. 무거운 pip 레이어를 소스 COPY 앞으로. **이미지 재빌드 시 드라이브 tar/SHA256 갱신 동반**(config.sh `*_IMAGE_SHA256` + 재업로드 — 안 하면 fetch 체크섬 불일치로 실패).
 
-4. **[문서] pick_and_place_text spin 버그** — `pick_and_place_text/{detection.py,yolo.py}` 에 `rclpy.spin_once` 재진입 버그 잔존(object_detection 만 수정). 동일 패치 vs 레거시화 결정.
+4. **[문서] pick_and_place_text/voice spin 버그** — `{detection.py,yolo.py}` 의 `rclpy.spin_once` 재진입 버그 잔존(object_detection 만 spin 수정). **KeyError(`reversed_class_dict[target]`)는 2026-06-10 에 3 copies 전부 `.get()`+미검출로 수정 완료.** 레거시 spin 버그: 동일 패치 vs 레거시화 결정.
 
 5. **[문서] 모델 가중치 중복** — `object_detection/resource/yolov8n_tools_0122.pt`(6.3MB) + `pick_and_place_text/resource/` 동일본. dedup vs pick_and_place_text 레거시화.
 
@@ -47,6 +64,8 @@
 - pick_and_place_text spin 버그 미수정(robot_control 이 컨테이너 detection 호출로 우회 중).
 - fleet 타 머신: DSR 패치 + python3-pymodbus + nvidia-container-toolkit 미반영.
 - yolo 이미지 드라이브 다운로드 미실측(4.4GB) — voice 만 실측. 클린설치서 첫 검증.
+- **yolo KeyError 수정(2026-06-10)은 소스만 반영 — 이미지 미재빌드라 fetch 시 옛 이미지.** 상단 ⚠ 배너 = 재빌드+드라이브 재업로드 먼저.
+- **노출됐던 OPENAI API 키 rotate 권장**(진단 중 터미널 노출). 현재 `.env`(gitignore)에 있고 추적 파일엔 없음(유출 안 됨).
 
 ---
 
