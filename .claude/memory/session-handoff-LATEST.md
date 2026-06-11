@@ -4,17 +4,17 @@
 > Forward-looking only — 본 세션에서 한 일이 아니라 다음 세션이 할 일.
 > 두 머신 공유 — **[실측]** 머신(로봇/카메라 실기) + **[문서]** 머신(git/문서/lessons). 항목에 담당 표기.
 
-## ⚠ 다음 세션 — 무엇보다 먼저 (사용자 지시 2026-06-10)
-**사용자가 내일 어떤 명령/요청으로 시작하든, 본론 전에 먼저 이걸 안내하고 확인받은 뒤 진행한다:**
+## 다음 세션 — 무엇보다 먼저
+**(2026-06-10 의 "YOLO 재빌드 + 드라이브 재업로드" 지시는 2026-06-11 완료 — 아래 Last updated ① 참조. 더 이상 선행 작업 아님.)**
 
-→ **YOLO 이미지 재빌드 + 드라이브 재업로드.** yolo.py KeyError 수정(`1de572b`)이 소스엔 반영됐지만 **드라이브의 yolo 이미지는 옛 버전** → 클린설치 fetch(step 15)가 옛 이미지를 받아 수정 미반영. 적용 절차:
-1. `set -a; source resources/config.sh; set +a; bash containers/build-all.sh` — yolo 재빌드(Dockerfile 레이어상 torch 재다운로드 가능, 수십 분).
-2. `docker save local/ros2-jazzy-yolo:dev -o /tmp/yolo.tar` — tar ≈ 4.3GB(`DOCKERHUB_USER` 설정 시 그 태그로).
-3. `sha256sum /tmp/yolo.tar` → `resources/config.sh` 의 `YOLO_IMAGE_SHA256` 갱신(새 파일로 올리면 `YOLO_IMAGE_GDRIVE_ID` 도). 변경 커밋/푸시.
-4. **`/tmp/yolo.tar` 를 공개 구글 드라이브에 업로드 — 사용자 Drive 계정 작업(AI 가 4.3GB 업로드 못 함).** 기존 file ID 자리에 교체 또는 새 파일+ID 갱신. "링크 있는 사람 보기" 공유 확인.
-- **대안**: 검증 머신에서 fetch 대신 `bash containers/build-all.sh` 로 로컬 빌드(드라이브 round-trip 회피, 더 빠를 수 있음).
+현재 최우선 = Next Actions #1 = **다른 노트북(fleet)에서 전체 클린설치 검증.** 새 yolo 이미지(KeyError 수정본)가 드라이브에 올라가 있어 그 머신 step15 fetch 가 수정본을 받는다. 드라이브 도달성/크기 검증은 [문서] 머신에서 통과(무인증 curl, Content-Length 일치) — 단 동일 네트워크라 타 네트워크/무계정 실측은 fleet 머신에서 최종 확인.
 
 ## Last updated
+2026-06-11 (후속) — **[실측+문서]** YOLO 이미지 재빌드 + 드라이브 재배포 완료(2커밋 push, `f874261`+`12c6fb1`):
+① **YOLO Dockerfile 레이어 재정렬**(`f874261`) — torch 설치를 노드 소스 COPY 앞으로 이동. 노드 코드만 고쳐도 torch(최중량 레이어)가 재다운로드되던 문제 제거. venv 는 전역 PATH 미등록·`/opt/venv/bin` 명시 호출 → colcon build 는 시스템 python 유지(콘솔스크립트 shebang 동작 보존, `entrypoint.sh` PYTHONPATH 우회 그대로).
+② **재빌드 + 검증** — `build-all.sh` 게이트 PASS(secret 없음, yolo/voice import smoke, voice tflite predict). 이미지 내부 `object_detection/yolo.py` 에 `.get(target)`+미검출 처리 반영 확인 → KeyError 수정이 드디어 배포 이미지에 포함.
+③ **드라이브 재배포 + SHA 갱신**(`12c6fb1`) — `docker save` tar(4.62GB = 4620719104B) → 드라이브 기존 file ID 버전 교체(ID/공유 유지) → `config.sh YOLO_IMAGE_SHA256` = `4b292639…` 갱신. 무인증 curl 도달성 + Content-Length 일치 검증 통과. **VOICE 미변경(재업로드 불요).**
+
 2026-06-11 — **[문서]** 전부 origin push 완료(branch `feat/application-containers`, 4커밋):
 ① **DDS 도메인 단일값 일치**(`43fa06c`) — `.env.example` 의 `ROS_DOMAIN_ID` 예시가 `0` 이라 살려 쓰면 host(기본 42)와 컨테이너가 다른 도메인에 떠 노드가 조용히 서로 못 찾던 풋건. 예시를 `42`(단일 진실 소스 = `resources/config.sh`)에 맞추고 "바꾸면 host·양 컨테이너 동일 값 유지" 경고 주석 추가.
 ② **문서 정정** — README 실기 기동 예시 placeholder `<controller-ip>`→실제 `192.168.1.100`(`ad562cd`); 결정기록(`docs/decisions`) 검증 명령 `docker exec rokey-yolo`→`docker compose exec yolo-detection`(`9d01749`).
@@ -30,7 +30,7 @@
 
 2. **[실측/문서] cobot2_bringup 클린설치 자동 빌드 검증** — `dsr-project-install.sh` HOST_PKGS 에 등록됨(cp -a 복사 경로). 다른 노트북은 cp 경로 그대로 — clone → 빌드 시 `ros2 launch cobot2_bringup bringup_all.launch.py` resolve 확인. (이 머신은 검증용 symlink 라 무관.)
 
-3. **[문서] Dockerfile 레이어 재정렬** — `containers/yolo-detection/Dockerfile`: `COPY object_detection` 이 torch pip 레이어보다 앞 → 노드 코드만 고쳐도 torch 재다운로드. 무거운 pip 레이어를 소스 COPY 앞으로. **이미지 재빌드 시 드라이브 tar/SHA256 갱신 동반**(config.sh `*_IMAGE_SHA256` + 재업로드 — 안 하면 fetch 체크섬 불일치로 실패).
+3. **[DONE 2026-06-11] Dockerfile 레이어 재정렬** — `containers/yolo-detection/Dockerfile` 의 torch pip 레이어를 소스 COPY 앞으로 이동 완료(`f874261`) + 재빌드·드라이브 tar/SHA256 갱신 동반 완료(`12c6fb1`). 잔여(소): voice Dockerfile 동일 안티패턴 점검 — voice 는 torch 미사용이라 재다운로드 비용이 작아 우선순위 낮음.
 
 4. **[문서] pick_and_place_text/voice spin 버그** — `{detection.py,yolo.py}` 의 `rclpy.spin_once` 재진입 버그 잔존(object_detection 만 spin 수정). **KeyError(`reversed_class_dict[target]`)는 2026-06-10 에 3 copies 전부 `.get()`+미검출로 수정 완료.** 레거시 spin 버그: 동일 패치 vs 레거시화 결정.
 
@@ -61,8 +61,8 @@
 
 - pick_and_place_text spin 버그 미수정(robot_control 이 컨테이너 detection 호출로 우회 중).
 - fleet 타 머신: DSR 패치 + python3-pymodbus + nvidia-container-toolkit 미반영.
-- yolo 이미지 드라이브 다운로드 미실측(4.4GB) — voice 만 실측. 클린설치서 첫 검증.
-- **yolo KeyError 수정(2026-06-10)은 소스만 반영 — 이미지 미재빌드라 fetch 시 옛 이미지.** 상단 ⚠ 배너 = 재빌드+드라이브 재업로드 먼저.
+- yolo 이미지 드라이브 **전체** 다운로드 미실측(4.62GB) — 2026-06-11 무인증 curl 로 첫 1MB+Content-Length 일치까지 검증(타입=POSIX tar, 크기 정확 일치, 권한 페이지 없음). 전체 SHA 왕복은 fleet 클린설치서 최종.
+- ~~yolo KeyError 수정 소스만 반영~~ → **2026-06-11 재빌드 + 드라이브 재배포 완료** — fetch 시 수정본 수신(Last updated ①). 배포 이미지 내부 yolo.py 에 `.get(target)` 반영 확인.
 - **노출됐던 OPENAI API 키 rotate 권장**(진단 중 터미널 노출). 현재 `.env`(gitignore)에 있고 추적 파일엔 없음(유출 안 됨).
 
 ---
@@ -114,6 +114,6 @@
 ---
 
 ## Current Focus
-- **[실측] Top priority**: **다른 노트북(fleet)에서 전체 클린설치 검증** — 새 머신이라 step14 가 드라이브에서 실제 다운로드(yolo 4.4GB 첫 실측), toolkit step3 자동. 드라이브 공유 설정("링크 있는 사람") 확인 필요.
-- **[문서]**: Dockerfile 레이어 재정렬(재빌드 시 드라이브 tar/SHA256 갱신 동반).
+- **[실측] Top priority**: **다른 노트북(fleet)에서 전체 클린설치 검증** — 새 머신이라 step15 가 드라이브에서 실제 다운로드(yolo 4.62GB 첫 전체 실측), toolkit step3 자동. 드라이브 공유("링크 있는 사람")는 [문서] 머신서 무인증 도달성+크기 검증 통과 — 타 네트워크/무계정 최종 확인은 fleet 머신.
+- **[문서]**: pick_and_place_text spin 버그 + 모델/패키지 중복(object_detection vs pick_and_place_text) 정리 결정. (Dockerfile 레이어 재정렬은 2026-06-11 완료.)
 - **Friction**: 미push git 객체 + 브랜치 canonical + 모델/패키지 중복 정리 결정 대기.
