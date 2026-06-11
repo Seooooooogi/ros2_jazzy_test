@@ -19,6 +19,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/config.sh"
 # shellcheck source=./confirm.sh
 source "${SCRIPT_DIR}/confirm.sh"
+# shellcheck source=./apt-repo.sh
+source "${SCRIPT_DIR}/apt-repo.sh"
 config_assert_set
 
 TOOLKIT_LIST=/etc/apt/sources.list.d/nvidia-container-toolkit.list
@@ -44,23 +46,17 @@ fi
 sudo apt-get update
 sudo apt-get install -y ca-certificates curl gnupg
 
-# 2) GPG 키 (이미 있으면 skip — idempotent).
-sudo install -m 0755 -d "${KEYRING_DIR}"
-if [[ ! -f "${TOOLKIT_KEY}" ]]; then
-    curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey \
-        | sudo gpg --dearmor -o "${TOOLKIT_KEY}"
-    sudo chmod a+r "${TOOLKIT_KEY}"
-fi
+# 2) keyring + apt source (add_apt_repo — upstream list 받아 signed-by 주입, 다중행 cat 비교).
+#    설치 전 update 는 아래 3) 이 하므로 --no-update.
+add_apt_repo --no-update \
+    --mode dearmor --downloader curl --key-write gpg-o \
+    --key-url "https://nvidia.github.io/libnvidia-container/gpgkey" --key-file "${TOOLKIT_KEY}" \
+    --list-file "${TOOLKIT_LIST}" \
+    --list-url "https://nvidia.github.io/libnvidia-container/stable/deb/nvidia-container-toolkit.list" \
+    --list-sed "s#deb https://#deb [signed-by=${TOOLKIT_KEY}] https://#g" \
+    --list-cmp cat
 
-# 3) apt source — upstream list 를 받아 signed-by 를 우리 키링으로 주입.
-#    동일 내용이면 재기록 안 함 (중복/덮어쓰기 방지).
-desired="$(curl -fsSL https://nvidia.github.io/libnvidia-container/stable/deb/nvidia-container-toolkit.list \
-    | sed "s#deb https://#deb [signed-by=${TOOLKIT_KEY}] https://#g")"
-if ! { [[ -f "${TOOLKIT_LIST}" ]] && [[ "$(cat "${TOOLKIT_LIST}")" == "${desired}" ]]; }; then
-    echo "${desired}" | sudo tee "${TOOLKIT_LIST}" >/dev/null
-fi
-
-# 4) 설치.
+# 3) 설치.
 sudo apt-get update
 sudo apt-get install -y nvidia-container-toolkit
 
