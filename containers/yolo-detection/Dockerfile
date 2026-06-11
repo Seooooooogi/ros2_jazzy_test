@@ -31,6 +31,38 @@ RUN apt-get update \
       ros-${ROS_DISTRO}-sensor-msgs \
  && rm -rf /var/lib/apt/lists/*
 
+# --- pip/venv 레이어를 소스 COPY 보다 앞에 배치 ---
+# 노드 소스(object_detection/yolo.py 등)만 고쳐도 torch(가장 무거운 레이어)가 재다운로드되지
+# 않도록, 소스와 무관한 venv/pip 설치를 소스 COPY 앞에 둔다. venv 는 전역 PATH 에 올리지 않고
+# /opt/venv/bin 으로 명시 호출한다 → 뒤따르는 colcon build 가 시스템 python 으로 돌아, ament
+# 콘솔스크립트 shebang 이 시스템 python 으로 굳는 기존 동작을 그대로 유지(entrypoint.sh 가
+# 런타임에 venv site-packages 를 PYTHONPATH 로 주입해 우회).
+# venv: --system-site-packages 로 rclpy/cv_bridge 등 apt/ROS 패키지를 공유.
+RUN python3 -m venv --system-site-packages /opt/venv
+RUN /opt/venv/bin/pip install --no-cache-dir --upgrade pip
+# torch/torchvision (cu128) — 가장 무거운 레이어(CUDA 런타임 번들)라 단독 RUN 으로 캐시 분리.
+RUN /opt/venv/bin/pip install --no-cache-dir \
+      --index-url "https://download.pytorch.org/whl/cu${CUDA_VERSION//./}" \
+      torch torchvision
+# ultralytics → opencv-python 을 numpy<2 호환 마지막 버전(<4.10 = 4.9.0.80, numpy>=1.21.2)으로
+# 다운그레이드해 numpy>=2 메타 충돌 제거 → numpy<2 마지막 재핀. 재핀 직후 import 검증.
+# ultralytics 는 메이저 상한 핀 (실측 8.4.56). 메이저 변경 시 API 깨질 수 있어 silent drift 차단.
+RUN /opt/venv/bin/pip install --no-cache-dir "ultralytics<9" \
+ && /opt/venv/bin/pip install --no-cache-dir "opencv-python<4.10" \
+ && /opt/venv/bin/pip install --no-cache-dir --force-reinstall "numpy<2" \
+ && /opt/venv/bin/python3 -c "import numpy, torch, ultralytics, cv2; assert numpy.__version__.startswith('1.'), numpy.__version__"
+# 슬리밍: 추론에 불요한 항목 제거 — triton(torch.compile 전용) / C++ 헤더 / 정적 .a / pycache.
+# 경로의 python 버전은 base 이미지에서 동적으로 구함 (3.13 등으로 올라가도 슬리밍이 silent no-op 되지 않게).
+# import 회귀는 runtime smoke(build-all.sh)가 검증. (nvidia CUDA .so 런타임은 GPU 필수라 유지.)
+RUN PYVER="$(/opt/venv/bin/python3 -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')" \
+ && SP="/opt/venv/lib/python${PYVER}/site-packages" \
+ && /opt/venv/bin/pip uninstall -y triton 2>/dev/null || true \
+ && rm -rf "${SP}/torch/include" \
+ && find "${SP}/nvidia" -type d -name include -prune -exec rm -rf {} + 2>/dev/null || true \
+ && find /opt/venv -name '*.a' -delete 2>/dev/null || true \
+ && find /opt/venv -type d -name __pycache__ -prune -exec rm -rf {} + 2>/dev/null || true
+
+# --- 소스 COPY: 여기부터 캐시가 무효화돼도 위 torch/pip 레이어는 보존된다. ---
 # od_msg 를 먼저 둔다 (object_detection 이 from od_msg.srv import — colcon 이 위상정렬).
 COPY cobot2_ws/od_msg           /ws/src/od_msg
 COPY cobot2_ws/object_detection /ws/src/object_detection
@@ -45,35 +77,10 @@ RUN rosdep init 2>/dev/null || true \
  && rm -rf /var/lib/apt/lists/*
 
 # setup.bash 는 unset var(AMENT_TRACE_SETUP_FILES 등)을 참조하므로 source 동안 -u 해제.
+# venv 를 전역 PATH 에 올리지 않았으므로 여기 python3 = 시스템 python (shebang 동작 보존).
 RUN set +u \
  && source "/opt/ros/${ROS_DISTRO}/setup.bash" \
  && colcon build --merge-install
-
-# Python 의존은 venv 로 격리 (--system-site-packages 로 rclpy/cv_bridge 등 apt/ROS 패키지 공유).
-RUN python3 -m venv --system-site-packages /opt/venv
-ENV PATH="/opt/venv/bin:${PATH}"
-RUN pip install --no-cache-dir --upgrade pip
-# torch/torchvision (cu128) — 가장 무거운 레이어(CUDA 런타임 번들)라 단독 RUN 으로 캐시 분리.
-RUN pip install --no-cache-dir \
-      --index-url "https://download.pytorch.org/whl/cu${CUDA_VERSION//./}" \
-      torch torchvision
-# ultralytics → opencv-python 을 numpy<2 호환 마지막 버전(<4.10 = 4.9.0.80, numpy>=1.21.2)으로
-# 다운그레이드해 numpy>=2 메타 충돌 제거 → numpy<2 마지막 재핀. 재핀 직후 import 검증.
-# ultralytics 는 메이저 상한 핀 (실측 8.4.56). 메이저 변경 시 API 깨질 수 있어 silent drift 차단.
-RUN pip install --no-cache-dir "ultralytics<9" \
- && pip install --no-cache-dir "opencv-python<4.10" \
- && pip install --no-cache-dir --force-reinstall "numpy<2" \
- && python3 -c "import numpy, torch, ultralytics, cv2; assert numpy.__version__.startswith('1.'), numpy.__version__"
-# 슬리밍: 추론에 불요한 항목 제거 — triton(torch.compile 전용) / C++ 헤더 / 정적 .a / pycache.
-# 경로의 python 버전은 base 이미지에서 동적으로 구함 (3.13 등으로 올라가도 슬리밍이 silent no-op 되지 않게).
-# import 회귀는 runtime smoke(build-all.sh)가 검증. (nvidia CUDA .so 런타임은 GPU 필수라 유지.)
-RUN PYVER="$(python3 -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')" \
- && SP="/opt/venv/lib/python${PYVER}/site-packages" \
- && pip uninstall -y triton 2>/dev/null || true \
- && rm -rf "${SP}/torch/include" \
- && find "${SP}/nvidia" -type d -name include -prune -exec rm -rf {} + 2>/dev/null || true \
- && find /opt/venv -name '*.a' -delete 2>/dev/null || true \
- && find /opt/venv -type d -name __pycache__ -prune -exec rm -rf {} + 2>/dev/null || true
 
 ############################ runtime ############################
 FROM ros:${ROS_DISTRO}-ros-base-noble AS runtime
