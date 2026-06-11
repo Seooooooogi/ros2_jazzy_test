@@ -83,7 +83,7 @@ export ROS2_JAZZY_TEST_REPO
 # — 해시를 tar 와 같은 출처에서 받으면 둘 다 변조 시 검증이 무의미하기 때문(신뢰 출처=레포).
 : "${YOLO_IMAGE_GDRIVE_ID:=1pbWlfFb3d5L6E_S5XrN9_7s_OLsg_YvC}"
 : "${VOICE_IMAGE_GDRIVE_ID:=1iKKLyreAawlDVBcFKqXlyNCG0JNnogYp}"
-: "${YOLO_IMAGE_SHA256:=b720f006b0e5b0b650820e80f2f7c6d924f1aa4b38792475c84af6668793c22d}"
+: "${YOLO_IMAGE_SHA256:=4b29263968bbd0b0247d8b71a11660b309ea596d6796bd899ef8d9bb6bf5d73b}"
 : "${VOICE_IMAGE_SHA256:=092b8138e14b7568d7dbaeb27c875867b2a16083f4ee6a0c9b2c1658bb9c2d0b}"
 
 # --- State file (resumable 재실행, 구조화 포맷 2026-05-27) ----
