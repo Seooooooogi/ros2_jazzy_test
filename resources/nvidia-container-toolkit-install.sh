@@ -60,10 +60,10 @@ add_apt_repo --no-update \
 sudo apt-get update
 sudo apt-get install -y nvidia-container-toolkit
 
-# 5) docker 런타임 등록 (idempotent — nvidia-ctk 가 /etc/docker/daemon.json 갱신).
+# 4) docker 런타임 등록 (idempotent — nvidia-ctk 가 /etc/docker/daemon.json 갱신).
 sudo nvidia-ctk runtime configure --runtime=docker
 
-# 6) 런타임 적용 — daemon.json 변경은 docker 재시작 후 반영. 이미 떠 있으면 재시작 skip.
+# 5) 런타임 적용 — daemon.json 변경은 docker 재시작 후 반영. 이미 떠 있으면 재시작 skip.
 #    docker 데몬 재시작은 되돌릴 수 없는 작업이라 명시 동의(ASSUME_YES=1 로 자동화 가능).
 if docker info --format '{{json .Runtimes}}' 2>/dev/null | grep -q '"nvidia"'; then
     echo "nvidia-toolkit: docker 에 nvidia 런타임 이미 등록됨 (재시작 skip)."
@@ -72,7 +72,7 @@ else
     sudo systemctl restart docker
 fi
 
-# 7) 검증 — 런타임 등록 확인.
+# 6) 검증 — 런타임 등록 확인.
 if ! docker info --format '{{json .Runtimes}}' 2>/dev/null | grep -q '"nvidia"'; then
     echo "nvidia-toolkit: 경고 — nvidia 런타임이 docker 에 보이지 않습니다. 'docker info' 로 확인." >&2
     exit 1

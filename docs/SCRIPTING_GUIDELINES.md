@@ -35,14 +35,14 @@
 ```bash
 source "${SCRIPT_DIR}/apt-repo.sh"
 add_apt_repo \
-    --key-mode dearmor --downloader curl \
+    --mode dearmor --downloader curl \
     --key-url  "https://example.com/key.gpg" \
     --key-file "${KEYRING_DIR}/example.gpg" \
     --list-file "/etc/apt/sources.list.d/example.list" \
     --list-line "deb [signed-by=${KEYRING_DIR}/example.gpg] https://example.com/repo ${UBUNTU_CODENAME} main"
 ```
 
-- `--key-mode raw` = 키를 그대로 저장(`.asc`/원본), `dearmor` = `gpg --dearmor` 변환. **키 파일명·signed-by 경로는 vendor 형식 그대로** — 임의로 `.asc`↔`.gpg` 바꾸지 않는다(signed-by 경로가 깨진다).
+- `--mode raw` = 키를 그대로 저장(`.asc`/원본), `--mode dearmor` = `gpg --dearmor` 변환. **키 파일명·signed-by 경로는 vendor 형식 그대로** — 임의로 `.asc`↔`.gpg` 바꾸지 않는다(signed-by 경로가 깨진다).
 - 선행 도구 설치(`apt install ca-certificates curl …`)는 vendor 마다 달라 `add_apt_repo` 밖, 각 스크립트에 둔다.
 - 새 repo 도입 시 `docs/COMPATIBILITY.md` 매트릭스도 갱신.
 
