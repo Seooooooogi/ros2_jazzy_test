@@ -15,14 +15,12 @@
 - **대안**: 검증 머신에서 fetch 대신 `bash containers/build-all.sh` 로 로컬 빌드(드라이브 round-trip 회피, 더 빠를 수 있음).
 
 ## Last updated
-2026-06-10 — **[문서]** 전부 origin push 완료(branch `feat/application-containers`):
-① **DDS 인터페이스 = loopback + 전체 물리 NIC**(ADR-020) — 같은 호스트 노드끼리 유선 IP 만 locator 로 광고해 unicast-to-self 가 라우팅 충돌로 실패(`ddsi_udp_conn_write retcode -1`)하던 문제 수정. `lo` 를 우선순위로 추가(같은 호스트=127.0.0.1), 외부 NIC 는 cross-host 경로. `dds-tuning.sh`+`cyclonedds.xml.in`. **ADR-016 의 "유선 only whitelist" 부분 supersede.**
-② **ethernet 고정 IP 자동화**(install.sh **step 16**, `network-static-ip.sh`, ADR-021) — nmcli 로 유선 NIC 를 `192.168.1.30/24`(config.sh `HOST_ETH_IP`) 고정, gateway/DNS 없음(`never-default`→wifi 인터넷 유지). 로봇 LAN: .1 그리퍼/.100 컨트롤러/.30 host. **STEPS_TOTAL 15→16.**
-③ **무인 설치 `bash install.sh --unattended`**(ADR-021) — 시작 시 OPENAI_API_KEY+confirm 1회 → 자동 reboot → GNOME autostart 가 복귀 시 자동 재개(one-shot)+sudo keepalive. 무플래그=기존 수동 동작 유지.
-④ **OPENAI_API_KEY 처리 버그 수정** — voice 컨테이너 crash-loop(키 없음→무한재시작→`/get_keyword` 미존재→"통신 안 됨")의 근본 원인. (a) 키 검사를 쉘 env 가 아니라 **`.env` 파일 내용** 기준으로(voice-env-check + unattended), (b) `.env.example`(추적 파일)에 실수로 넣은 실제 키 감지 시 `.env` 로 자동 이전+placeholder 복원(`_relocate_example_secret`). **노출됐던 OPENAI 키 rotate 권장.**
-⑤ **컨테이너 다운로드 진행바 콘솔 제거**(`fetch-images.sh` `-#`→`--no-progress-meter`).
-⑥ **YOLO KeyError 수정** — 학습 클래스 밖 target 에 `reversed_class_dict[target]` KeyError 로 노드 사망 → `.get()`+미검출(None,None). 3 copies(object_detection + 레거시 2). **단 이미지 재빌드 전엔 fetch 가 옛 이미지라 런타임 미반영(아래 Next Action).**
-직전 2026-06-09: voice 컨테이너 e2e + cobot2_bringup 분리 + 드라이브 이미지 fetch 전환.
+2026-06-11 — **[문서]** 전부 origin push 완료(branch `feat/application-containers`, 4커밋):
+① **DDS 도메인 단일값 일치**(`43fa06c`) — `.env.example` 의 `ROS_DOMAIN_ID` 예시가 `0` 이라 살려 쓰면 host(기본 42)와 컨테이너가 다른 도메인에 떠 노드가 조용히 서로 못 찾던 풋건. 예시를 `42`(단일 진실 소스 = `resources/config.sh`)에 맞추고 "바꾸면 host·양 컨테이너 동일 값 유지" 경고 주석 추가.
+② **문서 정정** — README 실기 기동 예시 placeholder `<controller-ip>`→실제 `192.168.1.100`(`ad562cd`); 결정기록(`docs/decisions`) 검증 명령 `docker exec rokey-yolo`→`docker compose exec yolo-detection`(`9d01749`).
+③ **gitignore 위생**(`3907af1`) — 로컬 도구 산출물/캐시(`.agents/`, `.understand-anything/`, `.claude/skills/`+`skills-lock.json`, `backup/llm_wiki/`) 추적 제외. `.claude/memory`·`backup/` 보존 스크립트는 서브경로만 타깃이라 추적 유지.
+④ **Notion 문서 동기화**(git 무관·원격 반영) — 마이그레이션 페이지 §2-1 아키텍처/§3-1 host 순차설치/§4 폴더구조를 16-step + 그리퍼(.1)/ALSA 마이크/wakeword 토픽/loopback 용어로 갱신; Docker 페이지를 실제 코드(멀티스테이지 Dockerfile·compose·`cobot2_ws` 구조)로 전면 교체 + "기동 순서 견고성"(DDS 비동기 discovery·RMW 통일·`wait_for_service` 블로킹으로 서순 무관, 단 카메라/생산자 영영 부재 시 조용한 hang) 분석 섹션 추가; 서비스 메시지 페이지에 wakeword 설명 삽입.
+직전 2026-06-10: DDS 인터페이스=loopback+물리 NIC(ADR-020), ethernet 고정 IP 자동화(install.sh step16·STEPS_TOTAL 15→16), 무인 설치 `--unattended`, OPENAI_API_KEY 처리 버그 수정, fetch 진행바 제거, YOLO KeyError 수정(소스만 — 이미지 재빌드 미반영, 상단 ⚠). 직전 2026-06-09: voice 컨테이너 e2e + cobot2_bringup 분리 + 드라이브 이미지 fetch 전환.
 
 ---
 
@@ -111,6 +109,7 @@
 - 같은 패턴 버그가 여러 파일에 퍼짐 → 재빌드 전 패키지 전체 grep 전수 수정.
 - python stdout block-buffered → hang 오인. `python3 -u` / `flush=True` / `PYTHONUNBUFFERED=1`.
 - DSR 서비스 "있는데 응답 없음" → short name(클라) vs `dsr_controller2/` prefix(실서버) 갈림.
+- 서비스 `wait_for_service` 무한대기(timeout/break 없음) = 서순엔 강건하나 생산자 영영 부재 시 크래시 아닌 **조용한 hang**. 특히 카메라 미연결/`camera:=false` → object_detection 이 intrinsics 무한 대기 후에야 `/get_3d_position` advertise → robot_control 영영 hang. "멈춤" 디버깅 시 생산자(카메라·실기 컨트롤러) 기동 여부부터 확인.
 
 ---
 
