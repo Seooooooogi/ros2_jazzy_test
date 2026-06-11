@@ -21,6 +21,8 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=./config.sh
 source "${SCRIPT_DIR}/config.sh"
+# shellcheck source=./apt-repo.sh
+source "${SCRIPT_DIR}/apt-repo.sh"
 config_assert_set
 
 RS_KEY="${KEYRING_DIR}/librealsenseai.gpg"
@@ -36,20 +38,12 @@ sudo rm -f /etc/apt/sources.list.d/librealsense.list "${KEYRING_DIR}/librealsens
 sudo apt-get update
 sudo apt-get install -y curl ca-certificates gnupg apt-transport-https \
     "${KERNEL_HEADERS_META}" "linux-headers-$(uname -r)"
-sudo install -m 0755 -d "${KEYRING_DIR}"
-
-# 2) RealSense AI GPG 키 (armored → dearmor, 없을 때만 — idempotent).
-if [[ ! -f "${RS_KEY}" ]]; then
-    curl -sSf "${RS_KEY_URL}" | gpg --dearmor | sudo tee "${RS_KEY}" >/dev/null
-    sudo chmod a+r "${RS_KEY}"
-fi
-
-# 3) apt source (동일 내용이면 재기록 안 함 — 중복/덮어쓰기 방지).
-desired="deb [signed-by=${RS_KEY}] ${RS_REPO} ${UBUNTU_CODENAME} main"
-if ! { [[ -f "${RS_LIST}" ]] && grep -qxF "${desired}" "${RS_LIST}"; }; then
-    echo "${desired}" | sudo tee "${RS_LIST}" >/dev/null
-fi
-sudo apt-get update
+# 2) keyring + apt source (add_apt_repo — armored 키 dearmor, 멱등).
+add_apt_repo \
+    --mode dearmor --downloader curl-sSf --key-write tee \
+    --key-url "${RS_KEY_URL}" --key-file "${RS_KEY}" \
+    --list-file "${RS_LIST}" \
+    --list-line "deb [signed-by=${RS_KEY}] ${RS_REPO} ${UBUNTU_CODENAME} main"
 
 # 4) librealsense2 SDK (kernel DKMS 모듈 + 유틸 + 헤더 + 디버그 심볼).
 sudo apt-get install -y \
