@@ -299,7 +299,7 @@
 - host: `which python3` → `/usr/bin/python3` (system, venv 없음)
 - host: `python3 -c "import rclpy"` → OK (system bindings)
 - host: `python3 -c "import torch"` → ImportError (의도된 결과 — torch 는 컨테이너 안에만)
-- container: `docker exec rokey-yolo python3 -c "import torch; assert torch.cuda.is_available()"` → OK
+- container: `docker compose -f containers/docker-compose.yml exec yolo-detection python3 -c "import torch; assert torch.cuda.is_available()"` → OK
 
 **Reopen 조건**:
 - host 에서 직접 Python 개발 / debugging 빈도가 잦아 컨테이너 진입 비용이 의미 있게 커지면 host venv 재도입 검토.
