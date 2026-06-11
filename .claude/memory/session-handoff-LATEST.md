@@ -10,6 +10,10 @@
 현재 최우선 = Next Actions #1 = **다른 노트북(fleet)에서 전체 클린설치 검증.** 새 yolo 이미지(KeyError 수정본)가 드라이브에 올라가 있어 그 머신 step15 fetch 가 수정본을 받는다. 드라이브 도달성/크기 검증은 [문서] 머신에서 통과(무인증 curl, Content-Length 일치) — 단 동일 네트워크라 타 네트워크/무계정 실측은 fleet 머신에서 최종 확인.
 
 ## Last updated
+2026-06-11 (후속2) — **[문서]** docker login 잔재 제거 + Notion 가이드 보강:
+① **docker login 잔재 제거**(`0b48886`) — app 이미지(yolo/voice)는 공개 드라이브 tar→`docker load` 라 레지스트리 로그인 불요인데, `voice-env-check.sh` 가 "pull 전 docker login 필요할 수 있음" 안내 블록을 들고 있었음(옛 Docker Hub pull 설계 잔재). 블록 + `a04-voice-precheck.sh`/`install.sh` step12 주석 정리. **ADR-007/publish 경로(docker login+push)는 history 로 보존** — ADR-019 가 "Docker Hub 또는 Drive" 중 Drive 채택으로 amend, 결정 흐름 추적 위해 미삭제(사용자 결정).
+② **Notion 마이그레이션 페이지 §3-1**(git 무관·원격 반영) — `fetch-images.sh`(step 15)를 line-by-line 으로 풀어씀(config 좌표 로드→멱등 skip→2-step confirm 다운로드→SHA256 검증→docker load). 같은 블록 step 12 + 폴더트리의 docker login 잔재도 동시 제거.
+
 2026-06-11 (후속) — **[실측+문서]** YOLO 이미지 재빌드 + 드라이브 재배포 완료(2커밋 push, `f874261`+`12c6fb1`):
 ① **YOLO Dockerfile 레이어 재정렬**(`f874261`) — torch 설치를 노드 소스 COPY 앞으로 이동. 노드 코드만 고쳐도 torch(최중량 레이어)가 재다운로드되던 문제 제거. venv 는 전역 PATH 미등록·`/opt/venv/bin` 명시 호출 → colcon build 는 시스템 python 유지(콘솔스크립트 shebang 동작 보존, `entrypoint.sh` PYTHONPATH 우회 그대로).
 ② **재빌드 + 검증** — `build-all.sh` 게이트 PASS(secret 없음, yolo/voice import smoke, voice tflite predict). 이미지 내부 `object_detection/yolo.py` 에 `.get(target)`+미검출 처리 반영 확인 → KeyError 수정이 드디어 배포 이미지에 포함.
@@ -26,7 +30,7 @@
 
 ## Next Actions (priority order)
 
-1. **[실측] 전체 클린설치 검증 — 다른 노트북(fleet 머신)에서 진행** — 최신 origin `git clone` → `bash install.sh`. 새 머신엔 이미지가 없어 **step14 가 드라이브에서 실제 다운로드**(yolo 4.4GB 첫 실측 자연 발생 — `docker rmi` 불요). nvidia-container-toolkit 은 step14(reboot 이후)에서 자동 설치(SKIP_IF_NO_GPU=1 — GPU 없으면 정상 skip). a01(step1~6) NVIDIA+reboot destructive, step12 `.env` OPENAI_API_KEY interactive. **점검: 드라이브 파일 2개가 "링크 있는 사람 보기" 공유여야 다른 네트워크/무계정에서 무인 curl 가능**(이 머신 fetch 성공은 동일 계정/네트워크 영향 배제 못 함). **(2026-06-10 갱신)** 이제 **전체 16 step**(step 15 드라이브 fetch, **step 16 ethernet 고정 IP** `192.168.1.30/24` 자동). `bash install.sh --unattended` 로 reboot·재개 무인 가능(GUI 세션, 복귀 후 sudo 비번 1회). **OPENAI_API_KEY 처리 버그 수정됨** — 쉘 env 에 키가 있든 `.env.example` 에 잘못 넣든 자동 처리 → 지난번 voice crash-loop 재발 안 함. yolo KeyError 도 미검출 처리(단 이미지 재빌드 전엔 옛 이미지 — 상단 배너 참조).
+1. **[실측] 전체 클린설치 검증 — 다른 노트북(fleet 머신)에서 진행** — 최신 origin `git clone` → `bash install.sh`. 새 머신엔 이미지가 없어 **step15 가 드라이브에서 실제 다운로드**(yolo 4.62GB 첫 실측 자연 발생 — `docker rmi` 불요). nvidia-container-toolkit 은 step14(reboot 이후)에서 자동 설치(SKIP_IF_NO_GPU=1 — GPU 없으면 정상 skip). a01(step1~6) NVIDIA+reboot destructive, step12 `.env` OPENAI_API_KEY interactive. **점검: 드라이브 파일 2개가 "링크 있는 사람 보기" 공유여야 다른 네트워크/무계정에서 무인 curl 가능**(이 머신 fetch 성공은 동일 계정/네트워크 영향 배제 못 함). **(2026-06-10 갱신)** 이제 **전체 16 step**(step 15 드라이브 fetch, **step 16 ethernet 고정 IP** `192.168.1.30/24` 자동). `bash install.sh --unattended` 로 reboot·재개 무인 가능(GUI 세션, 복귀 후 sudo 비번 1회). **OPENAI_API_KEY 처리 버그 수정됨** — 쉘 env 에 키가 있든 `.env.example` 에 잘못 넣든 자동 처리 → 지난번 voice crash-loop 재발 안 함. yolo KeyError 도 미검출 처리(단 이미지 재빌드 전엔 옛 이미지 — 상단 배너 참조).
 
 2. **[실측/문서] cobot2_bringup 클린설치 자동 빌드 검증** — `dsr-project-install.sh` HOST_PKGS 에 등록됨(cp -a 복사 경로). 다른 노트북은 cp 경로 그대로 — clone → 빌드 시 `ros2 launch cobot2_bringup bringup_all.launch.py` resolve 확인. (이 머신은 검증용 symlink 라 무관.)
 
@@ -70,11 +74,12 @@
 ## Context Notes
 
 ### 이미지 드라이브 배포 (2026-06-09)
-- install.sh step14 = `containers/fetch-images.sh`: 공개 구글 드라이브 file ID 로 tar 다운로드 → SHA256 검증 → gz/zip 해제 분기 → `docker load`. 이미지 존재 시 skip(멱등).
+- install.sh step15 = `containers/fetch-images.sh`: 공개 구글 드라이브 file ID 로 tar 다운로드 → SHA256 검증 → gz/zip 해제 분기 → `docker load`. 이미지 존재 시 skip(멱등). (step14=nvidia-container-toolkit, step16=고정 IP.)
+- **docker login 불요** — app 이미지는 registry pull 이 아니라 Drive tar→`docker load`. 외부 registry 에서 pull 하는 건 DSR emulator(`doosanrobot/dsr_emulator:3.0.1`, public Docker Hub anonymous) 뿐. (publish 경로 docker login+push 는 ADR-007 history 로 보존 — 현재 미사용.)
 - 대용량(>100MB) 다운로드: `drive.usercontent.google.com/download?id=..&export=download` 1차 응답이 virus-scan confirm form(HTML) → `confirm`/`uuid` 토큰 뽑아 2차 요청. 순수 bash curl(host pip 미설치 정책 — gdown 안 씀).
 - file ID/SHA256 = `resources/config.sh`(`YOLO/VOICE_IMAGE_GDRIVE_ID`, `_SHA256`). 공개 링크 ID 는 secret 아님. **해시는 레포(신뢰 출처)에, tar 만 드라이브** — 같은 출처면 동시 변조 시 검증 무의미.
 - 이미지 제작/검증은 별도 `containers/build-all.sh`(빌드+secret scan+import/tflite smoke). `docker save` tar = yolo 4.3GB / voice 0.42GB(buildkit 레이어 이미 압축 → gzip 무의미). 드라이브 폴더 `1csD1JhZz9xkpBqWR3ZC2udEPeVcndjiI`.
-- **클린설치 fetch 실측 주의**: Docker 이미지는 `--reset` 무관 잔존 → 기존 이미지 있으면 step14 skip. 다운로드 경로 타려면 사전 `docker rmi`.
+- **클린설치 fetch 실측 주의**: Docker 이미지는 `--reset` 무관 잔존 → 기존 이미지 있으면 step15 skip. 다운로드 경로 타려면 사전 `docker rmi`.
 
 ### bringup = cobot2_bringup 패키지 (2026-06-09)
 - `ros2 launch cobot2_bringup bringup_all.launch.py mode:=real` — dsr_bringup2 + RealSense(align_depth) + `docker compose up -d` 한 번에. robot_control(실모션·무한루프)은 **미포함** — `ros2 run robot_control robot_control` 분리 실행(인프라/작업 분리). host 기본 `192.168.1.100`(실기 고정), Ctrl+C 시 compose down.
