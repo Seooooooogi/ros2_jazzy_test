@@ -111,7 +111,7 @@ set -a; source ~/ros2_jazzy_test/resources/config.sh; set +a   # RMW(CycloneDDS)
 
 ```bash
 ros2 launch dsr_bringup2 dsr_bringup2_rviz.launch.py \
-  mode:=real host:=<controller-ip> port:=12345 model:=m0609 name:=dsr01
+  mode:=real host:=192.168.1.100 port:=12345 model:=m0609 name:=dsr01
 ```
 
 - 에뮬레이터로 띄우려면 `mode:=virtual` (컨트롤러 연결 없이)
