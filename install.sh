@@ -190,7 +190,7 @@ run_step 10 a02_colcon_build  bash "${RESOURCE_DIR}/colcon-build.sh"
 # --- step 11: 개발 도구 (a03: VS Code) ---
 run_step 11 a03_vscode bash "${RESOURCE_DIR}/vscode-install.sh"
 
-# --- step 12: 음성 사전 점검 (a04: .env 자격증명 + Docker Hub 로그인 안내) ---
+# --- step 12: 음성 사전 점검 (a04: .env 자격증명 점검 — host 설치 없음) ---
 run_step --interactive 12 a04_voice_env bash "${RESOURCE_DIR}/voice-env-check.sh"
 
 # --- step 13: DDS 튜닝 (CycloneDDS 버퍼 + 유선 NIC whitelist 자동 설정) ---

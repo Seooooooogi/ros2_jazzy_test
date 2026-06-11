@@ -4,7 +4,7 @@
 #
 # 음성/추론용 Python 패키지(langchain / openai / sounddevice 등)는 host 가 아닌
 # 별도(yolo/voice) 컨테이너 안에만 설치된다. host 단계의 역할은 컨테이너가 mount 할
-# .env 자격증명 점검 + 이미지 받기 전 Docker Hub 로그인 안내뿐이다.
+# .env 자격증명 점검뿐이다 (app 이미지는 공개 Drive tar → docker load 라 레지스트리 로그인 불요).
 # state 호출 없음. OPENAI_API_KEY 가 없으면 그 자리에서 직접 입력받아 .env 에 기록한다
 # (실패로 끊지 않음). 자격증명 값은 입력 시 화면 미표시 + 콘솔/로그에 절대 출력하지 않는다.
 set -euo pipefail
@@ -59,16 +59,6 @@ elif [[ -t 0 ]]; then
 else
     echo "voice: 경고 — OPENAI_API_KEY 가 비어 있고 비대화형 실행이라 입력받을 수 없습니다." >&2
     echo "       ${ENV_FILE} 에 'OPENAI_API_KEY=...' 를 직접 설정한 뒤 음성 컨테이너를 실행하세요." >&2
-fi
-
-# 3) Docker Hub 로그인 안내 — 애플리케이션 이미지 pull 전제.
-#    로그인 여부의 권위 있는 소스는 ~/.docker/config.json 의 auths 항목이다
-#    (docker info 출력의 Username 필드는 버전/설정에 따라 없어 신뢰 불가).
-if grep -q 'index.docker.io' "${HOME}/.docker/config.json" 2>/dev/null; then
-    echo "voice: Docker Hub 자격증명 설정 감지됨 (~/.docker/config.json)." >&2
-else
-    # 안내는 사용자 액션이 필요하므로 >&2 로 — 비-verbose 설치에서 step stdout 은 로그로만 빠진다.
-    echo "voice: 안내 — 애플리케이션 이미지(yolo/voice) pull 전 'docker login' 이 필요할 수 있습니다." >&2
 fi
 
 echo "success checking voice environment (host 설치 없음 — 컨테이너가 실제 실행)"
