@@ -9,7 +9,17 @@
 
 현재 최우선 = Next Actions #1 = **다른 노트북(fleet)에서 전체 클린설치 검증.** 새 yolo 이미지(KeyError 수정본)가 드라이브에 올라가 있어 그 머신 step15 fetch 가 수정본을 받는다. 드라이브 도달성/크기 검증은 [문서] 머신에서 통과(무인증 curl, Content-Length 일치) — 단 동일 네트워크라 타 네트워크/무계정 실측은 fleet 머신에서 최종 확인.
 
+**연계(후속3 리팩토링)**: 위 fleet 클린설치를 `refactor/installer-shell` 브랜치로 돌리면 리팩토링의 실 머신 검증(키 다운로드·`apt update` 인증·reboot 경계)을 동시에 끝낼 수 있다. 단 그 전에 push + 머지 대상 결정 필요(현재 로컬·미push). 리팩토링은 behavior-preserving 정적 검증 통과 — Last updated 후속3 참조.
+
 ## Last updated
+2026-06-11 (후속3) — **[문서]** 셸 스크립트 Comprehensive 리팩토링, 신규 브랜치 `refactor/installer-shell`(base `feat/application-containers`, 8커밋, **로컬·미push**). 전부 behavior-preserving:
+① **일관성**(`abe3cf6`) — source 전용 lib(config/state/run-step/steps/confirm/env-load/unattended/activate)에 "set -euo 안 둠(호출 진입점이 셸옵션 소유)" 예외 명시, 메시지 prefix 통일, stale "STEPS_TOTAL=15" 주석 제거, `docs/SCRIPTING_GUIDELINES.md` 신규, CLAUDE.md Hard Rule #5 를 "실행 진입점만"으로 정제.
+② **apt-repo 헬퍼**(`e9557f2`~`8796c1e`, vendor별 5커밋) — `resources/apt-repo.sh::add_apt_repo` 추출, docker/ros2/realsense/vscode/nvidia 전환. vendor별 키 처리(다운로더 플래그·dearmor write·list 비교)는 인자로 보존. **nvidia list 는 multi-line `cat`-compare 보존**(grep 단일행이면 멱등 깨짐). docker/nvidia 는 `--no-update`(뒤에 별도 update 존재).
+③ **step 단일소스화**(`4cf13d6`) — `resources/steps.sh`(run_stage_aNN(offset)+STAGE_*_COUNT+install_steps_total) 로 install.sh↔a0N step 목록 중복·이중 STEPS_TOTAL 제거. **단계 추가 시 steps.sh STAGE 상수 1곳만**(기존 4곳). reboot(step6)은 install.sh/a01 wrapper(메시지·무인분기·exit) 차이로 인라인 유지. **state key(name) 불변 → resume 호환.**
+④ **리뷰**(`576c9b5`) — code-reviewer adversarial(CRITICAL 0): 가이드 인자명 `--key-mode`→`--mode` 정정, nvidia 주석 번호 연속화.
+**검증(실 설치 없이)**: full-set shellcheck exit 0; 격리 STATE_DIR all-DONE 실행으로 install+a0N **skip-시퀀스(번호+name) 베이스라인과 byte 동일**; stub trace 로 5 vendor 키 fetch 명령 before/after 동일. **미검증(실 머신 필요)**: 실제 키 다운로드+`apt update` 인증, reboot 경계+복귀 재개 → fleet/VM end-to-end 가 머지 전 게이트. plan: `/home/rokey/.claude/plans/noble-fluttering-cray.md`.
+**남은 결정**: push 여부, 머지 대상(feat/application-containers vs main).
+
 2026-06-11 (후속2) — **[문서]** docker login 잔재 제거 + Notion 가이드 보강:
 ① **docker login 잔재 제거**(`0b48886`) — app 이미지(yolo/voice)는 공개 드라이브 tar→`docker load` 라 레지스트리 로그인 불요인데, `voice-env-check.sh` 가 "pull 전 docker login 필요할 수 있음" 안내 블록을 들고 있었음(옛 Docker Hub pull 설계 잔재). 블록 + `a04-voice-precheck.sh`/`install.sh` step12 주석 정리. **ADR-007/publish 경로(docker login+push)는 history 로 보존** — ADR-019 가 "Docker Hub 또는 Drive" 중 Drive 채택으로 amend, 결정 흐름 추적 위해 미삭제(사용자 결정).
 ② **Notion 마이그레이션 페이지 §3-1**(git 무관·원격 반영) — `fetch-images.sh`(step 15)를 line-by-line 으로 풀어씀(config 좌표 로드→멱등 skip→2-step confirm 다운로드→SHA256 검증→docker load). 같은 블록 step 12 + 폴더트리의 docker login 잔재도 동시 제거.
