@@ -137,9 +137,10 @@ export CYCLONEDDS_URI="${CYCLONEDDS_URI:-file://${CYCLONEDDS_XML}}"
 export ROS_DOMAIN_ID="${ROS_DOMAIN_ID:-42}"
 
 # --- Progress 표시 ([n/total] 시각화) ---------------------
-# 통합 진입점 install.sh 의 전체 단계 수 (a01:6 + a02:4 + a03:1 + a04:1 + dds-tuning:1
-# + nvidia-container-toolkit:1 + container-fetch:1 + network-static-ip:1).
-# install.sh 의 STEPS_TOTAL 과 일치해야 한다(run-step.sh 의 fallback 으로도 쓰임). 단계 추가 시 함께 갱신.
+# run-step.sh 진행률 분모(total)의 최후 fallback 값.
+# **권위 소스는 steps.sh** (STAGE_*_COUNT + install_steps_total) — install.sh/a0N 는 분모를
+# steps.sh 에서 계산하고, 이 TOTAL_STEPS 는 steps.sh 미source 시에만 fallback 으로 쓰인다.
+# 따라서 단계 추가 시 steps.sh 의 STAGE 상수만 갱신하면 되고, 이 값은 그 합과 맞춰만 둔다.
 : "${TOTAL_STEPS:=16}"
 
 # --- Self-check ----------------------------------------------------------

@@ -22,12 +22,14 @@ source "${RESOURCE_DIR}/config.sh"
 source "${RESOURCE_DIR}/state.sh"
 config_assert_set
 
-# 단독 실행 시 스테이지-로컬 진행률 ([n/1]). 통합 실행(install.sh)은 전체 step 수를 분모로 사용.
-STEPS_TOTAL=1
 # shellcheck source=resources/run-step.sh
 source "${RESOURCE_DIR}/run-step.sh"
+# shellcheck source=resources/steps.sh
+source "${RESOURCE_DIR}/steps.sh"
+# 단독 실행 시 스테이지-로컬 진행률 ([n/1]). 통합 실행(install.sh)은 전체 step 수를 분모로 사용.
+STEPS_TOTAL=$STAGE_A03_COUNT
 
-run_step 1 a03_vscode bash "${RESOURCE_DIR}/vscode-install.sh"
+run_stage_a03 0
 
 state_dump
 echo "a03: 완료 — Visual Studio Code 설치"
