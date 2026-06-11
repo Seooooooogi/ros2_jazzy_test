@@ -13,6 +13,8 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=./config.sh
 source "${SCRIPT_DIR}/config.sh"
+# shellcheck source=./apt-repo.sh
+source "${SCRIPT_DIR}/apt-repo.sh"
 config_assert_set
 
 ROS_KEY="${KEYRING_DIR}/ros.gpg"
@@ -44,18 +46,12 @@ sudo apt-get install -y software-properties-common
 sudo add-apt-repository -y universe
 sudo apt-get install -y curl gnupg2 lsb-release build-essential
 
-sudo install -m 0755 -d "${KEYRING_DIR}"
-if [[ ! -f "${ROS_KEY}" ]]; then
-    sudo curl -fsSL https://raw.githubusercontent.com/ros/rosdistro/master/ros.key -o "${ROS_KEY}"
-    sudo chmod a+r "${ROS_KEY}"
-fi
-
 arch="$(dpkg --print-architecture)"
-desired="deb [arch=${arch} signed-by=${ROS_KEY}] http://packages.ros.org/ros2/ubuntu ${UBUNTU_CODENAME} main"
-if ! { [[ -f "${ROS_LIST}" ]] && grep -qxF "${desired}" "${ROS_LIST}"; }; then
-    echo "${desired}" | sudo tee "${ROS_LIST}" >/dev/null
-fi
-sudo apt-get update
+add_apt_repo \
+    --mode raw \
+    --key-url "https://raw.githubusercontent.com/ros/rosdistro/master/ros.key" --key-file "${ROS_KEY}" \
+    --list-file "${ROS_LIST}" \
+    --list-line "deb [arch=${arch} signed-by=${ROS_KEY}] http://packages.ros.org/ros2/ubuntu ${UBUNTU_CODENAME} main"
 
 # --- ROS2 desktop + dev 도구 --------------------------------------------
 sudo apt-get install -y "ros-${ROS_DISTRO}-ament-package" python3-pyqt5 "ros-${ROS_DISTRO}-ament-cmake" libzmq3-dev
