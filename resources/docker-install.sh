@@ -12,6 +12,8 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=./config.sh
 source "${SCRIPT_DIR}/config.sh"
+# shellcheck source=./apt-repo.sh
+source "${SCRIPT_DIR}/apt-repo.sh"
 config_assert_set
 
 DOCKER_LIST=/etc/apt/sources.list.d/docker.list
@@ -21,19 +23,13 @@ DOCKER_KEY="${KEYRING_DIR}/docker.asc"
 sudo apt-get update
 sudo apt-get install -y ca-certificates curl
 
-# 2) GPG 키 (이미 있으면 skip — idempotent).
-sudo install -m 0755 -d "${KEYRING_DIR}"
-if [[ ! -f "${DOCKER_KEY}" ]]; then
-    sudo curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o "${DOCKER_KEY}"
-    sudo chmod a+r "${DOCKER_KEY}"
-fi
-
-# 3) apt source (동일 내용이면 재기록 안 함 — 중복/덮어쓰기 방지).
+# 2) keyring + apt source (add_apt_repo — 멱등). 엔진 설치 전 update 는 아래 4) 가 하므로 --no-update.
 arch="$(dpkg --print-architecture)"
-desired="deb [arch=${arch} signed-by=${DOCKER_KEY}] https://download.docker.com/linux/ubuntu ${UBUNTU_CODENAME} stable"
-if ! { [[ -f "${DOCKER_LIST}" ]] && grep -qxF "${desired}" "${DOCKER_LIST}"; }; then
-    echo "${desired}" | sudo tee "${DOCKER_LIST}" >/dev/null
-fi
+add_apt_repo --no-update \
+    --mode raw \
+    --key-url "https://download.docker.com/linux/ubuntu/gpg" --key-file "${DOCKER_KEY}" \
+    --list-file "${DOCKER_LIST}" \
+    --list-line "deb [arch=${arch} signed-by=${DOCKER_KEY}] https://download.docker.com/linux/ubuntu ${UBUNTU_CODENAME} stable"
 
 # 4) 엔진 설치 (latest stable, 핀 없음).
 sudo apt-get update
