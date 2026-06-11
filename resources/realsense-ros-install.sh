@@ -20,4 +20,4 @@ sudo apt-get install -y \
     "ros-${ROS_DISTRO}-realsense2-camera" \
     "ros-${ROS_DISTRO}-realsense2-description"
 
-echo "success installing ROS2 ${ROS_DISTRO} realsense2 wrapper"
+echo "realsense-ros: success installing ROS2 ${ROS_DISTRO} realsense2 wrapper"

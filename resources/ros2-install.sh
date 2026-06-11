@@ -43,4 +43,4 @@ sudo apt-get install -y \
 # Gazebo Harmonic (ros_gz 메타 → ros-gz-sim/-bridge/-image/-interfaces + Harmonic vendor).
 sudo apt-get install -y "ros-${ROS_DISTRO}-ros-gz"
 
-echo "success installing ROS2 ${ROS_DISTRO} extras (robot/control + Gazebo Harmonic)"
+echo "ros2-extras: success installing ROS2 ${ROS_DISTRO} extras (robot/control + Gazebo Harmonic)"

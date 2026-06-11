@@ -47,4 +47,4 @@ rosdep install --from-paths src --ignore-src --rosdistro "${ROS_DISTRO}" \
 # colcon 빌드 (src/ 의 패키지 = doosan-robot2 + host 패키지만).
 colcon build
 
-echo "success building colcon workspace at ${DSR_WORKSPACE}"
+echo "colcon-build: success building colcon workspace at ${DSR_WORKSPACE}"

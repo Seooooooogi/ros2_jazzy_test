@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # resources/confirm.sh — Confirm prompt for state-changing / irreversible operations
 # (sudo reboot / apt purge / driver swap 등 되돌릴 수 없는 작업은 사용자 명시 동의 필수).
+# source 전용 라이브러리 — set -euo 를 여기 두지 않는다(호출 진입점이 셸 옵션을 소유).
 #
 # Usage:
 #   source "$(dirname "${BASH_SOURCE[0]}")/confirm.sh"

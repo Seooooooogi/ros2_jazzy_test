@@ -2,6 +2,7 @@
 # resources/unattended.sh — 무인 설치(--unattended) 헬퍼.
 # 시작 시 자격증명(OPENAI_API_KEY) 선수집 + reboot 후 GUI autostart 로 install.sh 자동 재개.
 # install.sh 가 source 한다 — env-load.sh(_load_env/_require_env/_set_env_key) 선행 source 필요.
+# source 전용 라이브러리 — set -euo 를 여기 두지 않는다(호출 진입점이 셸 옵션을 소유).
 #
 # 메커니즘: GNOME autostart(.desktop)가 로그인 시 터미널을 열어 install-resume-launcher.sh
 # 를 실행 → install.sh --unattended 재기동. install.sh 가 재개 진입 시 autostart 를 즉시

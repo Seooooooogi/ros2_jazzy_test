@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # resources/config.sh — Single source of truth for distro / version pins.
 # distro / version 문자열을 스크립트마다 박지 않고 여기 한 곳에서만 정의한다.
+# source 전용 라이브러리 — set -euo 를 여기 두지 않는다(호출 진입점이 셸 옵션을 소유).
 #
 # Usage (from any installer script):
 #   source "$(dirname "${BASH_SOURCE[0]}")/config.sh"   # resources/ 내부에서

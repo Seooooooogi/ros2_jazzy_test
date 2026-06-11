@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # resources/state.sh — Step progress tracking (resumable 재실행 + [n/total] 진행률).
+# source 전용 라이브러리 — set -euo 를 여기 두지 않는다(호출 진입점이 셸 옵션을 소유).
 #
 # State file format (key=value — grep/sed 기반 in-place 갱신으로 idempotent 상태 기록):
 #   step_<name>=DONE|FAIL|SKIPPED|RUNNING

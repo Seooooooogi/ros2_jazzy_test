@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # resources/env-load.sh — Safe .env loader — 자격증명을 스크립트에 박지 않고 .env 에서 로드.
+# source 전용 라이브러리 — set -euo 를 여기 두지 않는다(호출 진입점이 셸 옵션을 소유).
 #
 # Usage:
 #   source "$(dirname "${BASH_SOURCE[0]}")/env-load.sh"

@@ -61,4 +61,4 @@ else
     echo "       ${ENV_FILE} 에 'OPENAI_API_KEY=...' 를 직접 설정한 뒤 음성 컨테이너를 실행하세요." >&2
 fi
 
-echo "success checking voice environment (host 설치 없음 — 컨테이너가 실제 실행)"
+echo "voice: success checking voice environment (host 설치 없음 — 컨테이너가 실제 실행)"

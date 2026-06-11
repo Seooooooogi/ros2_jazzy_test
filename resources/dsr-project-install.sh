@@ -97,4 +97,4 @@ sudo apt-get install -y \
 # 5) DSR 에뮬레이터 이미지 (명시 태그 — 이미 있으면 docker 가 자동 skip).
 docker pull "doosanrobot/dsr_emulator:${DSR_EMULATOR_VERSION}"
 
-echo "success installing Doosan DSR (${DSR_BRANCH}) + emulator ${DSR_EMULATOR_VERSION}"
+echo "dsr: success installing Doosan DSR (${DSR_BRANCH}) + emulator ${DSR_EMULATOR_VERSION}"

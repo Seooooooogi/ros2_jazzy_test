@@ -58,4 +58,4 @@ sudo apt-get install -y \
     librealsense2-dev \
     librealsense2-dbg
 
-echo "success installing RealSense librealsense2 SDK (${UBUNTU_CODENAME} apt repo)"
+echo "realsense-sdk: success installing RealSense librealsense2 SDK (${UBUNTU_CODENAME} apt repo)"

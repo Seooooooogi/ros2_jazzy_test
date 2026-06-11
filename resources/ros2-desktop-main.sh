@@ -87,4 +87,4 @@ if [[ -f "/opt/ros/${ROS_DISTRO}/setup.bash" ]]; then
     set -u
 fi
 
-echo "success installing ROS2 ${ROS_DISTRO}"
+echo "ros2-desktop: success installing ROS2 ${ROS_DISTRO}"

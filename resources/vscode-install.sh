@@ -39,4 +39,4 @@ sudo apt-get update
 # 4) VS Code 설치 (원본의 `code` GUI 자동 실행은 비대화형/원격에서 hang → 제거).
 sudo apt-get install -y code
 
-echo "success installing Visual Studio Code"
+echo "vscode: success installing Visual Studio Code"
