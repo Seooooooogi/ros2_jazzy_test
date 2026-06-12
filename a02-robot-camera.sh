@@ -24,19 +24,14 @@ fi
 
 # shellcheck source=resources/config.sh
 source "${RESOURCE_DIR}/config.sh"
-# shellcheck source=resources/state.sh
-source "${RESOURCE_DIR}/state.sh"
+# step 엔진(state + run_step + step 정의).
+# shellcheck source=resources/orchestrate.sh
+source "${RESOURCE_DIR}/orchestrate.sh"
 config_assert_set
+# 단독 실행 시 스테이지-로컬 진행률 ([n/4]). 통합 실행(install.sh)은 전체 step 수를 분모로 사용.
+STEPS_TOTAL=$STAGE_A02_COUNT
 
-# 단독 실행 시 스테이지-로컬 진행률 ([n/4]). 통합 실행(install.sh)은 자체 STEPS_TOTAL=15 사용.
-STEPS_TOTAL=4
-# shellcheck source=resources/run-step.sh
-source "${RESOURCE_DIR}/run-step.sh"
-
-run_step 1 a02_dsr_project    bash "${RESOURCE_DIR}/dsr-project-install.sh"
-run_step 2 a02_realsense_sdk  bash "${RESOURCE_DIR}/realsense-sdk-install.sh"
-run_step 3 a02_realsense_ros  bash "${RESOURCE_DIR}/realsense-ros-install.sh"
-run_step 4 a02_colcon_build   bash "${RESOURCE_DIR}/colcon-build.sh"
+run_stage_a02 0
 
 state_dump
 echo "a02: 완료 — DSR + RealSense 설치 및 ${DSR_WORKSPACE} 빌드 (CUDA/PyTorch 는 별도 컨테이너)"

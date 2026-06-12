@@ -1,0 +1,20 @@
+# main 브랜치에 내부 문서·협업 산출물(.claude-main-exclude 목록)이 새어들지 않았는지 검증.
+# 승격은 scripts/merge-to-main.sh 가 자동으로 제외하지만, 수동 머지 등으로 제외 경로가 main 에
+# 들어오면 이 가드가 실패시킨다. 실제로 머지를 막으려면 repo Settings → Branches 에서
+# 이 체크를 main 의 required status check 로 지정한다.
+name: guard-internal-paths-on-main
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  no-internal-paths:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Verify main tree excludes internal/Claude paths
+        run: bash scripts/check-no-claude-on-main.sh HEAD

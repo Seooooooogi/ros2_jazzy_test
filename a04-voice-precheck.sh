@@ -20,16 +20,14 @@ fi
 
 # shellcheck source=resources/config.sh
 source "${RESOURCE_DIR}/config.sh"
-# shellcheck source=resources/state.sh
-source "${RESOURCE_DIR}/state.sh"
+# step 엔진(state + run_step + step 정의).
+# shellcheck source=resources/orchestrate.sh
+source "${RESOURCE_DIR}/orchestrate.sh"
 config_assert_set
+# 단독 실행 시 스테이지-로컬 진행률 ([n/1]). 통합 실행(install.sh)은 전체 step 수를 분모로 사용.
+STEPS_TOTAL=$STAGE_A04_COUNT
 
-# 단독 실행 시 스테이지-로컬 진행률 ([n/1]). 통합 실행(install.sh)은 자체 STEPS_TOTAL=15 사용.
-STEPS_TOTAL=1
-# shellcheck source=resources/run-step.sh
-source "${RESOURCE_DIR}/run-step.sh"
-
-run_step --interactive 1 a04_voice_env bash "${RESOURCE_DIR}/voice-env-check.sh"
+run_stage_a04 0
 
 state_dump
 echo "a04: 완료 — 음성 환경 점검 (실제 실행은 음성 컨테이너)"

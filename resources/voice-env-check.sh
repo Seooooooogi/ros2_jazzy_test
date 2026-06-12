@@ -12,8 +12,9 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=./config.sh
 source "${SCRIPT_DIR}/config.sh"
-# shellcheck source=./env-load.sh
-source "${SCRIPT_DIR}/env-load.sh"
+# .env 로더(_load_env/_require_env/_set_env_key/_relocate_example_secret)는 interaction.sh 안.
+# shellcheck source=./interaction.sh
+source "${SCRIPT_DIR}/interaction.sh"
 config_assert_set
 
 REPO_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
@@ -61,4 +62,4 @@ else
     echo "       ${ENV_FILE} 에 'OPENAI_API_KEY=...' 를 직접 설정한 뒤 음성 컨테이너를 실행하세요." >&2
 fi
 
-echo "success checking voice environment (host 설치 없음 — 컨테이너가 실제 실행)"
+echo "voice: success checking voice environment (host 설치 없음 — 컨테이너가 실제 실행)"

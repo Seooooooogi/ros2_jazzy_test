@@ -28,21 +28,15 @@ if [[ "$(id -u)" -eq 0 ]]; then
     exit 1
 fi
 
+# step 엔진(state + run_step + step 정의) + 설치 UX(confirm + env-load + unattended).
 # shellcheck source=resources/config.sh
 source "${RESOURCE_DIR}/config.sh"
-# shellcheck source=resources/state.sh
-source "${RESOURCE_DIR}/state.sh"
-# shellcheck source=resources/confirm.sh
-source "${RESOURCE_DIR}/confirm.sh"
-# shellcheck source=resources/env-load.sh
-source "${RESOURCE_DIR}/env-load.sh"
-# shellcheck source=resources/unattended.sh
-source "${RESOURCE_DIR}/unattended.sh"
+# shellcheck source=resources/orchestrate.sh
+source "${RESOURCE_DIR}/orchestrate.sh"
+# shellcheck source=resources/interaction.sh
+source "${RESOURCE_DIR}/interaction.sh"
 config_assert_set
-
-STEPS_TOTAL=16
-# shellcheck source=resources/run-step.sh
-source "${RESOURCE_DIR}/run-step.sh"
+STEPS_TOTAL="$(install_steps_total)"
 
 usage() {
     cat <<'EOF'
@@ -144,11 +138,7 @@ fi
 # --- step 1~5: 사전준비 (a01: 커널 베이스라인 / NVIDIA / Docker / ROS2 jazzy / extras) ---
 # kernel-baseline 을 nvidia 보다 먼저: HWE 커널 메타 + 헤더 + modules-extra 를 보장해야
 # nvidia 모듈이 반쪽 커널을 끌어오는 brick 과 DKMS 헤더 누락을 둘 다 차단한다.
-run_step 1 a01_kernel_baseline bash "${RESOURCE_DIR}/kernel-baseline.sh"
-run_step 2 a01_nvidia_driver   bash "${RESOURCE_DIR}/nvidia-driver-install.sh"
-run_step 3 a01_docker          bash "${RESOURCE_DIR}/docker-install.sh"
-run_step 4 a01_ros2_desktop    bash "${RESOURCE_DIR}/ros2-desktop-main.sh"
-run_step 5 a01_ros2_extras     bash "${RESOURCE_DIR}/ros2-install.sh"
+run_stage_a01 0
 
 # --- step 6: reboot 경계 (a01) ---
 # run_step 으로 감싸지 못한다: reboot 은 프로세스를 종료하고, 이후의 모든 후속 step(7 이후)은
@@ -182,16 +172,13 @@ if [[ ! -d "/lib/modules/${__running}/kernel/drivers/net/wireless" ]]; then
 fi
 
 # --- step 7~10: 로봇/카메라 (a02: DSR + RealSense + colcon 빌드) ---
-run_step 7  a02_dsr_project   bash "${RESOURCE_DIR}/dsr-project-install.sh"
-run_step 8  a02_realsense_sdk bash "${RESOURCE_DIR}/realsense-sdk-install.sh"
-run_step 9  a02_realsense_ros bash "${RESOURCE_DIR}/realsense-ros-install.sh"
-run_step 10 a02_colcon_build  bash "${RESOURCE_DIR}/colcon-build.sh"
+run_stage_a02 6
 
 # --- step 11: 개발 도구 (a03: VS Code) ---
-run_step 11 a03_vscode bash "${RESOURCE_DIR}/vscode-install.sh"
+run_stage_a03 10
 
 # --- step 12: 음성 사전 점검 (a04: .env 자격증명 점검 — host 설치 없음) ---
-run_step --interactive 12 a04_voice_env bash "${RESOURCE_DIR}/voice-env-check.sh"
+run_stage_a04 11
 
 # --- step 13: DDS 튜닝 (CycloneDDS 버퍼 + 유선 NIC whitelist 자동 설정) ---
 # host 노드·컨테이너 공통 cyclonedds 환경을 결정적으로 구성. a0N 스테이지 스크립트엔

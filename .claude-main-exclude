@@ -1,0 +1,11 @@
+# main 브랜치에서 제외할 경로 (한 줄에 하나, 디렉토리는 / 로 끝낸다).
+# scripts/merge-to-main.sh 와 scripts/check-no-claude-on-main.sh 가 이 목록을 단일 소스로 읽는다.
+#
+# main = 외부(타 머신) 공개 설치 검증용 브랜치 — 설치 스크립트 + 컨테이너 빌드 + 공개 README 만.
+# Claude 협업 산출물(지침/메모리/프로파일)과 내부 문서(설계/결정/로드맵/트러블슈팅/세션 기록)는
+# dev 브랜치에서만 유지하고 main 에는 두지 않는다. 새 내부 파일을 추가하면 여기 등록.
+CLAUDE.md
+.claude/
+docs/
+tasks/
+containers/template/
