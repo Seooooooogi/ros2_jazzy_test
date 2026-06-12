@@ -17,8 +17,9 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=./config.sh
 source "${SCRIPT_DIR}/config.sh"
-# shellcheck source=./confirm.sh
-source "${SCRIPT_DIR}/confirm.sh"
+# confirm_or_abort_assumable 는 interaction.sh 안 (docker 재시작 동의).
+# shellcheck source=./interaction.sh
+source "${SCRIPT_DIR}/interaction.sh"
 # shellcheck source=./apt-repo.sh
 source "${SCRIPT_DIR}/apt-repo.sh"
 config_assert_set

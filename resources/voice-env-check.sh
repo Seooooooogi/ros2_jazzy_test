@@ -12,8 +12,9 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=./config.sh
 source "${SCRIPT_DIR}/config.sh"
-# shellcheck source=./env-load.sh
-source "${SCRIPT_DIR}/env-load.sh"
+# .env 로더(_load_env/_require_env/_set_env_key/_relocate_example_secret)는 interaction.sh 안.
+# shellcheck source=./interaction.sh
+source "${SCRIPT_DIR}/interaction.sh"
 config_assert_set
 
 REPO_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
