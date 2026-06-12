@@ -63,7 +63,7 @@
 | onnxruntime | 1.23.2 (실측) | pip | YOLO ONNX 추론 |
 | tflite-runtime | 2.14.0 (실측) | pip (openwakeword transitive) | |
 | pymodbus | 2.5.3 | `resources/python-dependency.sh:31` | ✅ 정확히 핀 — Doosan Modbus 통신용 |
-| VS Code | 1.120.0 (실측), 패키지 빌드 `1.120.0-1778619059` | `a03-vs-code-install.sh` | `wget code.visualstudio.com/sboot/stable?platform=linux-deb-x64`. 설치 크기 약 645MB |
+| VS Code | 1.120.0 (실측), 패키지 빌드 `1.120.0-1778619059` | `resources/vscode-install.sh` (install.sh step 11) | `wget code.visualstudio.com/sboot/stable?platform=linux-deb-x64`. 설치 크기 약 645MB |
 | Gazebo Classic | 11.10.2 (실측) | `backup/ros2-install.sh` (apt) | 기존 ROS2 예제 / MoveIt 데모용 |
 | Ignition Gazebo (Fortress) | 6.17.1 (실측) | `backup/ros2-install.sh` (apt) | ROS2 Humble 공식 권장. `libignition-gazebo6-dev 6.17.1-1~jammy` |
 | Gazebo apt repo key | gazebo-stable | `backup/ros2-install.sh:25-26` | **deprecated `apt-key add`** 로 키 등록 — Noble 에서 실패 |
@@ -76,7 +76,7 @@
 
 > System layer (a01: NVIDIA / Docker / ROS2 / Gazebo) 확정. Compute(CUDA/PyTorch — ADR-006 대기)
 > / Robot(DSR) / Camera(RealSense) / Voice 레이어는 후속 마일스톤에서 추가.
-> 드라이버·도커 실측 버전 숫자는 **핀하지 않고 설치 시점에 해소** → `bash a01-prerequirements.sh`
+> 드라이버·도커 실측 버전 숫자는 **핀하지 않고 설치 시점에 해소** → `bash install.sh`
 > 실행 후 "_(a01 실행 후 기입)_" 칸을 실제 값으로 갱신할 것.
 
 | Layer | Version | Source citation | Notes |

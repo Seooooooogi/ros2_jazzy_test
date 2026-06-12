@@ -365,6 +365,11 @@
 
 ### ADR-011: 단일 진입점 install.sh 통합 + run_step 중앙화 (2026-05-29)
 
+> **부분 supersede (ADR-022, 2026-06-12)**: "기존 a01~a04 를 개별 스테이지 재실행용으로 유지"
+> 한 결정은 폐기 — a0N standalone 은 install.sh 와 동일한 state 기반 skip 이라 강제 재실행이
+> 본래 불가, 실효 가치 없음. 스크립트 4개 삭제하고 install.sh 단일 진입점만 유지. run_step
+> 중앙화·reboot 인라인 원칙은 유효(run-step.sh/state.sh/steps.sh 는 이후 orchestrate.sh 로 통합).
+
 **Context**:
 - host 시리즈 a01~a04 가 jazzy 패턴으로 정리됐으나 진입점이 4개로 분산 → "한 번에 워크스테이션 셋업" 진입점 부재.
 - `run_step` 함수가 4개 오케스트레이터에 동일 본문으로 중복 정의(분모 변수명 `A0N_STEPS` 만 차이) → 수정 시 4곳 동기화 부담.
@@ -714,3 +719,26 @@
 **Reopen 조건**:
 - 완전 무인(복귀 후 sudo 비번도 제거)이 필요하면 → 임시 NOPASSWD sudoers + systemd 부팅 서비스(대안 A) 재검토(보안 트레이드오프·cleanup 신중).
 - DHCP/복수 로봇 LAN 동시 구성, headless 서버 무인이 필요하면 → 해당 케이스 별도 설계.
+
+---
+
+### ADR-022: a01–a04 스테이지 스크립트 폐기 — install.sh 단일 진입점 (ADR-011 부분 supersede, 2026-06-12)
+
+**Date**: 2026-06-12
+
+**Context**:
+- ADR-011 이 install.sh 통합을 도입하며 `a01-prerequirements.sh`~`a04-voice-precheck.sh` 를 "개별 스테이지 재실행용"으로 남겼다. 이후 run-step.sh/state.sh/steps.sh 가 `resources/orchestrate.sh` 로 통합되며 a0N 은 preamble + 스테이지-로컬 `STEPS_TOTAL` + `run_stage_a0N 0` 호출만 남은 얇은 wrapper 가 됐다.
+- 그런데 `run_step` 은 `step_should_skip` 으로 DONE step 을 건너뛴다 → a0N standalone 도 install.sh 와 **동일하게 state 기준 skip**. 즉 "단일 스테이지 강제 재실행"을 애초에 못 했다. 둘의 실질 차이는 진행률 분모와 "그 스테이지 뒤 멈춤"뿐 — 실효 가치 없음.
+
+**Decision**:
+- **a01–a04 4개 스크립트 삭제.** install.sh 가 유일 진입점(resumable·idempotent). 서브커맨드로도 대체하지 않는다 — 단일 스테이지 진입 자체가 통합 진입점 이전 시대의 잔재라는 판단.
+- 특정 작업 강제 재실행은 `--reset`(전체 초기화) 또는 해당 `resources/<step>.sh` 직접 실행.
+- `resources/orchestrate.sh` 의 `run_stage_a0N()`/`STAGE_A0N_COUNT`/`install_steps_total()` 은 install.sh 전체 시퀀스가 계속 사용 → 유지.
+
+**Consequences**:
+- 루트 `.sh` 는 install.sh 하나. 자동 재개 경로(`install-resume-launcher.sh` → `install.sh --unattended`)는 a0N 미참조라 불변.
+- 문서/주석의 a0N·run-step.sh·steps.sh 참조를 install.sh / orchestrate.sh 기준으로 정리.
+- main(공개) README 는 `.main-keep-ours` 로 별도 관리 — a0N 개별 실행 안내가 남아 있어, 다음 dev→main promotion 시 install.sh 단독으로 갱신 필요.
+
+**Reopen 조건**:
+- 특정 단계만 강제 재실행하는 요구가 반복되면 → state 일부만 무효화하는 `--redo <step>` 류 프리미티브 추가 검토(스크립트 4개 부활이 아니라).

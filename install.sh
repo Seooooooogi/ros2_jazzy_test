@@ -2,10 +2,11 @@
 # shellcheck source-path=SCRIPTDIR
 # install.sh — host 워크스테이션 셋업 단일 진입점 (a01~a04 전체 시퀀스).
 #
-# a01~a04 오케스트레이터의 모든 step + DDS 튜닝 + NVIDIA Container Toolkit + 컨테이너 이미지 확보를 하나의
-# 연속 시퀀스([n/16])로 실행한다.
-# 같은 state 파일을 공유하므로 개별 오케스트레이터(bash a0N-...sh)로 이미 완료한 step 은
-# 자동 skip 된다. 특정 스테이지만 다시 돌리려면 해당 a0N 스크립트를 직접 실행하면 된다.
+# 사전준비(커널/NVIDIA/Docker/ROS2) + 로봇·카메라 + VS Code + 음성 점검 + DDS 튜닝 +
+# NVIDIA Container Toolkit + 컨테이너 이미지 확보 + 네트워크 고정 IP 를 하나의 연속
+# 시퀀스([n/16])로 실행한다. 단계 정의는 resources/orchestrate.sh 의 run_stage_a0N.
+# 재실행 안전: 완료한 step 은 state 파일 기준 자동 skip 되어 끊긴 지점부터 이어진다.
+# 특정 작업만 강제로 다시 돌리려면 --reset(전체 초기화) 또는 resources/<step>.sh 직접 실행.
 #
 # 사용법:
 #   bash install.sh            전체 시퀀스 실행 (완료 step skip)
@@ -52,16 +53,15 @@ install.sh — host 셋업 단일 진입점 (a01~a04 + DDS 튜닝 + NVIDIA Conta
 
 기본은 콘솔에 [n/total] 진행률 + step 경과시간만 표시하고 상세 출력은
 ~/.ros2_jazzy_test/install.log 로 빠집니다. --verbose 또는 VERBOSE=1 환경변수로
-상세 출력을 콘솔에도 표시할 수 있습니다(개별 a0N 스크립트는 VERBOSE=1 bash a0N-...sh).
+상세 출력을 콘솔에도 표시할 수 있습니다.
 
 reboot(step 6) 후에는 다시 'bash install.sh' 를 실행하면 step 7 부터 이어집니다.
-개별 스테이지만 재실행하려면 a01-prerequirements.sh / a02-robot-camera.sh /
-a03-vs-code-install.sh / a04-voice-precheck.sh 를 직접 실행하세요.
+완료된 step 은 자동 skip 되므로 같은 명령을 다시 실행해도 끝난 단계는 건너뜁니다.
 EOF
 }
 
 # --verbose/-v 는 서브커맨드와 직교하므로 먼저 분리해 VERBOSE 로 흡수하고 나머지만 남긴다.
-# run-step.sh 가 같은 셸에서 VERBOSE 를 읽는다(export 는 자식 resource 스크립트 대비).
+# orchestrate.sh 의 run_step 이 같은 셸에서 VERBOSE 를 읽는다(export 는 자식 resource 스크립트 대비).
 VERBOSE="${VERBOSE:-0}"
 UNATTENDED="${UNATTENDED:-0}"
 __args=()

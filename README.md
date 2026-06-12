@@ -68,10 +68,10 @@ colcon build
 source install/setup.bash
 ```
 
-다른 위치(예: 바탕화면)에 두고 빌드 — `DSR_WORKSPACE` 지정 후 a02 실행 (패치 포함 전체 파이프라인이 그 경로에서 수행):
+다른 위치(예: 바탕화면)에 두고 빌드 — `DSR_WORKSPACE` 지정 후 설치 실행 (패치 포함 전체 파이프라인이 그 경로에서 수행):
 
 ```bash
-DSR_WORKSPACE=~/Desktop/cobot2_ws bash a02-robot-camera.sh
+DSR_WORKSPACE=~/Desktop/cobot2_ws bash install.sh
 # 이후 재빌드도 같은 경로에서: cd ~/Desktop/cobot2_ws && colcon build
 ```
 

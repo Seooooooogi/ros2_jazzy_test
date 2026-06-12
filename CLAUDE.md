@@ -34,9 +34,9 @@ ROS2 Humble installer → ROS2 Jazzy installer 마이그레이션. Ubuntu + NVID
 ## Quick Ref
 
 - Entry (권장): `bash install.sh` — a01~a04 전체를 단일 시퀀스(`[n/16]`)로 실행. 완료된 step 은 자동 skip, reboot 후 재실행하면 이어서 진행. `--unattended`(reboot 자동·복귀 시 GUI autostart 로 자동 재개, 시작 시 OPENAI_API_KEY+confirm 1회·복귀 후 sudo 비번 1회), `--status`(상태), `--reset`(state 초기화), `--help`. 콘솔엔 `[n/total]` 진행률 + 경고/에러만 남고, 각 step 의 상세 출력(apt/pip/colcon)은 `~/.ros2_jazzy_test/install.log`(append-only)로 빠진다.
-- 개별 스테이지 재실행: `bash a01-prerequirements.sh`(시스템, reboot 포함) / `a02-robot-camera.sh`(로봇+카메라) / `a03-vs-code-install.sh`(VS Code) / `a04-voice-precheck.sh`(음성 점검). 단독 실행 시 스테이지-로컬 진행률(`[n/6]` 등). install.sh 와 같은 state 파일 공유 → 어느 쪽으로 실행하든 skip 일관.
-- 순차 의미: `a01 → reboot → a02 → a03 → a04`. RealSense 는 a02 에 포함, humble 원본 realsense 스크립트는 `backup/` 보존. `run_step` 은 `resources/orchestrate.sh`(state + run_step + step 정의 통합 엔진)로 중앙화(오케스트레이터는 `STEPS_TOTAL` 만 설정).
-- 정적 검증: `shellcheck *.sh resources/*.sh`
+- 단계 재실행: 별도 스테이지 진입점 없음 — `bash install.sh` 재실행 시 완료 step 은 state 기준 자동 skip 되어 끊긴 지점부터 이어진다. 특정 작업만 강제 재실행은 `--reset`(전체 초기화) 또는 해당 `resources/<step>.sh` 직접 실행. (구 `a01-a04` 스테이지 스크립트는 resumable 단일 진입점 install.sh 로 흡수·폐기 — state 기반 skip 이라 per-stage 강제 재실행은 본래도 불가했음.)
+- 순차 의미: `a01 → reboot → a02 → a03 → a04`(state key 네임스페이스 = 내부 단계 그룹). RealSense 는 a02 에 포함, humble 원본 realsense 스크립트는 `backup/` 보존. `run_step` 은 `resources/orchestrate.sh`(state + run_step + step 정의 통합 엔진)로 중앙화(install.sh 가 `STEPS_TOTAL` 만 설정).
+- 정적 검증: `shellcheck *.sh resources/*.sh scripts/*.sh`
 - Compatibility matrix: `docs/COMPATIBILITY.md` (Phase 1 산출물)
 - 트러블슈팅 카탈로그: `docs/TROUBLESHOOTING.md` (Phase 3 산출물)
 - ROADMAP: `docs/DEVELOPMENT_ROADMAP.md`

@@ -6,7 +6,7 @@
 # 세 관심사를 한 파일로 묶는다 — 항상 함께 source 되며 step 한 단위를 따라가려면 셋 다 읽어야 한다:
 #   1) state   — step 진행 상태(DONE/FAIL/SKIPPED/RUNNING)를 state 파일에 멱등 기록 (resume + [n/total]).
 #   2) run_step — skip 판정 + begin/end + 로그 분리 + heartbeat 를 묶는 중앙 실행 래퍼.
-#   3) steps   — install.sh 전체/a0N 스테이지-로컬이 공유하는 step 정의(스테이지 함수 + 분모 상수).
+#   3) steps   — install.sh 전체 시퀀스가 호출하는 step 정의(스테이지 함수 + 분모 상수).
 #
 # 선행 source 필요: config.sh (STATE_FILE / LOG_FILE / STATE_DIR / TOTAL_STEPS). 호출자가
 # RESOURCE_DIR 와 STEPS_TOTAL 을 설정한다. 함수는 call-time resolve 라 source 순서는 무관.
@@ -113,8 +113,8 @@ state_dump() {
 # 위 state 섹션(step_should_skip / step_begin / step_end_*) 과 config.sh (TOTAL_STEPS) 에 의존.
 #
 # 진행률 분모(total)는 호출자가 설정하는 STEPS_TOTAL 을 호출 시점에 읽는다.
-# install.sh 는 STEPS_TOTAL(전체 step 수)을, 각 a0N 오케스트레이터는 스테이지-로컬 값(a01=6 /
-# a02=4 / a03=1 / a04=1)을 설정한다. 미설정 시 config.sh 의 TOTAL_STEPS 로 fallback.
+# install.sh 가 STEPS_TOTAL(전체 step 수, install_steps_total)을 설정한다.
+# 미설정 시 config.sh 의 TOTAL_STEPS 로 fallback.
 #
 # state 마킹/조회는 위 state 섹션이 전담하고, 본 섹션은 skip 판정 + begin/end 호출만 묶는다.
 #
@@ -209,22 +209,22 @@ run_step() {
 }
 
 # ============================================================================
-# 3) steps — install step 정의 (install.sh 전체 / a0N 스테이지-로컬 공유)
+# 3) steps — install step 정의 (install.sh 전체 시퀀스에서 호출)
 # ============================================================================
 # 선행: 위 state/run_step 섹션. 호출자가 RESOURCE_DIR 를 설정한다.
 #
 # 번호 규칙: 각 스테이지 함수는 offset 을 받아 run_step 번호 = offset + 로컬k 로 계산한다.
 #   install.sh: run_stage_a01 0 → (reboot=step6, install.sh 인라인) → run_stage_a02 6
 #               → run_stage_a03 10 → run_stage_a04 11 → step 13-16(install 전용, install.sh 인라인).
-#   단독 a0N : offset 0 (스테이지-로컬 [k/N]).
+# offset 인자는 향후 부분 실행/재배치 여지를 위해 남겨 둔다 — 현재 호출자는 install.sh 하나.
 # state key(name)는 offset/번호와 무관 — resume 호환에 영향 없음(같은 name 이면 skip 동일).
 #
-# reboot(step6)는 본 섹션에 두지 않는다: install.sh 와 a01 의 reboot wrapper 가
-# 메시지/UNATTENDED 분기/exit-vs-continue 까지 달라, 공유 시 동작이 미묘하게 바뀐다.
-# 각 진입점이 reboot 를 인라인으로 소유한다(behavior-preserving 우선).
+# reboot(step6)는 본 섹션에 두지 않는다: install.sh 의 reboot wrapper 가 메시지/UNATTENDED
+# 분기/exit-vs-continue 를 소유해 run_step 의 일반 step 프레이밍과 다르기 때문이다.
+# install.sh 가 reboot 를 인라인으로 소유한다(behavior-preserving 우선).
 
 # 스테이지별 step 수 (reboot 제외). 단계 추가 시 여기 한 곳만 갱신하면
-# install.sh 전체 분모와 a0N 스테이지-로컬 분모가 함께 따라온다.
+# install_steps_total() 의 전체 분모가 따라온다.
 STAGE_A01_COUNT=5
 STAGE_A02_COUNT=4
 STAGE_A03_COUNT=1

@@ -5,7 +5,7 @@
 #
 # Usage (from any installer script):
 #   source "$(dirname "${BASH_SOURCE[0]}")/config.sh"   # resources/ 내부에서
-#   source "$(dirname "$0")/resources/config.sh"        # top-level (a01-a04 / install.sh)
+#   source "$(dirname "$0")/resources/config.sh"        # top-level (install.sh)
 #
 # 본 파일은 직접 실행하지 않는다. set -u 환경에서도 안전하게 source 가능.
 # 변수별 정책:
@@ -18,7 +18,7 @@
 export ROS_DISTRO=jazzy
 export UBUNTU_CODENAME=noble
 
-# apt 비대화 모드 강제. run-step.sh 가 설치 명령의 stdout 을 로그파일로만 보내므로
+# apt 비대화 모드 강제. orchestrate.sh 가 설치 명령의 stdout 을 로그파일로만 보내므로
 # (콘솔엔 진행률 + stderr 만) dpkg 의 conffile/대화 프롬프트가 stdout 으로 나가면
 # 화면에 안 보인 채 입력을 기다려 설치가 멈춘다. noninteractive 로 그 경로를 차단.
 export DEBIAN_FRONTEND=noninteractive
@@ -92,7 +92,7 @@ export ROS2_JAZZY_TEST_REPO
 : "${STATE_FILE:=${STATE_DIR}/state}"
 
 # --- 설치 상세 로그 (append-only — 덮어쓰기 금지) ------------------------
-# run-step.sh 가 각 step 명령의 stdout+stderr 전량을 여기에 append 한다.
+# orchestrate.sh 가 각 step 명령의 stdout+stderr 전량을 여기에 append 한다.
 # 콘솔에는 [n/total] 진행률과 stderr(경고/에러)만 남고, 대량 출력(apt/pip/colcon)은
 # 이 파일로 빠진다. torch/colcon 으로 회당 수십 MB 누적 가능 — resumable 재실행이라
 # 계속 쌓이지만 규칙상 truncate/회전하지 않는다 (필요 시 사용자가 수동 정리).
@@ -137,10 +137,10 @@ export CYCLONEDDS_URI="${CYCLONEDDS_URI:-file://${CYCLONEDDS_XML}}"
 export ROS_DOMAIN_ID="${ROS_DOMAIN_ID:-42}"
 
 # --- Progress 표시 ([n/total] 시각화) ---------------------
-# run-step.sh 진행률 분모(total)의 최후 fallback 값.
-# **권위 소스는 steps.sh** (STAGE_*_COUNT + install_steps_total) — install.sh/a0N 는 분모를
-# steps.sh 에서 계산하고, 이 TOTAL_STEPS 는 steps.sh 미source 시에만 fallback 으로 쓰인다.
-# 따라서 단계 추가 시 steps.sh 의 STAGE 상수만 갱신하면 되고, 이 값은 그 합과 맞춰만 둔다.
+# orchestrate.sh 진행률 분모(total)의 최후 fallback 값.
+# **권위 소스는 orchestrate.sh** (STAGE_*_COUNT + install_steps_total) — install.sh 는 분모를
+# orchestrate.sh 에서 계산하고, 이 TOTAL_STEPS 는 orchestrate.sh 미source 시에만 fallback 으로 쓰인다.
+# 따라서 단계 추가 시 orchestrate.sh 의 STAGE 상수만 갱신하면 되고, 이 값은 그 합과 맞춰만 둔다.
 : "${TOTAL_STEPS:=16}"
 
 # --- Self-check ----------------------------------------------------------
