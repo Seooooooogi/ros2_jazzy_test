@@ -32,6 +32,15 @@ fi
 mapfile -t EXCLUDES < <(grep -vE '^[[:space:]]*(#|$)' "${EXCLUDE_FILE}")
 [[ ${#EXCLUDES[@]} -gt 0 ]] || { echo "merge-to-main: 제외 경로 목록이 비어 있습니다." >&2; exit 1; }
 
+# keep-ours 목록도 checkout 전(=현재 SRC/dev 버전)에 미리 읽어 둔다. .main-keep-ours 자체가
+# .claude-main-exclude 에 등록돼 있으면 main checkout 후엔 working tree 에 없고, 아래 제거 루프가
+# 지워 버린다 — 그 전에 메모리(KEEP_OURS)로 떠 둬야 충돌 해소 단계에서 keep-ours 가 동작한다.
+KEEP_OURS_FILE="${REPO_ROOT}/.main-keep-ours"
+KEEP_OURS=()
+if [[ -f "${KEEP_OURS_FILE}" ]]; then
+    mapfile -t KEEP_OURS < <(grep -vE '^[[:space:]]*(#|$)' "${KEEP_OURS_FILE}")
+fi
+
 git checkout "${TARGET}"
 
 # --no-ff --no-commit: 머지 커밋 트리를 확정하기 전에 Claude 경로를 떼어낼 틈을 만든다.
@@ -51,9 +60,9 @@ for p in "${EXCLUDES[@]}"; do
 done
 
 # main 이 자기 버전을 유지할 파일(README 등): 충돌 시 dev 로 덮지 않고 main(ours) 버전 보존.
-KEEP_OURS_FILE="${REPO_ROOT}/.main-keep-ours"
-if [[ -f "${KEEP_OURS_FILE}" ]]; then
-    mapfile -t KEEP_OURS < <(grep -vE '^[[:space:]]*(#|$)' "${KEEP_OURS_FILE}")
+# 목록은 상단에서(checkout 전 = SRC/dev 버전) 미리 읽어 KEEP_OURS 에 담아 뒀다 — .main-keep-ours
+# 가 제외 대상이라 이 시점엔 working tree 에 없을 수 있기 때문.
+if [[ ${#KEEP_OURS[@]} -gt 0 ]]; then
     for f in "${KEEP_OURS[@]}"; do
         # unmerged(충돌) 상태인 것만 ours(main) 로 해소.
         if git ls-files -u -- "${f}" | grep -q .; then
