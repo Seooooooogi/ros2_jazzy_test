@@ -2,6 +2,11 @@
 # 승격은 scripts/merge-to-main.sh 가 자동으로 제외하지만, 수동 머지 등으로 제외 경로가 main 에
 # 들어오면 이 가드가 실패시킨다. 실제로 머지를 막으려면 repo Settings → Branches 에서
 # 이 체크를 main 의 required status check 로 지정한다.
+#
+# scripts/ 자체가 main 에서 제외 대상이므로, 가드는 scripts/check-no-claude-on-main.sh 에
+# 의존하지 않고 .claude-main-exclude 를 직접 읽어 검사 로직을 인라인으로 수행한다
+# (검사 스크립트가 main 트리에 없어도 동작해야 한다). 같은 로직의 dev 측 로컬 검증은
+# scripts/check-no-claude-on-main.sh 가 담당한다.
 name: guard-internal-paths-on-main
 
 on:
@@ -17,4 +22,26 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
       - name: Verify main tree excludes internal/Claude paths
-        run: bash scripts/check-no-claude-on-main.sh HEAD
+        run: |
+          set -euo pipefail
+          EXCLUDE_FILE=".claude-main-exclude"
+          [[ -f "${EXCLUDE_FILE}" ]] || { echo "guard: ${EXCLUDE_FILE} 가 없습니다." >&2; exit 1; }
+
+          # 제외 경로 로드(빈 줄/주석 제외).
+          mapfile -t EXCLUDES < <(grep -vE '^[[:space:]]*(#|$)' "${EXCLUDE_FILE}")
+          [[ ${#EXCLUDES[@]} -gt 0 ]] || { echo "guard: 제외 경로 목록이 비어 있습니다." >&2; exit 1; }
+
+          bad=""
+          while IFS= read -r f; do
+            [[ -z "${f}" ]] && continue
+            for p in "${EXCLUDES[@]}"; do
+              case "${f}" in "${p%/}" | "${p%/}"/*) bad+="  ${f}"$'\n'; break ;; esac
+            done
+          done < <(git ls-tree -r --name-only HEAD)
+
+          if [[ -n "${bad}" ]]; then
+            echo "guard: main 트리에 내부/Claude 전용 경로가 있습니다 (main 엔 없어야 함):" >&2
+            printf '%s' "${bad}" >&2
+            exit 1
+          fi
+          echo "guard: main 트리 깨끗 — 내부/Claude 전용 경로 없음."

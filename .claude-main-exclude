@@ -9,3 +9,7 @@ CLAUDE.md
 docs/
 tasks/
 containers/template/
+# humble 보존 스크립트 — dev diff 참조용. 외부 공개 설치엔 불필요.
+backup/
+# main 승격/검증 도구 — dev 에서 실행하는 release 툴링. main 가드는 workflow 가 이 파일을 직접 읽어 인라인 검사.
+scripts/
