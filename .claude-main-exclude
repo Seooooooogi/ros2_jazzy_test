@@ -13,3 +13,5 @@ containers/template/
 backup/
 # main 승격/검증 도구 — dev 에서 실행하는 release 툴링. main 가드는 workflow 가 이 파일을 직접 읽어 인라인 검사.
 scripts/
+# merge-to-main keep-ours 목록 — dev 전용 메타데이터. 병합 로직(merge-to-main.sh)이 checkout 전 dev 버전을 읽음.
+.main-keep-ours
