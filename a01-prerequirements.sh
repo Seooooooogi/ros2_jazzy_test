@@ -20,18 +20,14 @@ if [[ "$(id -u)" -eq 0 ]]; then
     exit 1
 fi
 
+# step 엔진(state + run_step + step 정의) + 설치 UX(reboot confirm 용).
 # shellcheck source=resources/config.sh
 source "${RESOURCE_DIR}/config.sh"
-# shellcheck source=resources/state.sh
-source "${RESOURCE_DIR}/state.sh"
-# shellcheck source=resources/confirm.sh
-source "${RESOURCE_DIR}/confirm.sh"
+# shellcheck source=resources/orchestrate.sh
+source "${RESOURCE_DIR}/orchestrate.sh"
+# shellcheck source=resources/interaction.sh
+source "${RESOURCE_DIR}/interaction.sh"
 config_assert_set
-
-# shellcheck source=resources/run-step.sh
-source "${RESOURCE_DIR}/run-step.sh"
-# shellcheck source=resources/steps.sh
-source "${RESOURCE_DIR}/steps.sh"
 # 단독 실행 시 스테이지-로컬 진행률 ([n/6] = 5 step + reboot). 통합(install.sh)은 전체 step 수 분모.
 STEPS_TOTAL=$((STAGE_A01_COUNT + 1))
 

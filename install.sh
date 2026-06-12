@@ -28,22 +28,14 @@ if [[ "$(id -u)" -eq 0 ]]; then
     exit 1
 fi
 
+# step 엔진(state + run_step + step 정의) + 설치 UX(confirm + env-load + unattended).
 # shellcheck source=resources/config.sh
 source "${RESOURCE_DIR}/config.sh"
-# shellcheck source=resources/state.sh
-source "${RESOURCE_DIR}/state.sh"
-# shellcheck source=resources/confirm.sh
-source "${RESOURCE_DIR}/confirm.sh"
-# shellcheck source=resources/env-load.sh
-source "${RESOURCE_DIR}/env-load.sh"
-# shellcheck source=resources/unattended.sh
-source "${RESOURCE_DIR}/unattended.sh"
+# shellcheck source=resources/orchestrate.sh
+source "${RESOURCE_DIR}/orchestrate.sh"
+# shellcheck source=resources/interaction.sh
+source "${RESOURCE_DIR}/interaction.sh"
 config_assert_set
-
-# shellcheck source=resources/run-step.sh
-source "${RESOURCE_DIR}/run-step.sh"
-# shellcheck source=resources/steps.sh
-source "${RESOURCE_DIR}/steps.sh"
 STEPS_TOTAL="$(install_steps_total)"
 
 usage() {

@@ -7,7 +7,7 @@
 | 구분 | `set -euo pipefail` | 예시 |
 |---|---|---|
 | **실행 진입점** (직접 `bash X.sh`) | **필수** (shebang 다음 줄) | `install.sh`, `a0N`, `resources/` 설치 본문(kernel-baseline, docker-install …) |
-| **source 전용 라이브러리** (`source X.sh`) | **두지 않는다** | `config.sh`, `state.sh`, `run-step.sh`, `steps.sh`, `confirm.sh`, `env-load.sh`, `unattended.sh`, `activate.sh`, `apt-repo.sh` |
+| **source 전용 라이브러리** (`source X.sh`) | **두지 않는다** | `config.sh`, `orchestrate.sh`(state + run_step + step 정의), `interaction.sh`(env-load + confirm + unattended), `activate.sh`, `apt-repo.sh` |
 
 - sourced 파일에 `set -e` 를 넣으면 **호출자 셸 옵션을 오염**시킨다(호출 셸 전체가 errexit). 셸 옵션은 호출 진입점이 소유한다.
 - source 전용 라이브러리는 헤더 주석에 `# source 전용 라이브러리 — set -euo 를 여기 두지 않는다(호출 진입점이 셸 옵션을 소유).` 한 줄 명시.
@@ -49,14 +49,14 @@ add_apt_repo \
 ## 5. 메시지 / 로그
 - 콘솔 메시지는 `<script>: <msg>` prefix (예: `docker: ...`, `voice: ...`, `dsr: ...`). 어느 step 출력인지 식별.
 - 경고·에러는 `>&2`(stderr). 진행 정보는 stdout(로그 파일로 분리됨).
-- 진행률 배너 `[n/total]` 는 `run-step.sh`(`run_step`)가 전담 — 본문에서 직접 출력하지 않는다.
+- 진행률 배너 `[n/total]` 는 `orchestrate.sh`(`run_step`)가 전담 — 본문에서 직접 출력하지 않는다.
 - 변수: 전역/환경 = 대문자(`ROS_DISTRO`), 지역 = `local` 소문자, 내부 헬퍼 = `_` prefix.
 
 ## 6. 신규 설치 스크립트 템플릿
 ```bash
 #!/usr/bin/env bash
 # resources/<name>-install.sh — 한 줄 설명.
-# 순수 설치 본문 — state 프레이밍은 오케스트레이터(run-step.sh)가 소유.
+# 순수 설치 본문 — state 프레이밍은 오케스트레이터(orchestrate.sh 의 run_step)가 소유.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -76,4 +76,20 @@ sudo apt-get install -y <package>
 
 echo "<name>: success — <작업> 완료"
 ```
-- step 추가 시 `resources/steps.sh` 의 스테이지 함수 + `STAGE_*_COUNT` 1곳만 갱신(install.sh/a0N 양쪽 자동 반영).
+- step 추가 시 `resources/orchestrate.sh` 의 스테이지 함수 + `STAGE_*_COUNT` 1곳만 갱신(install.sh/a0N 양쪽 자동 반영).
+
+## 7. 한 도메인 = 여러 step → 서브커맨드 dispatch
+같은 vendor/도메인이 여러 step 으로 나뉘면(예: ROS2 desktop+extras, RealSense sdk+ros) 파일을
+나누는 대신 **한 파일 + 서브커맨드 dispatch** 로 묶는다. 각 step 은 여전히 별도 프로세스
+(`bash <file>.sh <sub>`)로 실행돼 `set -euo` 진입점 분리와 run_step 진행률/resume key 독립이
+유지된다(`ros2-packages.sh desktop|extras`, `realsense-install.sh sdk|ros`).
+
+```bash
+case "${1:?<name>: subcommand 필요 (a|b)}" in
+    a) do_a ;;
+    b) do_b ;;
+    *) echo "<name>: 알 수 없는 subcommand '$1' (a|b)" >&2; exit 2 ;;
+esac
+```
+- `orchestrate.sh` 의 `run_step` 줄에 서브커맨드를 인자로 넘긴다: `bash "${RESOURCE_DIR}/<file>.sh" a`.
+- 서브커맨드 분기 안에서만 쓰는 변수는 해당 함수 `local` 로 — branch 간 누수 차단.
