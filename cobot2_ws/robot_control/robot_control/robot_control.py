@@ -1,6 +1,7 @@
 import os
 import time
 import sys
+import json
 from scipy.spatial.transform import Rotation
 import numpy as np
 import rclpy
@@ -9,7 +10,7 @@ import DR_init
 
 from od_msg.srv import SrvDepthPosition
 from std_srvs.srv import Trigger
-from std_msgs.msg import Bool
+from std_msgs.msg import Bool, String
 from ament_index_python.packages import get_package_share_directory
 from robot_control.onrobot import RG
 
@@ -77,9 +78,37 @@ class RobotController(Node):
         # voice 가 wakeword 를 감지한 순간을 토픽으로 받아 로깅한다 (get_keyword 응답 대기 중 수신).
         self.create_subscription(Bool, "/wakeword_detected", self._on_wakeword, 10)
 
+        # 시각화 viewer 가 현재 처리 중인 target/pos 를 표시하도록 publish 한다.
+        # 모션 로직과 무관한 관찰용 토픽 — pick 직전 항목을 알리고, 유휴 시 비운다.
+        self.ui_pub = self.create_publisher(String, "/ui/current_task", 10)
+        self._publish_task(None, None)
+
     def _on_wakeword(self, msg):
         if msg.data:
             self.get_logger().info("Wakeword detected! (from voice node)")
+
+    def _publish_task(self, target, pos):
+        """현재 target/pos 를 viewer 용 토픽에 publish 한다.
+
+        Args:
+            target (str | None): 집을 대상 도구. 유휴 상태면 None.
+            pos (str | None): 목적지(pos1/2/3). 미지정이면 None.
+
+        Note:
+            관찰용 add-on 토픽이라 실패해도 pick-and-place 동작에 영향이 없어야 한다.
+            payload 는 viewer 가 파싱하는 JSON — 빈 객체 {} 는 유휴를 뜻한다.
+        """
+        data = {}
+        if target:
+            data["target"] = target
+        if pos:
+            data["pos"] = pos
+        # 관찰용 publish 가 실패해도 motion 루프(robot_control)는 영향받지 않아야 한다.
+        # robot_control() 은 main while 루프에서 try 없이 호출되므로 여기서 예외를 격리한다.
+        try:
+            self.ui_pub.publish(String(data=json.dumps(data)))
+        except Exception as e:
+            self.get_logger().warn(f"_publish_task failed (non-critical): {e}")
 
     def get_robot_pose_matrix(self, x, y, z, rx, ry, rz):
         R = Rotation.from_euler("ZYZ", [rx, ry, rz], degrees=True).as_matrix()
@@ -125,14 +154,21 @@ class RobotController(Node):
                 dests = []
 
             for i, target in enumerate(tools):
+                dest = dests[i] if i < len(dests) else None
+                # 명령 파싱 즉시 오버레이를 갱신한다. 검출/depth 실패로 pick 까지 못 가도
+                # "무엇을 시도 중인지"는 보여야 하므로 get_target_pos 성공 여부와 분리한다.
+                self._publish_task(target, dest)
+
                 target_pos = self.get_target_pos(target)
                 if target_pos is None:
                     self.get_logger().warn("No target position")
-                else:
-                    dest = dests[i] if i < len(dests) else None
-                    self.get_logger().info(f"target position: {target_pos} -> place: {dest}")
-                    self.pick_and_place_target(target_pos, dest)
-                    self.init_robot()
+                    continue
+                self.get_logger().info(f"target position: {target_pos} -> place: {dest}")
+                self.pick_and_place_target(target_pos, dest)
+                self.init_robot()
+
+            # 한 명령 처리가 끝나면 viewer 오버레이를 유휴로 되돌린다.
+            self._publish_task(None, None)
 
         else:
             # get_keyword 실패(wakeword 미감지/타임아웃 등) — 다음 루프에서 재호출한다.
