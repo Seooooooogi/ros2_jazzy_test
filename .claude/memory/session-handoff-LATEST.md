@@ -9,10 +9,16 @@
 
 현재 최우선 = Next Actions #1 = **다른 노트북(fleet)에서 전체 클린설치 검증.** 새 yolo 이미지(KeyError 수정본)가 드라이브에 올라가 있어 그 머신 step15 fetch 가 수정본을 받는다. 드라이브 도달성/크기 검증은 [문서] 머신에서 통과(무인증 curl, Content-Length 일치) — 단 동일 네트워크라 타 네트워크/무계정 실측은 fleet 머신에서 최종 확인.
 
-**연계(후속3 리팩토링)**: 위 fleet 클린설치를 `refactor/installer-shell` 브랜치로 돌리면 리팩토링의 실 머신 검증(키 다운로드·`apt update` 인증·reboot 경계)을 동시에 끝낼 수 있다. 단 그 전에 push + 머지 대상 결정 필요(현재 로컬·미push). 리팩토링은 behavior-preserving 정적 검증 통과 — Last updated 후속3 참조.
+**연계(후속3 리팩토링)**: `refactor/installer-shell`(셸 리팩토링)은 `feat/application-containers` 에 머지 완료(`68f452d`). fleet 클린설치를 그 브랜치로 돌리면 리팩토링의 실 머신 검증(키 다운로드·`apt update` 인증·reboot 경계)이 함께 끝난다. 리팩토링은 behavior-preserving 정적 검증 통과 — Last updated 후속3 참조.
 
 ## Last updated
-2026-06-11 (후속3) — **[문서]** 셸 스크립트 Comprehensive 리팩토링, 신규 브랜치 `refactor/installer-shell`(base `feat/application-containers`, 8커밋, **로컬·미push**). 전부 behavior-preserving:
+2026-06-12 (후속4) — **[문서]** 공개 main 트리 위생 마무리 + `a01-a04` 스테이지 스크립트 폐기. (`refactor/installer-shell` 은 이미 `feat/application-containers` 에 머지됨 `68f452d` — 후속3 의 "push/머지 결정"은 해소.)
+① **main 제외 확장 + 가드 self-contained**(`1268db2`, main `6de576f`) — `backup/`(humble 보존)·`scripts/`(승격 툴링)을 `.claude-main-exclude` 등록 후 공개 main 에서 제거. 내부경로 가드 워크플로가 `scripts/check-no-claude-on-main.sh` 의존을 버리고 `.claude-main-exclude` 를 직접 읽어 `git ls-tree` 인라인 검사(스크립트가 main 트리에 없어도 동작).
+② **`.main-keep-ours` 제외**(`bb469a1`, main `e3440cd`) — keep-ours 메타데이터도 main 제외. `merge-to-main.sh` 가 이 목록을 checkout·제외 **이전**(상단, dev 버전)에 미리 읽도록 reorder — 안 하면 제거 루프가 파일을 지운 뒤 읽혀 README 보존(keep-ours)이 깨지는 순서 버그.
+③ **`a01-a04` 폐기**(`915cdd8`) — install.sh resumable + `run_step` 의 state-skip 으로 standalone 이 강제 재실행을 본래 못 해 잔재. 4개 삭제, 서브커맨드로도 대체 안 함. 강제 재실행은 `--reset`/`resources/<step>.sh` 직접. `orchestrate.sh` 의 `run_stage_a0N`·분모 상수는 install.sh 전체 시퀀스가 계속 써 유지. ADR-022 기록 + a0N·run-step.sh·steps.sh 참조 정리.
+**⚠ promotion 체크리스트(다음 dev→main 승격 시 [문서])**: main README 는 `.main-keep-ours` 로 main 별도 관리라 아직 `a0N` 개별 실행을 안내한다. a0N 삭제가 머지로 main 에 도달하면 **main README 설치 안내를 `install.sh` 단독으로 갱신**해야 한다(현재는 main 에 a0N 이 남아 README 와 일관). 승격: `bash scripts/merge-to-main.sh feat/application-containers` → `git push origin main`(가드 자동 검증).
+
+2026-06-11 (후속3) — **[문서]** 셸 스크립트 Comprehensive 리팩토링, 신규 브랜치 `refactor/installer-shell`(base `feat/application-containers`, 8커밋). 전부 behavior-preserving. **(2026-06-12 기준 `feat/application-containers` 에 머지 완료 — 아래 "미push" 표기는 과거 시점.)**:
 ① **일관성**(`abe3cf6`) — source 전용 lib(config/state/run-step/steps/confirm/env-load/unattended/activate)에 "set -euo 안 둠(호출 진입점이 셸옵션 소유)" 예외 명시, 메시지 prefix 통일, stale "STEPS_TOTAL=15" 주석 제거, `docs/SCRIPTING_GUIDELINES.md` 신규, CLAUDE.md Hard Rule #5 를 "실행 진입점만"으로 정제.
 ② **apt-repo 헬퍼**(`e9557f2`~`8796c1e`, vendor별 5커밋) — `resources/apt-repo.sh::add_apt_repo` 추출, docker/ros2/realsense/vscode/nvidia 전환. vendor별 키 처리(다운로더 플래그·dearmor write·list 비교)는 인자로 보존. **nvidia list 는 multi-line `cat`-compare 보존**(grep 단일행이면 멱등 깨짐). docker/nvidia 는 `--no-update`(뒤에 별도 update 존재).
 ③ **step 단일소스화**(`4cf13d6`) — `resources/steps.sh`(run_stage_aNN(offset)+STAGE_*_COUNT+install_steps_total) 로 install.sh↔a0N step 목록 중복·이중 STEPS_TOTAL 제거. **단계 추가 시 steps.sh STAGE 상수 1곳만**(기존 4곳). reboot(step6)은 install.sh/a01 wrapper(메시지·무인분기·exit) 차이로 인라인 유지. **state key(name) 불변 → resume 호환.**
