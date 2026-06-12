@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # resources/config.sh — Single source of truth for distro / version pins.
 # distro / version 문자열을 스크립트마다 박지 않고 여기 한 곳에서만 정의한다.
+# source 전용 라이브러리 — set -euo 를 여기 두지 않는다(호출 진입점이 셸 옵션을 소유).
 #
 # Usage (from any installer script):
 #   source "$(dirname "${BASH_SOURCE[0]}")/config.sh"   # resources/ 내부에서
@@ -25,6 +26,13 @@ export DEBIAN_FRONTEND=noninteractive
 # NOTE: host venv 는 폐기 (2026-05-27 결정). application Python 패키지
 # (PyTorch / ultralytics / langchain / openai 등) 는 모두 별도(yolo/voice) 컨테이너 안에만 존재.
 # host 는 system Python (apt) + colcon 워크스페이스만 책임.
+
+# --- 레포 소스 트리 루트 ------------------------------------------------
+# 이 파일(resources/config.sh)의 부모 = 레포 루트. 클론 위치에 무관하게 자기 위치에서 계산해
+# 단일 진실 소스로 export 한다. bringup launch 가 colcon install 후 __file__ 로 레포(컨테이너
+# compose / config.sh)를 못 찾으므로 이 값을 참조한다. override 허용(`:=`).
+: "${ROS2_JAZZY_TEST_REPO:=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
+export ROS2_JAZZY_TEST_REPO
 
 # --- DSR (jazzy 브랜치 활성 확인 완료 2026-05-26) ---------------
 : "${DSR_BRANCH:=${ROS_DISTRO}}"
@@ -67,6 +75,18 @@ export DEBIAN_FRONTEND=noninteractive
 # 사용자 결정 2026-05-28. 시스템 레이어 설치에서 이 변수를 읽는 코드는 없음.
 : "${DOCKER_VERSION_STRING:=}"
 
+# --- Phase 4 이미지 배포 (공개 구글 드라이브에서 받아 docker load) ----------
+# 클린설치(install.sh step14)는 이미지를 빌드하지 않고 아래 공개 드라이브 file ID 로 tar 를
+# 받아 load 한다(빠른 재현). 직접 빌드/검증(이미지 제작 머신)은 containers/build-all.sh.
+#
+# file ID = 공개 링크 식별자(secret 아님) — 업로드 후 채운다. 비우면 fetch 가 명확히 실패.
+# SHA256 = `docker save` tar 의 무결성 해시. 반드시 레포(여기)에 핀하고 드라이브엔 tar 만 올린다
+# — 해시를 tar 와 같은 출처에서 받으면 둘 다 변조 시 검증이 무의미하기 때문(신뢰 출처=레포).
+: "${YOLO_IMAGE_GDRIVE_ID:=1pbWlfFb3d5L6E_S5XrN9_7s_OLsg_YvC}"
+: "${VOICE_IMAGE_GDRIVE_ID:=1iKKLyreAawlDVBcFKqXlyNCG0JNnogYp}"
+: "${YOLO_IMAGE_SHA256:=4b29263968bbd0b0247d8b71a11660b309ea596d6796bd899ef8d9bb6bf5d73b}"
+: "${VOICE_IMAGE_SHA256:=092b8138e14b7568d7dbaeb27c875867b2a16083f4ee6a0c9b2c1658bb9c2d0b}"
+
 # --- State file (resumable 재실행, 구조화 포맷 2026-05-27) ----
 : "${STATE_DIR:=${HOME}/.ros2_jazzy_test}"
 : "${STATE_FILE:=${STATE_DIR}/state}"
@@ -103,14 +123,25 @@ export CYCLONEDDS_URI="${CYCLONEDDS_URI:-file://${CYCLONEDDS_XML}}"
 # 전부 자동 탐지(무선/docker/가상 제외). CI / 특수망에서만 명시 지정.
 : "${DDS_NETIF:=}"
 
+# --- host ethernet 고정 IP (로봇 장비 LAN) ------------------------------
+# install.sh 마지막 step(network_static_ip)이 nmcli 로 유선 NIC 에 이 IP 를 고정한다.
+# 로봇 LAN 구성: .1=OnRobot 그리퍼 / .100=로봇 컨트롤러 / .30=host. 로봇·그리퍼와 같은
+# 서브넷이어야 통신 가능. 게이트웨이/DNS 는 두지 않는다 — 인터넷은 wifi 로 나가며, 이
+# 연결이 기본 경로를 잡으면 인터넷이 끊긴다(never-default). HOST_ETH_NETIF 비우면 자동 탐지.
+: "${HOST_ETH_IP:=192.168.1.30}"
+: "${HOST_ETH_PREFIX:=24}"
+: "${HOST_ETH_NETIF:=}"
+
 # ROS_DOMAIN_ID 단일 진실 소스. host(activate.sh)와 compose 두 서비스가 같은 값을
 # 봐야 discovery 성립. 미설정 셸에서도 결정적이도록 명시 핀.
 export ROS_DOMAIN_ID="${ROS_DOMAIN_ID:-42}"
 
 # --- Progress 표시 ([n/total] 시각화) ---------------------
-# 통합 진입점 install.sh 의 전체 단계 수 (a01:6 + a02:4 + a03:1 + a04:1 + dds-tuning:1).
-# run-step.sh 의 STEPS_TOTAL fallback 으로도 쓰인다. 단계 추가 시 함께 갱신.
-: "${TOTAL_STEPS:=13}"
+# run-step.sh 진행률 분모(total)의 최후 fallback 값.
+# **권위 소스는 steps.sh** (STAGE_*_COUNT + install_steps_total) — install.sh/a0N 는 분모를
+# steps.sh 에서 계산하고, 이 TOTAL_STEPS 는 steps.sh 미source 시에만 fallback 으로 쓰인다.
+# 따라서 단계 추가 시 steps.sh 의 STAGE 상수만 갱신하면 되고, 이 값은 그 합과 맞춰만 둔다.
+: "${TOTAL_STEPS:=16}"
 
 # --- Self-check ----------------------------------------------------------
 # 자식 스크립트가 진입 직후 호출하면 필수 변수 누락 즉시 catch.

@@ -61,3 +61,17 @@ CLAUDE.md
 
 # 코드 인덱스 — 소스에서 재생성 가능한 산출물이라 추적 제외.
 .codegraph/
+
+# 브레인스토밍/스펙 설계 산출물 (로컬 작업물 — 배포 대상 아님)
+docs/superpowers/
+
+# 로컬 에이전트/분석 도구 산출물 — 소스에서 재생성 가능, 배포 대상 아님.
+.agents/
+.understand-anything/
+
+# Skill 매니저가 설치/관리하는 패키지 + lock — 재설치로 재생성 가능, 로컬 환경 전용.
+.claude/skills/
+skills-lock.json
+
+# 로컬 참조용 wiki 덤프 — 설치 스크립트/배포와 무관(humble 보존 스크립트는 backup/ 안에서 계속 추적).
+backup/llm_wiki/

@@ -15,6 +15,8 @@
 **/*.pyc
 **/.ipynb_checkpoints
 **/*.pt
+# yolo 노드 검출 모델만 예외로 재포함 — object_detection 이미지에 bake (다른 .pt 는 계속 제외).
+!cobot2_ws/object_detection/resource/yolov8n_tools_0122.pt
 **/.env
 **/.env.*
 **/*.key

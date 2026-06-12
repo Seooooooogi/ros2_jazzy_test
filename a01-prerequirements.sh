@@ -20,26 +20,20 @@ if [[ "$(id -u)" -eq 0 ]]; then
     exit 1
 fi
 
+# step 엔진(state + run_step + step 정의) + 설치 UX(reboot confirm 용).
 # shellcheck source=resources/config.sh
 source "${RESOURCE_DIR}/config.sh"
-# shellcheck source=resources/state.sh
-source "${RESOURCE_DIR}/state.sh"
-# shellcheck source=resources/confirm.sh
-source "${RESOURCE_DIR}/confirm.sh"
+# shellcheck source=resources/orchestrate.sh
+source "${RESOURCE_DIR}/orchestrate.sh"
+# shellcheck source=resources/interaction.sh
+source "${RESOURCE_DIR}/interaction.sh"
 config_assert_set
-
-# 단독 실행 시 스테이지-로컬 진행률 ([n/6]). 통합 실행(install.sh)은 자체 STEPS_TOTAL=12 사용.
-STEPS_TOTAL=6
-# shellcheck source=resources/run-step.sh
-source "${RESOURCE_DIR}/run-step.sh"
+# 단독 실행 시 스테이지-로컬 진행률 ([n/6] = 5 step + reboot). 통합(install.sh)은 전체 step 수 분모.
+STEPS_TOTAL=$((STAGE_A01_COUNT + 1))
 
 # kernel-baseline 을 nvidia 보다 먼저: HWE 커널 메타 + 헤더 + modules-extra 보장이
 # nvidia 모듈 반쪽-커널 brick 과 DKMS 헤더 누락을 둘 다 차단하는 전제다.
-run_step 1 a01_kernel_baseline bash "${RESOURCE_DIR}/kernel-baseline.sh"
-run_step 2 a01_nvidia_driver   bash "${RESOURCE_DIR}/nvidia-driver-install.sh"
-run_step 3 a01_docker          bash "${RESOURCE_DIR}/docker-install.sh"
-run_step 4 a01_ros2_desktop    bash "${RESOURCE_DIR}/ros2-desktop-main.sh"
-run_step 5 a01_ros2_extras     bash "${RESOURCE_DIR}/ros2-install.sh"
+run_stage_a01 0
 
 # --- step 6: reboot (되돌릴 수 없는 작업이라 사용자 confirm + 재부팅 루프 방지) ---
 if step_should_skip a01_reboot; then

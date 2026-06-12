@@ -56,7 +56,11 @@ class YoloModel:
         print("classes: ")
         print(results[0].names)
         detections = self._aggregate_detections(results)
-        label_id = self.reversed_class_dict[target]
+        label_id = self.reversed_class_dict.get(target)
+        if label_id is None:
+            # 학습 클래스에 없는 target 은 KeyError 로 죽지 말고 미검출(None, None)로 처리
+            print(f"Unknown target '{target}' — not in model classes {list(self.reversed_class_dict.keys())}")
+            return None, None
         print("label_id: ", label_id)
         print("detections: ", detections)
 
