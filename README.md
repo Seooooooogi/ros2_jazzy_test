@@ -120,3 +120,21 @@ ros2 launch realsense2_camera rs_align_depth_launch.py \
 ```
 
 - `align_depth.enable:=true` 필수 — 없으면 `aligned_depth_to_color` 미publish
+
+## 시각화 (선택) — 실시간 카메라 + YOLO + 음성 상태
+
+RealSense 화면에 YOLO 실시간 박스·클래스 + 좌상단 wakeword/target/pos 를 겹쳐 띄우는 관찰용 창. 위에서 카메라가 떠 있어야 한다.
+
+```bash
+# 1) 추론 컨테이너 — viz 프로파일 (평소 up 엔 미포함). 박스만 /yolo/detections 로 publish
+docker compose -f ~/ros2_jazzy_test/containers/docker-compose.yml --profile viz up -d yolo-viz
+
+# 2) host 뷰어 창 (새 터미널 — 환경 source 후, q 로 종료)
+source /opt/ros/jazzy/setup.bash
+set -a; source ~/ros2_jazzy_test/resources/config.sh; set +a
+python3 ~/ros2_jazzy_test/viz/viewer.py
+```
+
+- 컨테이너가 박스만 보내고 host 뷰어가 원본 프레임 위에 합성 (host 는 apt cv2/cv_bridge 만 사용 — pip 불필요)
+- 좌상단 target/pos 는 `robot_control` 이 돌 때만 채워진다 (아니면 `-`)
+- 토픽 / 트러블슈팅 상세: `viz/README.md`
