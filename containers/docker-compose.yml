@@ -56,6 +56,34 @@ services:
     # volumes:
     #   - ./models/yolov8n_tools_0122.pt:/ws/install/share/object_detection/resource/yolov8n_tools_0122.pt:ro
 
+  yolo-viz:                     # 시각화 전용 — color 스트림 연속추론 → /yolo/detections (host viewer 가 구독).
+    # 기존 yolo 이미지를 그대로 재사용한다(신규/무태그 이미지 없음). 노드 본문은 build 된
+    # object_detection 서비스와 별개로, 마운트한 스크립트를 entrypoint 위에서 직접 실행한다
+    # → 이미지 재빌드/재배포 없이 viz 노드만 추가·수정 가능.
+    image: docker.io/${DOCKERHUB_USER:-local}/ros2-jazzy-yolo:${YOLO_TAG:-dev}
+    profiles: [viz]             # opt-in — 프로덕션 up 에 자동 포함 안 됨. `--profile viz` 로만 기동.
+    network_mode: host          # host net namespace 공유 → cyclonedds NIC whitelist·버퍼 상속(카메라 토픽 수신).
+    restart: unless-stopped
+    environment:
+      - ROS_DOMAIN_ID=${ROS_DOMAIN_ID:-42}
+      - RMW_IMPLEMENTATION=${RMW_IMPLEMENTATION:-rmw_cyclonedds_cpp}
+      - CYCLONEDDS_URI=file:///cyclonedds.xml
+      - PYTHONUNBUFFERED=1       # 모델 로드·추론 로그를 docker logs 에 실시간 노출.
+    volumes:
+      - ${CYCLONEDDS_XML:-${HOME}/.ros2_jazzy_test/cyclonedds.xml}:/cyclonedds.xml:ro
+      # `../` 는 의도적 — compose 파일이 containers/ 에 있어 volume 상대경로는 파일 기준이다.
+      # repo-root 의 viz/live_detection.py 를 가리키려면 한 단계 위로 올라간다.
+      - ../viz/live_detection.py:/opt/viz/live_detection.py:ro
+    deploy:                     # GPU 예약 — yolo-detection 과 동일.
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    # entrypoint(ROS overlay + venv PYTHONPATH 주입) 위에서 스크립트를 직접 실행.
+    command: ["python3", "/opt/viz/live_detection.py"]
+
   voice-processing:
     image: docker.io/${DOCKERHUB_USER:-local}/ros2-jazzy-voice:${VOICE_TAG:-dev}
     build:
