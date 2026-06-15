@@ -742,3 +742,26 @@
 
 **Reopen 조건**:
 - 특정 단계만 강제 재실행하는 요구가 반복되면 → state 일부만 무효화하는 `--redo <step>` 류 프리미티브 추가 검토(스크립트 4개 부활이 아니라).
+
+### ADR-023: 컨테이너 dev override — 코드 live-mount + 수동 기동 디버깅 워크플로 (2026-06-15)
+
+**Date**: 2026-06-15
+
+**Context**:
+- yolo/voice 컨테이너는 소스를 이미지에 baked-in(COPY + colcon build) → 코드 한 줄 수정에도 이미지 재빌드 필요. 노드가 CMD 로 자동 기동돼 디버깅 시 docker logs 를 따로 봐야 함. 반복 개발에 불편.
+- 협업자가 컨테이너 노드 코드를 쉽게 수정·테스트할 경로가 필요.
+
+**Decision**:
+- 프로덕션 정의(`docker-compose.yml`)는 그대로 두고 dev 전용 override(`docker-compose.dev.yml`)를 추가.
+  - `build.target=builder`(colcon·`/ws/src` 보유 스테이지), host 소스(`~/yolo_ws/src`·`~/voice_ws/src`)를 `/ws/src` 에 bind-mount → 수정 즉시 반영.
+  - 노드 auto-run 끔(`sleep`) → `docker exec` 로 진입해 `ros2 run` 수동 실행. `dev/bashrc` 를 `/root/.bashrc` 로 mount 해 exec 셸이 ROS overlay+venv 자동 source(entrypoint 는 PID1 전용이라 exec 셸엔 환경 미반영).
+  - 별도 이미지 태그(`dev-builder`)로 프로덕션 이미지와 분리(tag clobber 방지).
+- `~/yolo_ws`·`~/voice_ws` 는 레포 `cobot2_ws` 에서 **복사**해 생성(`containers/dev-ws-setup.sh`). 별도 워크스페이스라 자유롭게 수정, 공유는 레포로 수동 반영(symlink 은 docker bind-mount 안에서 깨져 복사 채택).
+- `ament_python`(object_detection/voice_processing)이라 `--symlink-install` 후 `.py` 편집은 노드 재시작만으로 반영. `od_msg`(메시지)는 codegen 이라 변경 시 `colcon build` 재실행.
+
+**Consequences**:
+- dev override·setup·`containers/README.md` 는 공개 main 에도 포함(viz 프로파일처럼 공개 개발 도구).
+- 프로덕션 경로(install.sh / 배포 이미지 / fetch)는 불변 — dev override 를 안 띄우면 미사용. 배포 이미지는 baked-in 유지(재현성).
+
+**Reopen 조건**:
+- 자동 재시작(파일 저장 → 노드 reload)까지 필요하면 watchmedo 등 file watcher 를 dev override 에 추가 검토.

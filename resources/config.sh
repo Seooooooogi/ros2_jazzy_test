@@ -39,6 +39,13 @@ export ROS2_JAZZY_TEST_REPO
 : "${DSR_EMULATOR_VERSION:=3.0.1}"
 : "${DSR_WORKSPACE:=${HOME}/cobot2_ws}"
 
+# --- Phase 4 dev 워크스페이스 (컨테이너 코드 live-mount, docker-compose.dev.yml 전용) ----
+# yolo/voice 컨테이너를 dev 모드로 띄울 때 host 의 이 경로(${WS}/src)를 컨테이너 /ws/src 에
+# bind-mount 한다. containers/dev-ws-setup.sh 가 레포 cobot2_ws 의 해당 패키지를 여기로 복사 생성.
+# 프로덕션(install.sh / docker-compose.yml)과 무관 — dev override 를 안 띄우면 미사용. override 허용.
+: "${YOLO_WS:=${HOME}/yolo_ws}"
+: "${VOICE_WS:=${HOME}/voice_ws}"
+
 # --- Kernel track (HWE) --------------------------------------------------
 # HWE 커널 메타를 명시 설치해 커널 이미지 + 헤더 + modules-extra 를 항상 함께 보장한다.
 # 이 메타가 빠지면 다른 패키지(예: nvidia 모듈)가 커널 이미지만 끌어와 modules-extra

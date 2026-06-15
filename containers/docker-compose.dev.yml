@@ -1,0 +1,43 @@
+# Phase 4 컨테이너 dev override — 코드 수정 live-mount + 노드 수동 기동(디버깅용).
+#
+# base(docker-compose.yml)와 함께 머지해 쓴다:
+#   bash containers/dev-ws-setup.sh   # 최초 1회 — ~/yolo_ws·~/voice_ws 생성
+#   docker compose -f containers/docker-compose.yml -f containers/docker-compose.dev.yml build
+#   docker compose -f containers/docker-compose.yml -f containers/docker-compose.dev.yml up -d yolo-detection
+#   docker exec -it yolo-detection bash   # 안에서: colcon build --symlink-install && ros2 run object_detection object_detection
+#
+# 프로덕션(docker-compose.yml 단독) 대비 차이:
+#   - build.target=builder — colcon·빌드도구·/ws/src 가 있는 스테이지로 빌드(runtime 엔 colcon 없음).
+#   - host 소스(~/yolo_ws/src, ~/voice_ws/src)를 /ws/src 에 bind-mount → 수정 즉시 반영.
+#     소스는 containers/dev-ws-setup.sh 가 레포 cobot2_ws 에서 복사 생성한다.
+#   - 노드 auto-run(CMD ros2 run) 끔 → 기동 시 1회 colcon build 후 sleep. exec 로 들어가 수동 실행.
+#   - 별도 이미지 태그(dev-builder) — 프로덕션 이미지 tag clobber 방지.
+#   - dev/bashrc 를 /root/.bashrc 로 mount → docker exec 셸이 ROS overlay+venv PYTHONPATH 자동 source.
+#     (entrypoint 는 PID1 전용이라 docker exec 로 띄운 셸엔 그 환경이 실리지 않는다.)
+#
+# network_mode host·GPU(yolo)·/dev/snd+audio(voice)·env·env_file·cyclonedds.xml mount 은 base 에서 상속.
+# 전제(base 와 동일): ~/.ros2_jazzy_test/cyclonedds.xml(dds-tuning) + (voice).env. 카메라 토픽은 host 소유.
+
+services:
+  yolo-detection:
+    image: docker.io/${DOCKERHUB_USER:-local}/ros2-jazzy-yolo:dev-builder
+    build:
+      target: builder
+    working_dir: /ws
+    volumes:
+      - ${YOLO_WS:-${HOME}/yolo_ws}/src:/ws/src
+      - ./dev/bashrc:/root/.bashrc:ro
+    # $$ROS_DISTRO — compose 가 $ 한 개로 축약해 컨테이너 안 bash 가 런타임에 확장(이미지 ENV=jazzy).
+    command: ["bash", "-c", "set +u; source /opt/ros/$$ROS_DISTRO/setup.bash; colcon build --symlink-install || true; sleep infinity"]
+    restart: "no"
+
+  voice-processing:
+    image: docker.io/${DOCKERHUB_USER:-local}/ros2-jazzy-voice:dev-builder
+    build:
+      target: builder
+    working_dir: /ws
+    volumes:
+      - ${VOICE_WS:-${HOME}/voice_ws}/src:/ws/src
+      - ./dev/bashrc:/root/.bashrc:ro
+    command: ["bash", "-c", "set +u; source /opt/ros/$$ROS_DISTRO/setup.bash; colcon build --symlink-install || true; sleep infinity"]
+    restart: "no"
