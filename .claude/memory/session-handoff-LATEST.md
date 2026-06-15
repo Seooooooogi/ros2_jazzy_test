@@ -5,15 +5,22 @@
 > 두 머신 공유 — **[실측]** 머신(로봇/카메라 실기) + **[문서]** 머신(git/문서/lessons). 항목에 담당 표기.
 
 ## 다음 세션 — 무엇보다 먼저
+
+**⚠ 미커밋 working tree (2026-06-15 후속7)**: 추적 파일이 **둘 다 미커밋**으로 공존한다 — HEAD `4dc2ba5` 는 **후속6·후속7 이전 = 16-step·한글본**. ① 후속7 셸 영어화 26개 `.sh`. ② 후속6 dev_ws install.sh 편입(16→17 step)의 코드 변경: `install.sh` step16 `container_dev_ws`·step17 `network_static_ip`, `config.sh TOTAL_STEPS=17`, `orchestrate.sh INSTALL_EXTRA_COUNT=5`, `CLAUDE.md [n/17]`, `containers/README.md`, `docs/decisions/README.md`, `containers/dev/bashrc`. 영어화가 후속6 가 건드린 4개 `.sh`(install/config/orchestrate/network-static-ip) 위에 덮여 **커밋 완전 분리는 까다롭다** — 커밋 시 두 논리 변경이 섞였음을 인지. 커밋은 사용자 요청 시에만, **사용자 명의·AI attribution 금지**.
+
 **(2026-06-10 의 "YOLO 재빌드 + 드라이브 재업로드" 지시는 2026-06-11 완료 — 아래 Last updated ① 참조. 더 이상 선행 작업 아님.)**
 
 현재 최우선 = Next Actions #1 = **다른 노트북(fleet)에서 전체 클린설치 검증.** 새 yolo 이미지(KeyError 수정본)가 드라이브에 올라가 있어 그 머신 step15 fetch 가 수정본을 받는다. 드라이브 도달성/크기 검증은 [문서] 머신에서 통과(무인증 curl, Content-Length 일치) — 단 동일 네트워크라 타 네트워크/무계정 실측은 fleet 머신에서 최종 확인.
 
 **연계(후속3 리팩토링)**: `refactor/installer-shell`(셸 리팩토링)은 `feat/application-containers` 에 머지 완료(`68f452d`). fleet 클린설치를 그 브랜치로 돌리면 리팩토링의 실 머신 검증(키 다운로드·`apt update` 인증·reboot 경계)이 함께 끝난다. 리팩토링은 behavior-preserving 정적 검증 통과 — Last updated 후속3 참조.
 
-**신규(2026-06-15 후속5) [실측] 검증 대기**: ① Calibration `onrobot.py` 가 pymodbus 3.x 로 바뀜 → **RG gripper open/close/move 하드웨어 재검증 전 실로봇 운용 금지**(register write 의미는 import smoke 로 검증 불가, ADR-014). ② 컨테이너 dev 모드(`docker-compose.dev.yml`) — `git pull`(feat/application-containers) 후 `bash containers/dev-ws-setup.sh` → dev override up → `docker exec` → `ros2 run` 으로 코드 수정 즉시 반영 워크플로 실사용 확인. 둘 다 fleet 클린설치와 독립.
+**신규(2026-06-15 후속5) [실측] 검증 대기**: ① Calibration `onrobot.py` 가 pymodbus 3.x 로 바뀜 → **RG gripper open/close/move 하드웨어 재검증 전 실로봇 운용 금지**(register write 의미는 import smoke 로 검증 불가, ADR-014). ② 컨테이너 dev 모드 — 이제 install.sh step16(`container_dev_ws`)이 `~/yolo_ws`·`~/voice_ws` 를 클린설치 시 자동 생성(후속6, 기설치 머신은 `bash containers/dev-ws-setup.sh`). [실측] 검증 = dev override up(`-f docker-compose.dev.yml`) → `docker exec` → `ros2 run` 으로 코드 수정 즉시 반영 워크플로 실사용 확인.
 
 ## Last updated
+2026-06-15 (후속7) — **[문서]** 활성 셸 스크립트 26개 영어 통일 + ROKEY bootcamp 저작권 배너(사용자 요청). 모든 파일 shebang 다음에 동일 4줄 블록(`Copyright (c) 2026 ROKEY bootcamp. All rights reserved.`) 삽입. 대상: `install.sh` + `resources/*.sh`(18) + `containers/*.sh`(5) + `scripts/*.sh`(2). 제외: `backup/*.sh`(humble 원본), `.github/workflows/*.yml`(비 `.sh` — 한글 잔존, 별도 요청 시). 코드 주석 + 런타임 출력(`echo`/`printf`/progress/warn/error/prompt) + heredoc(`.desktop` `Comment=`·`install.sh` usage) 전부 한→영. **behavior-preserving** — bash 제어흐름·변수·명령 무변경, 문자열/주석만(전체 비-주석 diff 감사로 확인). **검증**: full-set `shellcheck` RC=0(baseline 동일), 잔여 한글 0, 배너 26개 전부, `set -` 무결성(source-lib 5개 없음·`install-resume-launcher.sh` `set -uo`·나머지 `set -euo`), `install.sh --help`/`--status` 영어 출력+exit0. **사소 behavior 1건**: `dds-tuning.sh` 의 레거시 `~/.bashrc` 정리용 `sed` 삭제 패턴이 한글(`모든 새 셸 기본 RMW = CycloneDDS`)이라 영어로 변경 → 아주 옛 버전을 돌렸던 머신에서만 그 stale **주석 한 줄**이 자동 정리 안 됨(해롭지 않음, managed export 블록은 정상, 클린설치 무관). **미커밋**(상단 ⚠ 참조). plan: `/home/rokey/.claude/plans/install-sh-refactored-lamport.md`.
+
+2026-06-15 (후속6) — **[문서]** dev 워크스페이스 생성을 install.sh 에 편입(사용자 요청). `~/yolo_ws`·`~/voice_ws` 를 수동 `dev-ws-setup.sh` 에서 install.sh **step16**(`container_dev_ws`)으로 올려 클린설치 시 자동 생성 — 어느 머신이나 dev-ready(소스 복사뿐, host pip 없음). 전체 step **16→17**(network 고정IP 16→17). 카운트 단일소스 `orchestrate.sh::INSTALL_EXTRA_COUNT` 4→5(`install_steps_total`=17), `config.sh::TOTAL_STEPS` fallback 17. 동기화: CLAUDE.md `[n/17]`, `network-static-ip.sh`·ADR-021 의 step 번호 17, ADR-023 Consequences(install.sh 자동 생성 반영), `containers/README.md`. dev **컨테이너** 자체(`-f docker-compose.dev.yml`)는 여전히 opt-in. 멱등(이미 있으면 skip)·resume 안전(state key `container_dev_ws`).
+
 2026-06-15 (후속5) — **[문서]** Calibration pymodbus 3.x 수정 + corecode 저장소 편입 + 컨테이너 dev 모드. 전부 `feat/application-containers` push 완료(HEAD `ee72e39`, 4커밋):
 ① **Calibration onrobot.py pymodbus 2.x→3.x**(`06f036a`) — 사용자 보고로 발견. 실제 2.x 코드는 `corecode/Calibration_Tutorial/onrobot.py`(gitignored `corecode.zip` 안, 디스크엔 `.pyc` 만 풀려 있어 Explore 가 처음 못 찾음). `cobot2_ws` 의 onrobot.py 3개는 이미 3.x — 차이는 import(`pymodbus.client.sync`→`pymodbus.client`) + `unit=`→`slave=`(12곳) + 호출 뒤 `isError()` 가드뿐. 추적되는 3.x 본과 byte-identical 로 교체. **⚠️ [실측] RG gripper open/close/move 하드웨어 검증 미완**(ADR-014 — 검증 전 실로봇 운용 금지).
 ② **corecode 저장소 편입**(`b6e92a1`) — `.gitignore` 에서 `corecode/` 해제, dev/연구 튜토리얼(Calibration/DRL/OD/VoiceProcessing) 소스 추적. **하드코딩 Roboflow 키**(`OD_Tutorial/YOLO/data_download.ipynb`) → `os.getenv("ROBOFLOW_API_KEY")` redact + 노트북 출력 제거. 제외: `__pycache__`/`*.pyc`(전역 규칙)+중복 `hello_rokey_8332_32.tflite`(cobot2_ws/containers 에 이미 있음)+대용량 `class_embeddings.json`. **corecode 는 dev 전용 아님**(사용자 결정) → `.claude-main-exclude` 미등록 → 다음 `merge-to-main` 시 공개 main 으로 정상 승격.
@@ -55,7 +62,7 @@
 
 ## Next Actions (priority order)
 
-1. **[실측] 전체 클린설치 검증 — 다른 노트북(fleet 머신)에서 진행** — 최신 origin `git clone` → `bash install.sh`. 새 머신엔 이미지가 없어 **step15 가 드라이브에서 실제 다운로드**(yolo 4.62GB 첫 실측 자연 발생 — `docker rmi` 불요). nvidia-container-toolkit 은 step14(reboot 이후)에서 자동 설치(SKIP_IF_NO_GPU=1 — GPU 없으면 정상 skip). a01(step1~6) NVIDIA+reboot destructive, step12 `.env` OPENAI_API_KEY interactive. **점검: 드라이브 파일 2개가 "링크 있는 사람 보기" 공유여야 다른 네트워크/무계정에서 무인 curl 가능**(이 머신 fetch 성공은 동일 계정/네트워크 영향 배제 못 함). **(2026-06-10 갱신)** 이제 **전체 16 step**(step 15 드라이브 fetch, **step 16 ethernet 고정 IP** `192.168.1.30/24` 자동). `bash install.sh --unattended` 로 reboot·재개 무인 가능(GUI 세션, 복귀 후 sudo 비번 1회). **OPENAI_API_KEY 처리 버그 수정됨** — 쉘 env 에 키가 있든 `.env.example` 에 잘못 넣든 자동 처리 → 지난번 voice crash-loop 재발 안 함. yolo KeyError 도 미검출 처리(단 이미지 재빌드 전엔 옛 이미지 — 상단 배너 참조).
+1. **[실측] 전체 클린설치 검증 — 다른 노트북(fleet 머신)에서 진행** — 최신 origin `git clone` → `bash install.sh`. 새 머신엔 이미지가 없어 **step15 가 드라이브에서 실제 다운로드**(yolo 4.62GB 첫 실측 자연 발생 — `docker rmi` 불요). nvidia-container-toolkit 은 step14(reboot 이후)에서 자동 설치(SKIP_IF_NO_GPU=1 — GPU 없으면 정상 skip). a01(step1~6) NVIDIA+reboot destructive, step12 `.env` OPENAI_API_KEY interactive. **점검: 드라이브 파일 2개가 "링크 있는 사람 보기" 공유여야 다른 네트워크/무계정에서 무인 curl 가능**(이 머신 fetch 성공은 동일 계정/네트워크 영향 배제 못 함). **(2026-06-10 갱신)** 이제 **전체 17 step**(step 15 fetch, **step 16 dev 워크스페이스 생성**, **step 17 ethernet 고정 IP** `192.168.1.30/24`). `bash install.sh --unattended` 로 reboot·재개 무인 가능(GUI 세션, 복귀 후 sudo 비번 1회). **OPENAI_API_KEY 처리 버그 수정됨** — 쉘 env 에 키가 있든 `.env.example` 에 잘못 넣든 자동 처리 → 지난번 voice crash-loop 재발 안 함. yolo KeyError 도 미검출 처리(단 이미지 재빌드 전엔 옛 이미지 — 상단 배너 참조).
 
 2. **[실측/문서] cobot2_bringup 클린설치 자동 빌드 검증** — `dsr-project-install.sh` HOST_PKGS 에 등록됨(cp -a 복사 경로). 다른 노트북은 cp 경로 그대로 — clone → 빌드 시 `ros2 launch cobot2_bringup bringup_all.launch.py` resolve 확인. (이 머신은 검증용 symlink 라 무관.)
 
@@ -101,7 +108,7 @@
 ## Context Notes
 
 ### 이미지 드라이브 배포 (2026-06-09)
-- install.sh step15 = `containers/fetch-images.sh`: 공개 구글 드라이브 file ID 로 tar 다운로드 → SHA256 검증 → gz/zip 해제 분기 → `docker load`. 이미지 존재 시 skip(멱등). (step14=nvidia-container-toolkit, step16=고정 IP.)
+- install.sh step15 = `containers/fetch-images.sh`: 공개 구글 드라이브 file ID 로 tar 다운로드 → SHA256 검증 → gz/zip 해제 분기 → `docker load`. 이미지 존재 시 skip(멱등). (step14=toolkit, step15=fetch, step16=dev WS 생성, step17=고정 IP.)
 - **docker login 불요** — app 이미지는 registry pull 이 아니라 Drive tar→`docker load`. 외부 registry 에서 pull 하는 건 DSR emulator(`doosanrobot/dsr_emulator:3.0.1`, public Docker Hub anonymous) 뿐. (publish 경로 docker login+push 는 ADR-007 history 로 보존 — 현재 미사용.)
 - 대용량(>100MB) 다운로드: `drive.usercontent.google.com/download?id=..&export=download` 1차 응답이 virus-scan confirm form(HTML) → `confirm`/`uuid` 토큰 뽑아 2차 요청. 순수 bash curl(host pip 미설치 정책 — gdown 안 씀).
 - file ID/SHA256 = `resources/config.sh`(`YOLO/VOICE_IMAGE_GDRIVE_ID`, `_SHA256`). 공개 링크 ID 는 secret 아님. **해시는 레포(신뢰 출처)에, tar 만 드라이브** — 같은 출처면 동시 변조 시 검증 무의미.
