@@ -7,8 +7,8 @@
 
 ## 설치 순서
 
-- 권장 진입점: `install.sh` 하나
-- 내부 실행 순서: `a01 → reboot → a02 → a03 → a04` (단일 시퀀스, `[n/total]` 진행률)
+- 진입점은 `install.sh` 하나 (단일 시퀀스, `[n/total]` 진행률)
+- 내부 순서: 시스템 준비 → reboot → 로봇·카메라 → VS Code → 음성 점검 → 마무리(DDS·컨테이너·네트워크)
 - 완료된 단계는 자동 skip
 
 ```bash
@@ -16,7 +16,7 @@
 git clone https://github.com/Seooooooogi/ros2_jazzy_test.git ros2_jazzy_test
 cd ros2_jazzy_test
 
-# 2) 전체 설치 시작 (a01 단계에서 시스템 준비 후 reboot 필요 가능)
+# 2) 전체 설치 시작 (시스템 준비 후 reboot 필요 가능)
 bash install.sh
 
 # 3) reboot 발생 시 부팅 후 같은 명령 재실행 → 멈춘 다음 단계부터 이어서 진행
@@ -26,24 +26,18 @@ bash install.sh
 - **재개 가능(resumable)** — 실패/리부트로 끊겨도 마지막 성공 단계 기록
 - 재실행 시 처음이 아니라 다음 단계부터 진행
 
-### 단계 구성
+### 설치 단계 (`install.sh` 가 순서대로 수행)
 
-| 단계 | 스크립트 | 내용 |
-|------|----------|------|
-| a01 | `a01-prerequirements.sh` | 시스템 준비 — 커널 베이스라인, NVIDIA 드라이버, Docker, ROS2 Jazzy. **reboot 포함** |
-| a02 | `a02-robot-camera.sh` | Doosan DSR 로봇 + RealSense 카메라 설치 |
-| a03 | `a03-vs-code-install.sh` | VS Code 설치 |
-| a04 | `a04-voice-precheck.sh` | 음성 처리 사전 점검 (API 키 입력 포함) |
+| 단계 | 내용 |
+|------|------|
+| 시스템 준비 | 커널 베이스라인, NVIDIA 드라이버, Docker, ROS2 Jazzy. **reboot 포함** |
+| 로봇 · 카메라 | Doosan DSR 로봇 + RealSense 카메라 + 워크스페이스(cobot2_ws) 빌드 |
+| VS Code | VS Code 설치 |
+| 음성 점검 | 음성 처리 `.env` 사전 점검 (API 키) |
+| 마무리 | DDS 튜닝 · NVIDIA Container Toolkit · 컨테이너 이미지 확보 · 네트워크 고정 IP |
 
-- 각 단계 단독 실행 가능
-- `install.sh` 와 상태 파일 공유 → 어느 쪽으로 실행하든 skip 판정 일관
-
-```bash
-bash a01-prerequirements.sh   # 시스템 (reboot 포함)
-bash a02-robot-camera.sh      # 로봇 + 카메라
-bash a03-vs-code-install.sh   # VS Code
-bash a04-voice-precheck.sh    # 음성 점검
-```
+- 모든 단계는 `bash install.sh` 한 번으로 순차 실행 — 완료 단계는 자동 skip
+- 특정 작업만 다시 돌리려면 `bash install.sh --reset`(전체 초기화) 후 재실행
 
 ## 자주 쓰는 옵션
 
@@ -70,11 +64,11 @@ cp .env.example .env
 
 ## 워크스페이스 (cobot2_ws) 빌드 / 위치
 
-- a02 단계(로봇/카메라): 워크스페이스 **자동 clone + 빌드** — 별도 수동 빌드 불필요
+- 로봇·카메라 단계: 워크스페이스 **자동 clone + 빌드** — 별도 수동 빌드 불필요
 - 기본 위치: `~/cobot2_ws` (환경변수 `DSR_WORKSPACE` 로 변경 가능)
 - 구성: `doosan-robot2`(jazzy) clone + host 패키지(`robot_control`, `od_msg`)만 복사 후 `colcon build`
   - app 패키지(`object_detection` / `voice_processing` 등)는 host ws 에 없음 — yolo/voice 컨테이너가 담당
-- doosan-robot2(jazzy) 소스 호환 패치(서비스 이름·prefix) a02 에서 자동 적용 → **손수 clone 시 패치 누락으로 런타임 깨짐**
+- doosan-robot2(jazzy) 소스 호환 패치(서비스 이름·prefix) 설치 시 자동 적용 → **손수 clone 시 패치 누락으로 런타임 깨짐**
 
 수정 후 재빌드:
 
@@ -85,10 +79,10 @@ colcon build
 source install/setup.bash
 ```
 
-다른 위치(예: 바탕화면)에 두고 빌드 — `DSR_WORKSPACE` 지정 후 a02 실행 (패치 포함 전체 파이프라인이 그 경로에서 수행):
+다른 위치(예: 바탕화면)에 두고 빌드 — `DSR_WORKSPACE` 지정 후 설치 실행 (패치 포함 전체 파이프라인이 그 경로에서 수행):
 
 ```bash
-DSR_WORKSPACE=~/Desktop/cobot2_ws bash a02-robot-camera.sh
+DSR_WORKSPACE=~/Desktop/cobot2_ws bash install.sh
 # 이후 재빌드도 같은 경로에서: cd ~/Desktop/cobot2_ws && colcon build
 ```
 
