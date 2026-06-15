@@ -1,3 +1,5 @@
+# ROS2_Jazzy_Test
+
 - Ubuntu 워크스테이션을 **ROS2 Jazzy 로봇 개발 환경**으로 일관되게 셋업하는 bash 설치 스크립트 모음
 - 대상: Ubuntu 24.04 (noble) + NVIDIA GPU 워크스테이션
 
@@ -9,7 +11,7 @@ git clone https://github.com/Seooooooogi/ros2_jazzy_test.git
 cd ros2_jazzy_test
 
 # 2) 전체 설치
-bash install.sh --unattended
+bash install.sh --unattended # --unattended : 자동 재부팅 모드
 ```
 
 ## 추가 옵션
@@ -59,8 +61,8 @@ ros2 launch realsense2_camera rs_align_depth_launch.py \
 
 YOLO / Voice 컨테이너:
 
-- 각 컨테이너는 기동과 동시에 노드 자동 실행 (yolo=`object_detection`, voice=`get_keyword`) — 별도 `ros2 run` 불필요
-- 전제: 카메라(위 RealSense)가 먼저 떠 있어야 yolo 가 토픽 구독 / voice 는 `.env` 의 `OPENAI_API_KEY` 필요 (cyclonedds 설정은 install.sh 가 렌더)
+- 각 컨테이너는 기동과 동시에 노드 자동 실행 (yolo=`object_detection`, voice=`get_keyword`)
+- 카메라(위 RealSense)가 먼저 떠 있어야 yolo 가 토픽 구독 / voice 는 `.env` 의 `OPENAI_API_KEY` 필요
 
 ```bash
 # 둘 다 기동
@@ -75,7 +77,7 @@ docker compose -f ~/ros2_jazzy_test/containers/docker-compose.yml logs -f
 docker compose -f ~/ros2_jazzy_test/containers/docker-compose.yml down
 ```
 
-## 시각화 (선택) — 실시간 카메라 + YOLO + 음성 상태
+## 시각화 (optional) — 실시간 카메라 + YOLO + 음성 상태
 
 RealSense 화면에 YOLO 실시간 박스·클래스 + 좌상단 wakeword/target/pos 를 겹쳐 띄우는 관찰용 창. 위에서 카메라가 떠 있어야 한다.
 
@@ -83,7 +85,7 @@ RealSense 화면에 YOLO 실시간 박스·클래스 + 좌상단 wakeword/target
 # 1) 추론 컨테이너 — 박스만 /yolo/detections 로 publish
 docker compose -f ~/ros2_jazzy_test/containers/docker-compose.yml --profile viz up -d yolo-viz
 
-# 2) host 뷰어 창 (q 로 종료)
+# 2) host 뷰어 창 (q : 종료)
 source /opt/ros/jazzy/setup.bash
 set -a; source ~/ros2_jazzy_test/resources/config.sh; set +a
 python3 ~/ros2_jazzy_test/viz/viewer.py
