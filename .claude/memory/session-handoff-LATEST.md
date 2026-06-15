@@ -11,7 +11,16 @@
 
 **연계(후속3 리팩토링)**: `refactor/installer-shell`(셸 리팩토링)은 `feat/application-containers` 에 머지 완료(`68f452d`). fleet 클린설치를 그 브랜치로 돌리면 리팩토링의 실 머신 검증(키 다운로드·`apt update` 인증·reboot 경계)이 함께 끝난다. 리팩토링은 behavior-preserving 정적 검증 통과 — Last updated 후속3 참조.
 
+**신규(2026-06-15 후속5) [실측] 검증 대기**: ① Calibration `onrobot.py` 가 pymodbus 3.x 로 바뀜 → **RG gripper open/close/move 하드웨어 재검증 전 실로봇 운용 금지**(register write 의미는 import smoke 로 검증 불가, ADR-014). ② 컨테이너 dev 모드(`docker-compose.dev.yml`) — `git pull`(feat/application-containers) 후 `bash containers/dev-ws-setup.sh` → dev override up → `docker exec` → `ros2 run` 으로 코드 수정 즉시 반영 워크플로 실사용 확인. 둘 다 fleet 클린설치와 독립.
+
 ## Last updated
+2026-06-15 (후속5) — **[문서]** Calibration pymodbus 3.x 수정 + corecode 저장소 편입 + 컨테이너 dev 모드. 전부 `feat/application-containers` push 완료(HEAD `ee72e39`, 4커밋):
+① **Calibration onrobot.py pymodbus 2.x→3.x**(`06f036a`) — 사용자 보고로 발견. 실제 2.x 코드는 `corecode/Calibration_Tutorial/onrobot.py`(gitignored `corecode.zip` 안, 디스크엔 `.pyc` 만 풀려 있어 Explore 가 처음 못 찾음). `cobot2_ws` 의 onrobot.py 3개는 이미 3.x — 차이는 import(`pymodbus.client.sync`→`pymodbus.client`) + `unit=`→`slave=`(12곳) + 호출 뒤 `isError()` 가드뿐. 추적되는 3.x 본과 byte-identical 로 교체. **⚠️ [실측] RG gripper open/close/move 하드웨어 검증 미완**(ADR-014 — 검증 전 실로봇 운용 금지).
+② **corecode 저장소 편입**(`b6e92a1`) — `.gitignore` 에서 `corecode/` 해제, dev/연구 튜토리얼(Calibration/DRL/OD/VoiceProcessing) 소스 추적. **하드코딩 Roboflow 키**(`OD_Tutorial/YOLO/data_download.ipynb`) → `os.getenv("ROBOFLOW_API_KEY")` redact + 노트북 출력 제거. 제외: `__pycache__`/`*.pyc`(전역 규칙)+중복 `hello_rokey_8332_32.tflite`(cobot2_ws/containers 에 이미 있음)+대용량 `class_embeddings.json`. **corecode 는 dev 전용 아님**(사용자 결정) → `.claude-main-exclude` 미등록 → 다음 `merge-to-main` 시 공개 main 으로 정상 승격.
+③ **컨테이너 dev 모드 override**(`34b1492`, ADR-023) — `containers/docker-compose.dev.yml`: host `~/yolo_ws/src`·`~/voice_ws/src` 를 `/ws/src` 에 bind-mount(코드 수정 즉시 반영), `build.target=builder`+별도 dev 이미지 태그(프로덕션 clobber 방지), 노드 auto-run 끔(sleep) → `docker exec` 진입해 수동 `ros2 run`(디버깅 용이). `containers/dev/bashrc`(컨테이너 `/root/.bashrc` 로 mount)로 exec 셸에 ROS overlay+venv PYTHONPATH 자동 source(entrypoint 는 PID1 전용이라 exec 셸엔 미반영). `containers/dev-ws-setup.sh` 가 `cobot2_ws` 에서 ~/*_ws 복사 생성(별도 WS — 레포 공유는 수동 커밋, symlink 은 bind-mount 와 충돌해 복사 채택). `config.sh` YOLO_WS/VOICE_WS, `containers/README.md` 사용법.
+④ **Roboflow placeholder**(`ee72e39`) — `.env.example` 에 `ROBOFLOW_API_KEY`(튜토리얼 전용, 설치/런타임 무관). **키 rotate 는 [실측/문서] 사용자 외부 작업**(평문 노출됐던 `VdSAW…` — git history 미유입, 추적 시작 커밋이 이미 redact 본. 단 로컬 `corecode.zip` 원본엔 평문 잔존, gitignored).
+**검증(이 박스)**: shellcheck(dev-ws-setup/bashrc/config) 통과, `docker-compose.dev.yml` YAML 유효, staged 시크릿 0건, AI attribution 0건. **미검증(실 머신)**: compose 머지(이 박스 compose v2 부재)·pymodbus 3.x import·gripper 하드웨어 → [실측].
+
 2026-06-12 (후속4) — **[문서]** 공개 main 트리 위생 마무리 + `a01-a04` 스테이지 스크립트 폐기. (`refactor/installer-shell` 은 이미 `feat/application-containers` 에 머지됨 `68f452d` — 후속3 의 "push/머지 결정"은 해소.)
 ① **main 제외 확장 + 가드 self-contained**(`1268db2`, main `6de576f`) — `backup/`(humble 보존)·`scripts/`(승격 툴링)을 `.claude-main-exclude` 등록 후 공개 main 에서 제거. 내부경로 가드 워크플로가 `scripts/check-no-claude-on-main.sh` 의존을 버리고 `.claude-main-exclude` 를 직접 읽어 `git ls-tree` 인라인 검사(스크립트가 main 트리에 없어도 동작).
 ② **`.main-keep-ours` 제외**(`bb469a1`, main `e3440cd`) — keep-ours 메타데이터도 main 제외. `merge-to-main.sh` 가 이 목록을 checkout·제외 **이전**(상단, dev 버전)에 미리 읽도록 reorder — 안 하면 제거 루프가 파일을 지운 뒤 읽혀 README 보존(keep-ours)이 깨지는 순서 버그.
@@ -84,6 +93,8 @@
 - yolo 이미지 드라이브 **전체** 다운로드 미실측(4.62GB) — 2026-06-11 무인증 curl 로 첫 1MB+Content-Length 일치까지 검증(타입=POSIX tar, 크기 정확 일치, 권한 페이지 없음). 전체 SHA 왕복은 fleet 클린설치서 최종.
 - ~~yolo KeyError 수정 소스만 반영~~ → **2026-06-11 재빌드 + 드라이브 재배포 완료** — fetch 시 수정본 수신(Last updated ①). 배포 이미지 내부 yolo.py 에 `.get(target)` 반영 확인.
 - **노출됐던 OPENAI API 키 rotate 권장**(진단 중 터미널 노출). 현재 `.env`(gitignore)에 있고 추적 파일엔 없음(유출 안 됨).
+- **노출됐던 Roboflow API 키 rotate 권장**(2026-06-15) — `OD_Tutorial/YOLO/data_download.ipynb` 평문 `VdSAW…`, redact→`os.getenv`. git history 미유입(추적 시작 커밋이 redact 본)이나 로컬 `corecode.zip` 원본엔 평문 잔존. rotate 는 사용자 외부 작업(Roboflow 콘솔).
+- **[실측] Calibration pymodbus 3.x gripper 하드웨어 검증 미완**(2026-06-15) — `corecode/Calibration_Tutorial/onrobot.py` register write 의미(open/close/move)는 실 RG gripper 로만 검증 가능. 검증 전 실로봇 운용 금지(ADR-014).
 
 ---
 
