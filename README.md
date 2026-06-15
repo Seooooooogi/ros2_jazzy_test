@@ -36,13 +36,13 @@ set -a; source ~/ros2_jazzy_test/resources/config.sh; set +a   # RMW(CycloneDDS)
 ```
 
 
-DSR + RealSense + yolo/voice 통합 bringup:
+DSR + RealSense + yolo/voice 통합 bringup(터미널 1):
 
 ```bash
 ros2 launch cobot2_bringup bringup_all.launch.py mode:=real
 ```
 
-robot_control 실행
+robot_control 실행(터미널 2)
 
 ```bash
 ros2 run robot_control robot_control
