@@ -7,15 +7,17 @@
 
 프로덕션 컨테이너는 소스를 이미지에 구워(baked-in) 넣어 코드 수정 시 재빌드가 필요하다. dev 모드는 host 의 워크스페이스를 컨테이너 `/ws/src` 에 bind-mount 해 **수정이 즉시 반영**되고, 노드를 자동 기동하지 않아 **exec 로 들어가 직접 실행·디버깅**한다.
 
-### 1) 워크스페이스 준비 (최초 1회)
+### 1) 워크스페이스 준비
+
+`install.sh`(step16, `container_dev_ws`)가 클린설치 시 **자동 생성**한다. 기설치 머신/재생성은 수동:
 
 ```bash
-bash containers/dev-ws-setup.sh
+bash containers/dev-ws-setup.sh            # 이미 있으면 skip(편집본 보호)
+bash containers/dev-ws-setup.sh --force    # 강제 덮어쓰기(편집본 폐기)
 ```
 
 - 레포 `cobot2_ws` 의 패키지를 host 로 복사: `~/yolo_ws/src/{od_msg,object_detection}`, `~/voice_ws/src/voice_processing`
 - 경로는 `YOLO_WS`/`VOICE_WS` 로 변경 가능(기본 `~/yolo_ws`·`~/voice_ws`)
-- 이미 있으면 건너뜀(편집본 보호) — 덮어쓰려면 `--force`
 - **여기서 편집**한다. 레포 공유는 수정분을 `cobot2_ws` 로 되돌려 커밋(별도 워크스페이스라 자동 동기화 아님)
 
 ### 2) 빌드 + 기동

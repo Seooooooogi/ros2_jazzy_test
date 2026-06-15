@@ -699,7 +699,7 @@
 - 사용자 결정(2026-06-10): ① 설치 마지막에 고정 IP 자동 설정, ② reboot 전후를 무인으로(시작 시 자격증명·동의만 받고 자동 재개).
 
 **Decision**:
-- **고정 IP 자동화** — `resources/network-static-ip.sh`(install.sh step 16). `nmcli`(NetworkManager. netplan 은 NM 에 위임)로 유선 NIC 의 기존 ethernet 프로필을 찾아(활성 없으면 저장 프로필, 그래도 없으면 생성) `ipv4.method manual` + `${HOST_ETH_IP}/${HOST_ETH_PREFIX}` + **gateway/DNS 없음 + `never-default yes`**(wifi 인터넷 보호) + `interface-name`/`autoconnect` 핀. 멱등. 케이블 미연결이어도 설정 영속(`con up` best-effort). 값은 `config.sh` 단일 소스(`HOST_ETH_IP=192.168.1.30`/`HOST_ETH_PREFIX=24`/`HOST_ETH_NETIF=`).
+- **고정 IP 자동화** — `resources/network-static-ip.sh`(install.sh step 17). `nmcli`(NetworkManager. netplan 은 NM 에 위임)로 유선 NIC 의 기존 ethernet 프로필을 찾아(활성 없으면 저장 프로필, 그래도 없으면 생성) `ipv4.method manual` + `${HOST_ETH_IP}/${HOST_ETH_PREFIX}` + **gateway/DNS 없음 + `never-default yes`**(wifi 인터넷 보호) + `interface-name`/`autoconnect` 핀. 멱등. 케이블 미연결이어도 설정 영속(`con up` best-effort). 값은 `config.sh` 단일 소스(`HOST_ETH_IP=192.168.1.30`/`HOST_ETH_PREFIX=24`/`HOST_ETH_NETIF=`).
   - **per-step confirm 없음**(사용자 결정): nmcli IP 변경은 reversible 이라 "되돌릴 수 없는 작업" confirm 범위 밖. 무인 모드는 시작 시 1회 동의로 포괄.
 - **무인 설치** `bash install.sh --unattended`(opt-in 플래그, 무플래그=기존 수동 동작 불변). 메커니즘:
   - 시작 시(첫 실행·tty): `OPENAI_API_KEY` 선수집(→`.env`, 화면/로그 미표시) + 진행 confirm 1회 + GUI autostart 등록. → step 12(voice)는 키가 이미 있어 비대화 통과, step 6 reboot 도 재confirm 없음(시작 동의로 포괄).
@@ -713,7 +713,7 @@
 - 렌더/생성물 중 머신 종속(autostart .desktop, NM 연결, .env)은 추적 안 함. 스크립트·config 만 추적.
 - **전제**: GUI(GNOME) 세션 + 터미널(gnome-terminal/x-terminal-emulator). 비 GUI/비대화형 `--unattended` 는 자동 재개 불가 → 경고 후 수동 재개 안내. auto-login 미설정 시 복귀 후 로그인 1회 필요.
 - 무인 재개 실패 시 자동 재시도 없음(one-shot 의도) — 터미널은 열려 결과 표시, 사용자가 수동 재개/`--reset`.
-- 물리 유선 NIC 가 아예 없는 머신에선 step 16 이 benign skip 으로 **완료(DONE) 기록**된다(설치 전체를 막지 않기 위함 — 케이블만 미연결인 경우는 NIC 가 탐지되어 설정이 영속). 이후 NIC 연결 시 `bash resources/network-static-ip.sh` 단독 재실행으로 적용한다(install.sh 재실행은 step skip).
+- 물리 유선 NIC 가 아예 없는 머신에선 step 17 이 benign skip 으로 **완료(DONE) 기록**된다(설치 전체를 막지 않기 위함 — 케이블만 미연결인 경우는 NIC 가 탐지되어 설정이 영속). 이후 NIC 연결 시 `bash resources/network-static-ip.sh` 단독 재실행으로 적용한다(install.sh 재실행은 step skip).
 - main 브랜치 편입은 후속(install.sh 브랜치 분기 정책 ADR-019).
 
 **Reopen 조건**:
@@ -761,7 +761,7 @@
 
 **Consequences**:
 - dev override·setup·`containers/README.md` 는 공개 main 에도 포함(viz 프로파일처럼 공개 개발 도구).
-- 프로덕션 경로(install.sh / 배포 이미지 / fetch)는 불변 — dev override 를 안 띄우면 미사용. 배포 이미지는 baked-in 유지(재현성).
+- install.sh step16(`container_dev_ws`)이 `~/yolo_ws`·`~/voice_ws` 를 자동 생성(어느 머신이나 dev-ready — 소스 복사뿐, host pip 없음). 단 dev **컨테이너** 자체는 opt-in(`-f docker-compose.dev.yml` 로만). 배포 이미지(fetch)·프로덕션 기동은 불변 — baked-in 유지(재현성).
 
 **Reopen 조건**:
 - 자동 재시작(파일 저장 → 노드 reload)까지 필요하면 watchmedo 등 file watcher 를 dev override 에 추가 검토.

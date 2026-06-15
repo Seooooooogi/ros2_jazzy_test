@@ -1,3 +1,4 @@
+# shellcheck shell=bash
 # dev override(docker-compose.dev.yml)가 이 파일을 컨테이너의 /root/.bashrc 로 mount 한다.
 # `docker exec -it <svc> bash` 진입 시 ROS overlay + venv PYTHONPATH 를 자동 source 한다.
 # 이유: entrypoint.sh 는 PID1(sleep) 전용이라 그 export 가 docker exec 로 띄운 새 셸엔 안 실린다.
