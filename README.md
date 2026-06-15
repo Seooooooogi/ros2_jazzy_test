@@ -56,6 +56,25 @@ ros2 launch realsense2_camera rs_align_depth_launch.py \
   depth_module.depth_profile:=848x480x30 rgb_camera.color_profile:=1280x720x30 \
   align_depth.enable:=true enable_rgbd:=true pointcloud.enable:=true initial_reset:=true
 ```
+
+YOLO / Voice 컨테이너:
+
+- 각 컨테이너는 기동과 동시에 노드 자동 실행 (yolo=`object_detection`, voice=`get_keyword`) — 별도 `ros2 run` 불필요
+- 전제: 카메라(위 RealSense)가 먼저 떠 있어야 yolo 가 토픽 구독 / voice 는 `.env` 의 `OPENAI_API_KEY` 필요 (cyclonedds 설정은 install.sh 가 렌더)
+
+```bash
+# 둘 다 기동
+docker compose -f ~/ros2_jazzy_test/containers/docker-compose.yml up -d
+
+# 개별 기동 (서비스명 지정)
+docker compose -f ~/ros2_jazzy_test/containers/docker-compose.yml up -d yolo-detection
+docker compose -f ~/ros2_jazzy_test/containers/docker-compose.yml up -d voice-processing
+
+# 로그 확인 / 종료
+docker compose -f ~/ros2_jazzy_test/containers/docker-compose.yml logs -f
+docker compose -f ~/ros2_jazzy_test/containers/docker-compose.yml down
+```
+
 ## 시각화 (선택) — 실시간 카메라 + YOLO + 음성 상태
 
 RealSense 화면에 YOLO 실시간 박스·클래스 + 좌상단 wakeword/target/pos 를 겹쳐 띄우는 관찰용 창. 위에서 카메라가 떠 있어야 한다.
