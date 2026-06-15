@@ -1,19 +1,24 @@
 #!/usr/bin/env bash
+# =============================================================
+#  ros2_jazzy_test — ROS2 Jazzy workstation installer
+#  Copyright (c) 2026 ROKEY bootcamp. All rights reserved.
+# =============================================================
+#
 # shellcheck source-path=SCRIPTDIR
-# resources/dds-tuning.sh — CycloneDDS 대용량 토픽 튜닝 설치 (install.sh step 13).
+# resources/dds-tuning.sh — CycloneDDS large-topic tuning install (install.sh step 13).
 #
-# 하는 일 (순서 중요 — sysctl 이 cyclonedds 노드 기동보다 먼저여야 함):
-#   1. 설치 머신의 물리 외부 NIC 자동 탐지 (유선·무선 모두, docker/가상 제외, carrier 무관).
-#   2. /etc/sysctl.d/60-cyclonedds.conf 설치 + 적용 (소켓/fragment 버퍼 영속).
-#   3. cyclonedds.xml.in 템플릿에 loopback + NIC 목록을 치환해 ${CYCLONEDDS_XML} 로 렌더.
-#   4. ~/.bashrc 에 CYCLONEDDS_URI / RMW_IMPLEMENTATION export 멱등 주입.
+# What it does (order matters — sysctl must come before cyclonedds nodes start):
+#   1. auto-detect the install machine's physical external NICs (both wired and wireless, excluding docker/virtual, regardless of carrier).
+#   2. install + apply /etc/sysctl.d/60-cyclonedds.conf (persistent socket/fragment buffers).
+#   3. render to ${CYCLONEDDS_XML} by substituting loopback + the NIC list into the cyclonedds.xml.in template.
+#   4. idempotently inject CYCLONEDDS_URI / RMW_IMPLEMENTATION exports into ~/.bashrc.
 #
-# 인터페이스 정책: loopback(lo) 을 항상 선두에 두고(같은 호스트 노드끼리는 cyclonedds 가
-# loopback 우선 → 127.0.0.1, 외부 IP unicast-to-self 라우팅 실패 회피) 물리 외부 NIC 는
-# 다른 머신과의 cross-host 경로로 함께 화이트리스트한다.
+# Interface policy: always put loopback (lo) first (between same-host nodes cyclonedds
+# prefers loopback → 127.0.0.1, avoiding external-IP unicast-to-self routing failure); the physical external NICs
+# are also whitelisted for the cross-host path to other machines.
 #
-# 단독 실행 가능: bash resources/dds-tuning.sh (하드웨어 변경 시 재실행으로 목록 갱신).
-# 본 스크립트는 순수 설치 본문 — state 프레이밍(run_step)은 호출자(install.sh)가 소유.
+# Standalone run: bash resources/dds-tuning.sh (re-run on hardware change to refresh the list).
+# This script is a pure install body — the state framing (run_step) is owned by the caller (install.sh).
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -25,18 +30,18 @@ TEMPLATE="${SCRIPT_DIR}/cyclonedds.xml.in"
 SYSCTL_SRC="${SCRIPT_DIR}/sysctl-cyclonedds.conf"
 SYSCTL_DST="/etc/sysctl.d/60-cyclonedds.conf"
 
-[[ -f "${TEMPLATE}" ]]   || { echo "dds-tuning: 템플릿 없음: ${TEMPLATE}" >&2; exit 1; }
-[[ -f "${SYSCTL_SRC}" ]] || { echo "dds-tuning: sysctl 원본 없음: ${SYSCTL_SRC}" >&2; exit 1; }
+[[ -f "${TEMPLATE}" ]]   || { echo "dds-tuning: template missing: ${TEMPLATE}" >&2; exit 1; }
+[[ -f "${SYSCTL_SRC}" ]] || { echo "dds-tuning: sysctl source missing: ${SYSCTL_SRC}" >&2; exit 1; }
 
-# --- 1. 물리 외부 NIC 탐지 (유선 + 무선) --------------------------------
-# 물리 NIC 는 carrier/IP 없어도 /sys/class/net 에 존재하므로 로봇 미연결 설치에도 식별 가능.
-# 가상(device 심볼릭 부재)·docker/veth/bridge/tap/tun 는 제외 — 타 머신 경로가 아니고
-# 쓸모없는 locator 만 늘려 discovery 노이즈/-1 송신실패를 만든다. lo 는 렌더 단계에서
-# 항상 별도 선두 추가하므로 여기 목록에선 제외한다.
+# --- 1. physical external NIC detection (wired + wireless) --------------
+# A physical NIC exists in /sys/class/net even without carrier/IP, so it is identifiable on a robot-less install too.
+# Exclude virtual (no device symlink) and docker/veth/bridge/tap/tun — they are not paths to other machines and
+# only add useless locators, causing discovery noise / -1 send failures. lo is always added separately
+# at the front in the render step, so it is excluded from this list.
 declare -a NICS=()
 if [[ -n "${DDS_NETIF}" ]]; then
-    # override: 콤마구분 허용. 사용자 책임으로 그대로 사용. lo 는 렌더 단계에서 항상
-    # 별도 추가되므로 여기엔 외부 NIC 만 지정하면 된다(lo 를 넣어도 중복은 가드로 방지).
+    # override: comma-separated allowed. Used as-is at the user's responsibility. lo is always
+    # added separately in the render step, so specify only external NICs here (a guard prevents duplicates even if lo is included).
     IFS=',' read -r -a NICS <<< "${DDS_NETIF}"
     echo "[dds] DDS_NETIF override → ${NICS[*]}"
 else
@@ -44,80 +49,80 @@ else
         nic="$(basename "${path}")"
         [[ "${nic}" == "lo" ]] && continue
         case "${nic}" in docker*|veth*|br-*|virbr*|bond*|tap*|tun*) continue ;; esac
-        [[ -e "${path}/device" ]] || continue   # 물리(device 심볼릭)만 — 유선/무선 모두
+        [[ -e "${path}/device" ]] || continue   # physical (device symlink) only — both wired/wireless
         NICS+=("${nic}")
     done
     if [[ "${#NICS[@]}" -eq 0 ]]; then
-        # 외부 NIC 가 0개여도 loopback 단독으로 같은 호스트(호스트↔컨테이너)는 동작 →
-        # 치명적 아님(과거엔 exit 1 이었으나, lo 항상 추가로 정책 변경).
-        echo "[dds] 경고: 물리 외부 NIC 미검출 — loopback 으로 same-host 통신만 구성됩니다." >&2
-        echo "       다른 머신과의 cross-host 통신이 필요하면 인터페이스를 직접 지정하세요:" >&2
+        # Even with 0 external NICs, loopback alone works for the same host (host↔container) →
+        # not fatal (it was exit 1 before, but the policy changed to always add lo).
+        echo "[dds] warning: no physical external NIC detected — only same-host communication is configured via loopback." >&2
+        echo "       If cross-host communication with other machines is needed, specify the interface explicitly:" >&2
         echo "       DDS_NETIF=<iface[,iface2]> bash resources/dds-tuning.sh" >&2
     else
-        echo "[dds] 외부 NIC 자동 탐지 → ${NICS[*]} (docker/가상 제외; loopback 은 항상 추가)"
+        echo "[dds] external NIC auto-detect → ${NICS[*]} (docker/virtual excluded; loopback always added)"
     fi
 fi
 
-# --- 2. sysctl 영속 설치 + 적용 (cyclonedds 노드보다 먼저) ----------------
-echo "[dds] 커널 소켓/fragment 버퍼 설치: ${SYSCTL_DST}"
+# --- 2. persistent sysctl install + apply (before cyclonedds nodes) ----------------
+echo "[dds] installing kernel socket/fragment buffers: ${SYSCTL_DST}"
 sudo install -m 0644 -o root -g root "${SYSCTL_SRC}" "${SYSCTL_DST}"
 sudo sysctl --system >/dev/null
 echo "[dds]   rmem_max=$(sysctl -n net.core.rmem_max) wmem_max=$(sysctl -n net.core.wmem_max)"
 
-# --- 3. cyclonedds.xml 렌더 (NIC 목록 치환) ------------------------------
+# --- 3. render cyclonedds.xml (substitute the NIC list) ------------------------------
 mkdir -p "$(dirname "${CYCLONEDDS_XML}")"
-# 임시파일은 /tmp 고정 — sed 의 `r` 명령은 파일명을 인용 못 하므로 공백 없는 경로 보장.
+# temp file fixed to /tmp — sed's `r` command cannot quote the filename, so ensure a space-free path.
 iface_block="$(TMPDIR=/tmp mktemp)"
 rendered_xml="$(TMPDIR=/tmp mktemp)"
 trap 'rm -f "${iface_block}" "${rendered_xml}"' EXIT
 {
-    # loopback 항상 선두 — 같은 호스트 데이터 경로(외부 IP unicast-to-self 우회).
-    # priority="default" 면 cyclonedds 가 loopback 에 더 높은 우선순위를 줘, 같은 호스트
-    # 매칭엔 127.0.0.1 을 쓴다(실측 확인: writer addrset 이 udp/127.0.0.1 로 해석됨).
+    # loopback always first — same-host data path (bypass external-IP unicast-to-self).
+    # with priority="default", cyclonedds gives loopback higher priority, using 127.0.0.1 for
+    # same-host matches (measured: the writer addrset resolves to udp/127.0.0.1).
     printf '        <NetworkInterface name="lo" priority="default" multicast="true"/>\n'
     for nic in "${NICS[@]}"; do
-        [[ "${nic}" == "lo" ]] && continue   # 위에서 이미 추가 — DDS_NETIF 에 lo 가 와도 중복 방지
+        [[ "${nic}" == "lo" ]] && continue   # already added above — prevents duplication even if lo comes in DDS_NETIF
         printf '        <NetworkInterface name="%s" presence_required="false"/>\n' "${nic}"
     done
 } > "${iface_block}"
-# placeholder 줄(단독 줄)만 NIC 블록으로 치환 (sed r 로 파일 삽입 후 삭제).
-# 앵커 ^...$ 로 주석 본문에 같은 토큰이 있어도 오매칭하지 않게 한다.
-# 임시파일에 먼저 렌더 후 원자적 mv — sed 가 중간 실패해도 기존 XML(또는 무파일)을
-# 부분 XML 로 덮어쓰지 않는다(부분 XML 이면 cyclonedds 노드가 즉사).
+# replace only the placeholder line (standalone) with the NIC block (sed r inserts the file then deletes it).
+# anchor ^...$ so it does not mismatch even if the same token appears in a comment body.
+# render to the temp file first then atomic mv — so even if sed fails midway, it does not overwrite the existing XML
+# (or no file) with a partial XML (a partial XML kills cyclonedds nodes instantly).
 sed -e "/^__DDS_INTERFACES__\$/{
 r ${iface_block}
 d
 }" "${TEMPLATE}" > "${rendered_xml}"
 mv "${rendered_xml}" "${CYCLONEDDS_XML}"
-echo "[dds] 렌더 완료: ${CYCLONEDDS_XML} (loopback + 외부 ${#NICS[@]}개)"
+echo "[dds] render complete: ${CYCLONEDDS_XML} (loopback + ${#NICS[@]} external)"
 
-# --- 4. ~/.bashrc env 멱등 주입 (관리 블록으로 통일) ----------------------
-# config.sh 는 source 되는 컨텍스트(activate.sh/CI)에만 적용되고, 대화형 셸은
-# ~/.bashrc 만 읽으므로 여기에 export 를 심는다. 기존(수동 포함) 관리 라인을 먼저
-# 제거하고 마커 블록으로 다시 써 중복을 막는다(멱등).
+# --- 4. idempotent ~/.bashrc env injection (unified into a managed block) ----------------------
+# config.sh applies only in sourced contexts (activate.sh/CI), and an interactive shell
+# reads only ~/.bashrc, so we plant the exports here. Remove existing managed lines (including manual ones) first,
+# then rewrite as a marker block to prevent duplicates (idempotent).
 bashrc="${HOME}/.bashrc"
 BEGIN_MARK="# >>> ros2_jazzy_test cyclonedds env >>>"
 END_MARK="# <<< ros2_jazzy_test cyclonedds env <<<"
 if [[ -f "${bashrc}" ]]; then
-    # 이전 관리 블록 제거
+    # remove the previous managed block
     sed -i "/${BEGIN_MARK}/,/${END_MARK}/d" "${bashrc}"
-    # 이번 세션에 수동 추가됐을 수 있는 산발적 export/주석 정리
+    # clean up sporadic export/comment that may have been manually added this session
     sed -i \
         -e '/CycloneDDS receive-buffer tuning for large RealSense topics/d' \
-        -e '/모든 새 셸 기본 RMW = CycloneDDS/d' \
+        -e '/default RMW = CycloneDDS for all new shells/d' \
         -e '\#^export CYCLONEDDS_URI=#d' \
         -e '/^export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp/d' \
         "${bashrc}"
 fi
 {
     echo "${BEGIN_MARK}"
-    echo "# CycloneDDS 표준 + 대용량 토픽 버퍼/인터페이스 튜닝 (dds-tuning.sh 관리, 수동 편집 금지)"
+    echo "# CycloneDDS standard + large-topic buffer/interface tuning (managed by dds-tuning.sh, do not edit manually)"
     echo "export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp"
     echo "export CYCLONEDDS_URI=\"file://${CYCLONEDDS_XML}\""
     echo "${END_MARK}"
 } >> "${bashrc}"
-echo "[dds] ~/.bashrc 관리 블록 갱신 (CYCLONEDDS_URI / RMW_IMPLEMENTATION)"
+echo "[dds] updated the ~/.bashrc managed block (CYCLONEDDS_URI / RMW_IMPLEMENTATION)"
 
-echo "[dds] 완료. 새 터미널 또는 'source ~/.bashrc' 후 cyclonedds 적용."
-echo "[dds] 참고: 같은 호스트 통신(호스트↔컨테이너)은 loopback 으로 항상 동작합니다."
-echo "[dds]       다른 머신과의 통신은 해당 외부 NIC 가 up 이어야 합니다."
+echo "[dds] done. cyclonedds applies after a new terminal or 'source ~/.bashrc'."
+echo "[dds] note: same-host communication (host↔container) always works via loopback."
+echo "[dds]       communication with other machines requires that external NIC to be up."

@@ -1,12 +1,17 @@
 #!/usr/bin/env bash
-# dev 워크스페이스 생성 — 레포 cobot2_ws 의 컨테이너 패키지를 host 의 ~/yolo_ws·~/voice_ws 로 복사.
-# docker-compose.dev.yml 이 이 경로(${WS}/src)를 컨테이너 /ws/src 에 bind-mount → 코드 수정 즉시 반영.
+# =============================================================
+#  ros2_jazzy_test — ROS2 Jazzy workstation installer
+#  Copyright (c) 2026 ROKEY bootcamp. All rights reserved.
+# =============================================================
 #
-# 별도 워크스페이스라 거기서 자유롭게 편집·디버깅하고, 레포 공유는 수동으로 되돌려 커밋한다.
-# (symlink 은 docker bind-mount 안에서 host 경로를 가리켜 컨테이너에서 깨지므로 복사 채택.)
+# dev workspace creation — copy the repo cobot2_ws container packages into the host's ~/yolo_ws·~/voice_ws.
+# docker-compose.dev.yml bind-mounts this path (${WS}/src) to the container /ws/src → code edits reflect immediately.
 #
-# 멱등: 이미 있는 패키지 디렉토리는 건너뛴다(편집본 보호). --force 로 덮어쓰기.
-# 사용: bash containers/dev-ws-setup.sh [--force]
+# A separate workspace, so you can edit/debug freely there and manually port changes back to share with the repo.
+# (A symlink points to a host path inside the docker bind-mount and breaks in the container, so we use copy.)
+#
+# Idempotent: an already-present package directory is skipped (protects edited copies). Overwrite with --force.
+# Usage: bash containers/dev-ws-setup.sh [--force]
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -19,7 +24,7 @@ FORCE=0
 
 SRC="${REPO_ROOT}/cobot2_ws"
 
-# "대상WS|패키지...". yolo 는 object_detection 이 od_msg.srv 를 import 하므로 함께 복사.
+# "targetWS|packages...". For yolo, object_detection imports od_msg.srv, so copy it together.
 ENTRIES=(
     "${YOLO_WS}|od_msg object_detection"
     "${VOICE_WS}|voice_processing"
@@ -36,17 +41,17 @@ for entry in "${ENTRIES[@]}"; do
     for pkg in "${pkgs[@]}"; do
         dest="${ws}/src/${pkg}"
         if [[ -e "${dest}" && "${FORCE}" -ne 1 ]]; then
-            echo "  · ${pkg}: 이미 존재 — skip (--force 로 덮어쓰기)"
+            echo "  · ${pkg}: already exists — skip (overwrite with --force)"
             continue
         fi
         rm -rf "${dest}"
         cp -r "${SRC}/${pkg}" "${dest}"
-        echo "  ✓ ${pkg} 복사"
+        echo "  ✓ copied ${pkg}"
     done
 done
 
 echo
-echo "✅ dev 워크스페이스 준비 완료."
-echo "  빌드: docker compose -f ${REPO_ROOT}/containers/docker-compose.yml -f ${REPO_ROOT}/containers/docker-compose.dev.yml build"
-echo "  기동: docker compose -f ${REPO_ROOT}/containers/docker-compose.yml -f ${REPO_ROOT}/containers/docker-compose.dev.yml up -d yolo-detection"
-echo "  진입: docker exec -it yolo-detection bash   # 안에서 colcon build --symlink-install && ros2 run object_detection object_detection"
+echo "✅ dev workspace ready."
+echo "  build: docker compose -f ${REPO_ROOT}/containers/docker-compose.yml -f ${REPO_ROOT}/containers/docker-compose.dev.yml build"
+echo "  start: docker compose -f ${REPO_ROOT}/containers/docker-compose.yml -f ${REPO_ROOT}/containers/docker-compose.dev.yml up -d yolo-detection"
+echo "  enter: docker exec -it yolo-detection bash   # inside: colcon build --symlink-install && ros2 run object_detection object_detection"

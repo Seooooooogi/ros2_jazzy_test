@@ -1,17 +1,22 @@
 #!/usr/bin/env bash
-# Phase 4 application 이미지 확보 — 빌드 대신 공개 구글 드라이브에서 tar 를 받아 docker load.
+# =============================================================
+#  ros2_jazzy_test — ROS2 Jazzy workstation installer
+#  Copyright (c) 2026 ROKEY bootcamp. All rights reserved.
+# =============================================================
 #
-# 클린설치(install.sh step14)의 기본 경로다. 이미지를 직접 빌드/검증(이미지 제작 머신)하려면
-# containers/build-all.sh 를 쓴다. 본 스크립트는 그 산출물(docker save tar)을 받아 재현만 한다.
+# Phase 4 application image fetch — instead of building, download a tar from public Google Drive and docker load.
 #
-# 동작:
-#   1) 대상 이미지가 이미 로컬에 있으면 skip (멱등 — 재실행/재개 안전).
-#   2) 공개 드라이브 file ID 로 tar 다운로드 (대용량 virus-scan confirm 토큰 처리).
-#   3) SHA256 검증 (config 에 핀된 값과 대조) — 손상/위변조 차단.
-#   4) gz/zip 이면 해제한 뒤 docker load.
+# This is the default path of a clean install (install.sh step14). To build/verify the images directly (image-producing
+# machine), use containers/build-all.sh. This script only reproduces that artifact (docker save tar).
 #
-# file ID / SHA256 은 config.sh 에 핀한다(공개 링크 ID 는 secret 아님). 업로드 후 ID 를 채운다.
-# 사용: bash containers/fetch-images.sh
+# Behavior:
+#   1) skip if the target image is already local (idempotent — re-run/resume safe).
+#   2) download the tar via the public drive file ID (handles the large-file virus-scan confirm token).
+#   3) verify SHA256 (against the value pinned in config) — blocks corruption/tampering.
+#   4) if gz/zip, extract then docker load.
+#
+# The file ID / SHA256 are pinned in config.sh (a public-link ID is not a secret). Fill in the ID after upload.
+# Usage: bash containers/fetch-images.sh
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -19,26 +24,26 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 # shellcheck source=resources/config.sh
 source "${REPO_ROOT}/resources/config.sh"
 
-# 다운로드 작업 디렉토리(머신 종속 산출물 — 레포 추적 안 함).
+# Download working directory (machine-specific artifact — not tracked in the repo).
 WORKDIR="${IMAGE_FETCH_DIR:-${STATE_DIR}/images}"
 mkdir -p "${WORKDIR}"
 
-# 이미지 정의: "로컬태그|드라이브ID|sha256|파일명". build-all.sh 의 이미지 좌표와 동일 기본값.
+# Image definition: "localtag|driveID|sha256|filename". Same defaults as build-all.sh's image coordinates.
 IMAGES=(
     "docker.io/${DOCKERHUB_USER:-local}/ros2-jazzy-yolo:${YOLO_TAG:-dev}|${YOLO_IMAGE_GDRIVE_ID:-}|${YOLO_IMAGE_SHA256:-}|ros2-jazzy-yolo-dev.tar"
     "docker.io/${DOCKERHUB_USER:-local}/ros2-jazzy-voice:${VOICE_TAG:-dev}|${VOICE_IMAGE_GDRIVE_ID:-}|${VOICE_IMAGE_SHA256:-}|ros2-jazzy-voice-dev.tar"
 )
 TOTAL="${#IMAGES[@]}"
 
-# 공개 구글 드라이브 대용량 파일 다운로드. >100MB 는 1차 요청에 virus-scan confirm form(HTML)을
-# 돌려주므로 confirm/uuid 토큰을 뽑아 2차 요청해야 실제 바이너리를 받는다. 작은 파일은 1차가 곧 파일.
+# Download a large public Google Drive file. For >100MB the first request returns a virus-scan confirm form (HTML),
+# so we extract the confirm/uuid token and make a second request to get the actual binary. Small files come back directly on the first request.
 gdrive_download() {
     local id="$1" out="$2"
     local base="https://drive.usercontent.google.com/download"
     local cookie; cookie="$(mktemp)"
     local html; html="$(curl -sL -c "${cookie}" "${base}?id=${id}&export=download")"
-    # --no-progress-meter: 진행률 막대(curl 은 stderr 로 출력)를 끈다. orchestrate.sh 의 run_step 이 stderr 를
-    # 콘솔에도 보내므로 기존 -# 진행바('###..%')가 콘솔에 노출됐다. -s 와 달리 에러는 그대로 남는다.
+    # --no-progress-meter: turns off the progress bar (curl prints it to stderr). orchestrate.sh's run_step sends stderr
+    # to the console too, so the old -# progress bar ('###..%') leaked to the console. Unlike -s, errors are still shown.
     if printf '%s' "${html}" | grep -q 'name="confirm"'; then
         local confirm uuid
         confirm="$(printf '%s' "${html}" | grep -o 'name="confirm" value="[^"]*"' | sed -E 's/.*value="([^"]*)".*/\1/')"
@@ -59,28 +64,28 @@ for entry in "${IMAGES[@]}"; do
     printf '\n[%d/%d] %s\n' "${n}" "${TOTAL}" "${tag}"
 
     if docker image inspect "${tag}" >/dev/null 2>&1; then
-        echo "  ✓ 이미 로컬에 존재 — skip"
+        echo "  ✓ already present locally — skip"
         continue
     fi
     if [[ -z "${id}" ]]; then
-        echo "  ✗ 드라이브 file ID 미설정 (config.sh 의 *_IMAGE_GDRIVE_ID)." >&2
-        echo "    업로드 후 ID 를 채우거나, 직접 빌드는 containers/build-all.sh 를 실행하세요." >&2
+        echo "  ✗ drive file ID unset (config.sh's *_IMAGE_GDRIVE_ID)." >&2
+        echo "    Fill in the ID after upload, or run containers/build-all.sh to build directly." >&2
         exit 1
     fi
 
     tarpath="${WORKDIR}/${fname}"
-    echo "  · 다운로드 → ${tarpath}"
+    echo "  · download → ${tarpath}"
     gdrive_download "${id}" "${tarpath}"
 
     if [[ -n "${sha}" ]]; then
-        echo "  · SHA256 검증"
+        echo "  · SHA256 verify"
         echo "${sha}  ${tarpath}" | sha256sum -c - \
-            || { echo "  ✗ 체크섬 불일치 — 손상/위변조 의심, 중단" >&2; exit 1; }
+            || { echo "  ✗ checksum mismatch — suspected corruption/tampering, aborting" >&2; exit 1; }
     else
-        echo "  ! SHA256 미설정 — 무결성 검증 생략(config 에 핀 권장)" >&2
+        echo "  ! SHA256 unset — skipping integrity verification (pinning in config is recommended)" >&2
     fi
 
-    # 압축 해제 분기. docker load 가 gzip 은 자동 인식하나, 명시 해제로 gz/zip 모두 일반화.
+    # Decompression branch. docker load auto-detects gzip, but explicit extraction generalizes both gz/zip.
     case "${tarpath}" in
         *.gz)  echo "  · gunzip"; gunzip -f "${tarpath}"; tarpath="${tarpath%.gz}";;
         *.zip) echo "  · unzip";  unzip -o "${tarpath}" -d "${WORKDIR}"; tarpath="${WORKDIR}/$(basename "${tarpath}" .zip).tar";;
@@ -88,9 +93,9 @@ for entry in "${IMAGES[@]}"; do
 
     echo "  · docker load"
     docker load -i "${tarpath}"
-    rm -f "${tarpath}"          # load 후 tar 불필요 — 디스크 회수(이미지 존재로 재실행 skip)
-    echo "  ✓ load 완료"
+    rm -f "${tarpath}"          # tar not needed after load — reclaim disk (re-run skips since the image exists)
+    echo "  ✓ load complete"
 done
 
 echo
-echo "✅ 이미지 확보 완료 — ${TOTAL} 개. (직접 빌드/검증은 containers/build-all.sh)"
+echo "✅ image fetch complete — ${TOTAL} images. (direct build/verification is containers/build-all.sh)"

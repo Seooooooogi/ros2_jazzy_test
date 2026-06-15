@@ -1,16 +1,21 @@
 #!/usr/bin/env bash
+# =============================================================
+#  ros2_jazzy_test — ROS2 Jazzy workstation installer
+#  Copyright (c) 2026 ROKEY bootcamp. All rights reserved.
+# =============================================================
+#
 # shellcheck source-path=SCRIPTDIR
 # resources/activate.sh — One-shot ROS2 environment activation for non-interactive
 # shells (CI / cron / systemd / scripted runs) where ~/.bashrc auto-source is not
 # applied.
-# source 전용 라이브러리 — set -euo 를 여기 두지 않는다(호출 진입점이 셸 옵션을 소유).
+# Source-only library — no `set -euo` here (the calling entry point owns shell options).
 #
 # Usage:
 #   source "$(dirname "${BASH_SOURCE[0]}")/activate.sh"
-#   # 이후 ros2 / colcon / rclpy 사용 가능 (system Python).
+#   # ros2 / colcon / rclpy available afterwards (system Python).
 #
-# Application Python (PyTorch / ultralytics / langchain / openai 등) 은 별도(yolo/voice)
-# Docker container 안에만 존재 — 본 wrapper 는 그것을 다루지 않는다.
+# Application Python (PyTorch / ultralytics / langchain / openai, etc.) lives only
+# inside the separate (yolo/voice) Docker containers — this wrapper does not handle it.
 
 _ACT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=./config.sh

@@ -1,12 +1,17 @@
 #!/usr/bin/env bash
-# shellcheck shell=bash
-# resources/apt-repo.sh — apt repo + keyring 등록 중앙화 (멱등).
-# source 전용 라이브러리 — set -euo 를 여기 두지 않는다(호출 진입점이 셸 옵션을 소유).
+# =============================================================
+#  ros2_jazzy_test — ROS2 Jazzy workstation installer
+#  Copyright (c) 2026 ROKEY bootcamp. All rights reserved.
+# =============================================================
 #
-# add_apt_repo: keyring dir 보장 → GPG 키(없을 때만, raw/dearmor) → chmod a+r →
-#               apt source list 멱등 기록 → (기본) apt-get update.
-# 키 파일명·signed-by 경로는 호출자가 vendor 형식 그대로 전달(임의 변환 금지 — repo 인증 깨짐).
-# vendor 별 키 처리 차이(다운로더 플래그·dearmor write·list 비교)는 인자로 보존한다.
+# shellcheck shell=bash
+# resources/apt-repo.sh — centralized apt repo + keyring registration (idempotent).
+# Source-only library — no `set -euo` here (the calling entry point owns shell options).
+#
+# add_apt_repo: ensure keyring dir → GPG key (only if absent, raw/dearmor) → chmod a+r →
+#               idempotently write the apt source list → (by default) apt-get update.
+# The caller passes the key filename / signed-by path in the vendor's exact format (no arbitrary conversion — it breaks repo auth).
+# Per-vendor key-handling differences (downloader flags, dearmor write, list comparison) are preserved via arguments.
 #
 # Usage:
 #   add_apt_repo \
@@ -16,10 +21,10 @@
 #       { --list-line "deb ..." | --list-url URL --list-sed "s#..#..#g" } \
 #       [--list-cmp grep|cat] [--no-update]
 #
-#   raw     = 키를 그대로 저장(armored .asc / 원본). 항상 `sudo curl -fsSL URL -o KEY`.
-#   dearmor = `<downloader> URL | gpg --dearmor | sudo tee KEY`  (--key-write tee, 기본)
-#             또는 `<downloader> URL | sudo gpg --dearmor -o KEY` (--key-write gpg-o)
-#   list-cmp grep = 단일행 grep -qxF (기본) / cat = 다중행 전체 비교(upstream list+sed).
+#   raw     = store the key as-is (armored .asc / original). Always `sudo curl -fsSL URL -o KEY`.
+#   dearmor = `<downloader> URL | gpg --dearmor | sudo tee KEY`  (--key-write tee, default)
+#             or `<downloader> URL | sudo gpg --dearmor -o KEY` (--key-write gpg-o)
+#   list-cmp grep = single-line grep -qxF (default) / cat = full multi-line comparison (upstream list+sed).
 
 add_apt_repo() {
     local key_file="" key_url="" mode="raw" downloader="curl" key_write="tee"
@@ -37,20 +42,20 @@ add_apt_repo() {
             --list-sed)   list_sed="$2";   shift 2;;
             --list-cmp)   list_cmp="$2";   shift 2;;
             --no-update)  do_update=0;     shift;;
-            *) echo "add_apt_repo: 알 수 없는 인자 '$1'" >&2; return 2;;
+            *) echo "add_apt_repo: unknown argument '$1'" >&2; return 2;;
         esac
     done
 
-    # 다운로더(→ stdout) 플래그 배열 — vendor 별 정확 보존.
+    # Downloader (→ stdout) flag array — preserved exactly per vendor.
     local -a dl
     case "${downloader}" in
         curl)     dl=(curl -fsSL);;
         curl-sSf) dl=(curl -sSf);;
         wget)     dl=(wget -qO-);;
-        *) echo "add_apt_repo: 알 수 없는 downloader '${downloader}'" >&2; return 2;;
+        *) echo "add_apt_repo: unknown downloader '${downloader}'" >&2; return 2;;
     esac
 
-    # 1) keyring 디렉토리 + 키 (없을 때만 — idempotent).
+    # 1) keyring directory + key (only if absent — idempotent).
     sudo install -m 0755 -d "$(dirname "${key_file}")"
     if [[ ! -f "${key_file}" ]]; then
         case "${mode}" in
@@ -64,15 +69,15 @@ add_apt_repo() {
                     "${dl[@]}" "${key_url}" | gpg --dearmor | sudo tee "${key_file}" >/dev/null
                 fi
                 ;;
-            *) echo "add_apt_repo: 알 수 없는 mode '${mode}'" >&2; return 2;;
+            *) echo "add_apt_repo: unknown mode '${mode}'" >&2; return 2;;
         esac
         sudo chmod a+r "${key_file}"
     fi
 
-    # 2) apt source list — 동일 내용이면 재기록 안 함(중복/덮어쓰기 방지).
+    # 2) apt source list — do not rewrite if content is identical (prevents duplication/overwrite).
     local desired
     if [[ -n "${list_url}" ]]; then
-        # upstream list 를 받아 signed-by 주입(sed). 다중행이라 cat 비교가 기본.
+        # Fetch the upstream list and inject signed-by (sed). Multi-line, so cat comparison is the default.
         desired="$("${dl[@]}" "${list_url}" | sed "${list_sed}")"
     else
         desired="${list_line}"
@@ -89,7 +94,7 @@ add_apt_repo() {
         echo "${desired}" | sudo tee "${list_file}" >/dev/null
     fi
 
-    # 3) apt 캐시 갱신 (호출자가 --no-update 면 생략 — repo-add 후 별도 update 가 따로 있을 때).
+    # 3) refresh the apt cache (skipped if the caller passes --no-update — when a separate update follows repo-add).
     if [[ "${do_update}" == "1" ]]; then
         sudo apt-get update
     fi

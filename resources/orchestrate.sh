@@ -1,41 +1,46 @@
 #!/usr/bin/env bash
+# =============================================================
+#  ros2_jazzy_test — ROS2 Jazzy workstation installer
+#  Copyright (c) 2026 ROKEY bootcamp. All rights reserved.
+# =============================================================
+#
 # shellcheck shell=bash
-# resources/orchestrate.sh — install step 엔진 (상태추적 + 실행래퍼 + step 정의 단일 소스).
-# source 전용 라이브러리 — set -euo 를 여기 두지 않는다(호출 진입점이 셸 옵션을 소유).
+# resources/orchestrate.sh — install step engine (state tracking + run wrapper + step definitions, single source).
+# Source-only library — no `set -euo` here (the calling entry point owns shell options).
 #
-# 세 관심사를 한 파일로 묶는다 — 항상 함께 source 되며 step 한 단위를 따라가려면 셋 다 읽어야 한다:
-#   1) state   — step 진행 상태(DONE/FAIL/SKIPPED/RUNNING)를 state 파일에 멱등 기록 (resume + [n/total]).
-#   2) run_step — skip 판정 + begin/end + 로그 분리 + heartbeat 를 묶는 중앙 실행 래퍼.
-#   3) steps   — install.sh 전체 시퀀스가 호출하는 step 정의(스테이지 함수 + 분모 상수).
+# Bundles three concerns in one file — always sourced together, and you must read all three to follow one step:
+#   1) state   — idempotently records step progress (DONE/FAIL/SKIPPED/RUNNING) in the state file (resume + [n/total]).
+#   2) run_step — central run wrapper bundling skip decision + begin/end + log separation + heartbeat.
+#   3) steps   — step definitions called by the full install.sh sequence (stage functions + denominator constants).
 #
-# 선행 source 필요: config.sh (STATE_FILE / LOG_FILE / STATE_DIR / TOTAL_STEPS). 호출자가
-# RESOURCE_DIR 와 STEPS_TOTAL 을 설정한다. 함수는 call-time resolve 라 source 순서는 무관.
+# Requires config.sh to be sourced first (STATE_FILE / LOG_FILE / STATE_DIR / TOTAL_STEPS). The caller
+# sets RESOURCE_DIR and STEPS_TOTAL. Functions resolve at call time, so source order does not matter.
 
 # ============================================================================
-# 1) state — step progress tracking (resumable 재실행 + [n/total] 진행률)
+# 1) state — step progress tracking (resumable re-run + [n/total] progress)
 # ============================================================================
-# State file format (key=value — grep/sed 기반 in-place 갱신으로 idempotent 상태 기록):
+# State file format (key=value — idempotent state recording via grep/sed-based in-place update):
 #   step_<name>=DONE|FAIL|SKIPPED|RUNNING
 #
 # Usage (from installer step):
 #   step_should_skip a01_prerequirements && return 0
 #   step_begin 1 6 a01_prerequirements
 #   ... do work ...
-#   step_end_ok       # 또는 실패 시 step_end_fail
+#   step_end_ok       # or step_end_fail on failure
 #
-# Idempotent: 같은 step 을 여러 번 RUNNING -> DONE 마킹해도 state 파일은 1줄 유지.
-# Dependencies: config.sh 의 STATE_FILE 이 정의되어 있어야 함.
+# Idempotent: marking the same step RUNNING -> DONE multiple times keeps a single line in the state file.
+# Dependencies: STATE_FILE from config.sh must be defined.
 
-# 내부 상태: 현재 진행 중인 step name (step_begin -> step_end_* 짝짓기용)
+# Internal state: the currently running step name (for pairing step_begin -> step_end_*).
 __current_step=""
 
-# Internal: state 파일이 없으면 생성.
+# Internal: create the state file if it does not exist.
 _state_ensure_file() {
     mkdir -p "$(dirname "$STATE_FILE")"
     [[ -f "$STATE_FILE" ]] || : > "$STATE_FILE"
 }
 
-# Internal: state 파일의 step_<name> 라인을 status 로 set (없으면 추가, 있으면 교체).
+# Internal: set the step_<name> line in the state file to status (append if absent, replace if present).
 _state_set() {
     local name="$1" status="$2" key
     _state_ensure_file
@@ -47,14 +52,14 @@ _state_set() {
     fi
 }
 
-# Public: 이미 DONE 으로 마킹된 step 인가? 반환 0 = skip 해도 됨.
+# Public: is this step already marked DONE? return 0 = safe to skip.
 step_should_skip() {
     local name="$1"
     _state_ensure_file
     grep -qE "^step_${name}=DONE$" "$STATE_FILE"
 }
 
-# Public: step 시작. 진행률 + 헤더 출력 + state 에 RUNNING 기록.
+# Public: begin a step. Print progress + header and record RUNNING in state.
 # Args: <n> <total> <name>
 step_begin() {
     local n="$1" total="$2" name="$3"
@@ -67,7 +72,7 @@ step_begin() {
     _state_set "$name" RUNNING
 }
 
-# Public: 현재 step 을 DONE 으로 마감.
+# Public: finalize the current step as DONE.
 step_end_ok() {
     if [[ -z "$__current_step" ]]; then
         echo "state: step_end_ok called without step_begin" >&2
@@ -78,7 +83,7 @@ step_end_ok() {
     __current_step=""
 }
 
-# Public: 현재 step 을 FAIL 로 마감.
+# Public: finalize the current step as FAIL.
 step_end_fail() {
     if [[ -z "$__current_step" ]]; then
         echo "state: step_end_fail called without step_begin" >&2
@@ -89,7 +94,7 @@ step_end_fail() {
     __current_step=""
 }
 
-# Public: 현재 step 을 SKIPPED 로 마감 (조건부 skip 시).
+# Public: finalize the current step as SKIPPED (on conditional skip).
 step_end_skip() {
     if [[ -z "$__current_step" ]]; then
         return 1
@@ -99,7 +104,7 @@ step_end_skip() {
     __current_step=""
 }
 
-# Public: 모든 step 상태 출력 (디버깅 / verification 용).
+# Public: print all step states (for debugging / verification).
 state_dump() {
     _state_ensure_file
     echo "--- state file: $STATE_FILE ---"
@@ -108,92 +113,92 @@ state_dump() {
 }
 
 # ============================================================================
-# 2) run_step — 중앙화된 step 실행 래퍼 (오케스트레이션 정책)
+# 2) run_step — centralized step run wrapper (orchestration policy)
 # ============================================================================
-# 위 state 섹션(step_should_skip / step_begin / step_end_*) 과 config.sh (TOTAL_STEPS) 에 의존.
+# Depends on the state section above (step_should_skip / step_begin / step_end_*) and config.sh (TOTAL_STEPS).
 #
-# 진행률 분모(total)는 호출자가 설정하는 STEPS_TOTAL 을 호출 시점에 읽는다.
-# install.sh 가 STEPS_TOTAL(전체 step 수, install_steps_total)을 설정한다.
-# 미설정 시 config.sh 의 TOTAL_STEPS 로 fallback.
+# The progress denominator (total) reads STEPS_TOTAL, set by the caller, at call time.
+# install.sh sets STEPS_TOTAL (total step count, install_steps_total).
+# Falls back to TOTAL_STEPS from config.sh when unset.
 #
-# state 마킹/조회는 위 state 섹션이 전담하고, 본 섹션은 skip 판정 + begin/end 호출만 묶는다.
+# State marking/lookup is owned by the state section above; this section only bundles the skip decision + begin/end calls.
 #
-# 출력 정책: step 명령(`"$@"`)의 stdout 은 config.sh 의 LOG_FILE 로만, stderr 는 콘솔과
-# LOG_FILE 양쪽으로 보낸다. 콘솔에는 step_begin/step_end_* 의 진행률 배너 + 경고/에러만
-# 남아 단계가 명확히 보이고, apt/pip/colcon 의 대량 출력은 로그파일로 빠진다.
+# Output policy: the step command's (`"$@"`) stdout goes only to LOG_FILE from config.sh, while stderr goes to both the console and
+# LOG_FILE. The console keeps only the progress banner from step_begin/step_end_* + warnings/errors,
+# so steps are clearly visible, and the bulk output of apt/pip/colcon goes to the log file.
 #
-# 실패 시 step_end_fail 로 FAIL 을 기록한 뒤 exit 1 로 직접 종료한다 — 이 경로에서는
-# 호출자에 설치된 ERR trap 이 발화하지 않는다(exit 는 trap 대상이 아님). 즉 실패 보고는
-# step_end_fail 의 FAIL 기록이 단일 진실이고, ERR trap 은 run_step 밖의 명령 실패만 잡는다.
+# On failure it records FAIL via step_end_fail then exits directly with exit 1 — on this path
+# the ERR trap installed by the caller does not fire (exit is not a trap target). So failure reporting
+# has step_end_fail's FAIL record as the single source of truth, and the ERR trap catches only command failures outside run_step.
 
-# step 실행 중 콘솔이 "멈춘 듯" 보이지 않도록 경과시간을 in-place(\r)로 갱신하는 heartbeat.
-# stdout 이 로그로 빠지는 비-verbose + 대화형(tty) 일 때만 띄운다. verbose 모드는 step 의
-# 실제 출력(colcon n/total, apt %)이 콘솔로 흐르므로 heartbeat 를 띄우지 않는다.
-# 첫 draw 를 2초 뒤로 미룬다: 짧은 step / step 초반의 sudo 비밀번호 프롬프트가 heartbeat
-# 라인과 겹치지 않게 — sudo 는 보통 step 시작 직후에 묻고 그 안에 끝난다.
+# A heartbeat that updates elapsed time in-place (\r) so the console does not look "stuck" during a step.
+# Shown only when non-verbose (stdout goes to the log) + interactive (tty). In verbose mode the step's
+# actual output (colcon n/total, apt %) flows to the console, so no heartbeat is shown.
+# Delay the first draw by 2 seconds: so a short step / the sudo password prompt early in a step does not
+# overlap the heartbeat line — sudo usually asks right after a step starts and finishes within it.
 _step_heartbeat() {
     local name="$1" start="$SECONDS" e
     while :; do
         sleep 2
         e=$(( SECONDS - start ))
-        printf '\r  ⋯ %s 진행 중 (%02d:%02d 경과)\033[K' "$name" $(( e / 60 )) $(( e % 60 )) >&2
+        printf '\r  ⋯ %s running (%02d:%02d elapsed)\033[K' "$name" $(( e / 60 )) $(( e % 60 )) >&2
     done
 }
 
-# run_step [--interactive] <n> <name> <cmd...> — DONE 이면 skip, 아니면 begin → 실행 → ok/fail.
-# --interactive: step 이 stdin 으로 사용자 입력을 받는 경우(예: API 키 직접 입력) heartbeat 를
-#   끈다. heartbeat 의 \r 갱신이 입력 프롬프트를 덮어써 입력이 엉키는 것을 방지.
+# run_step [--interactive] <n> <name> <cmd...> — skip if DONE, otherwise begin → run → ok/fail.
+# --interactive: when a step reads user input from stdin (e.g. typing an API key directly), turn off the
+#   heartbeat. Prevents the heartbeat's \r update from overwriting the input prompt and garbling input.
 run_step() {
     local interactive=0
     if [[ "${1:-}" == --interactive ]]; then interactive=1; shift; fi
     local n="$1" name="$2"
     shift 2
     if [[ $# -eq 0 ]]; then
-        echo "run-step: '${name}' 에 실행할 명령이 없습니다 (run_step <n> <name> <cmd...>)." >&2
+        echo "run-step: no command to run for '${name}' (run_step <n> <name> <cmd...>)." >&2
         exit 2
     fi
-    local total="${STEPS_TOTAL:-${TOTAL_STEPS:?run-step: STEPS_TOTAL/TOTAL_STEPS 미설정}}"
+    local total="${STEPS_TOTAL:-${TOTAL_STEPS:?run-step: STEPS_TOTAL/TOTAL_STEPS not set}}"
     if step_should_skip "${name}"; then
-        echo "[${n}/${total}] skip: ${name} (이미 DONE)"
+        echo "[${n}/${total}] skip: ${name} (already DONE)"
         return 0
     fi
-    # 설치 상세 로그(config.sh 의 LOG_FILE)에 step 구분 배너 append. LOG_FILE 미정의
-    # 환경(구버전 source 순서)에서도 set -u 로 죽지 않게 STATE_DIR 기준 폴백.
-    local log="${LOG_FILE:-${STATE_DIR:?run-step: STATE_DIR 미설정}/install.log}"
+    # Append a step-separator banner to the detailed install log (LOG_FILE from config.sh). In an environment where
+    # LOG_FILE is undefined (old source order), fall back via STATE_DIR so set -u does not kill it.
+    local log="${LOG_FILE:-${STATE_DIR:?run-step: STATE_DIR not set}/install.log}"
     mkdir -p "$(dirname "$log")"
     { echo; echo "===== [${n}/${total}] ${name} — $(date '+%F %T') ====="; } >>"$log"
 
     step_begin "${n}" "${total}" "${name}"
 
-    # 출력 분리: 명령 stdout 은 로그 전용, stderr 는 콘솔(>&2) + 로그(tee -a).
-    # 콘솔에는 진행률 배너 + 경고/에러만 남고 apt/pip/colcon 의 대량 stdout 은 로그로 빠진다.
+    # Output separation: command stdout is log-only, stderr goes to console (>&2) + log (tee -a).
+    # The console keeps only the progress banner + warnings/errors; the bulk stdout of apt/pip/colcon goes to the log.
     #
-    # tee 는 비동기 process-sub 라 명령 종료 후에도 잔여 버퍼를 flush 중일 수 있다. 그대로
-    # 두면 step_end_* 의 [OK]/[FAIL] 배너가 명령의 마지막 stderr 보다 먼저 찍혀 출력이
-    # 뒤섞인다. 그래서 tee 를 exec 로 전용 fd 에 1회 띄우고 PID 를 잡아, 명령 종료 후 fd 를
-    # 닫아 EOF 를 주고 wait 로 drain 을 끝낸 뒤에야 배너를 찍어 순서를 결정적으로 만든다.
+    # tee is an async process-sub, so it may still be flushing leftover buffer after the command ends. If left
+    # as-is, the [OK]/[FAIL] banner from step_end_* prints before the command's last stderr, so output
+    # gets interleaved. So we launch tee once on a dedicated fd via exec and capture its PID, then after the command ends close the fd
+    # to give EOF and wait for the drain to finish before printing the banner, making the order deterministic.
     #
-    # 파이프라인이 아니라 리다이렉트 + process-sub 라 pipefail 과 무관하고, exit code 는
-    # "$@" 의 것을 rc 에 그대로 받는다(`|| rc=$?` 라 set -e 도 미발화). sudo 프롬프트는
-    # /dev/tty 로 나가므로 이 리다이렉트에 삼켜지지 않는다.
+    # Since it is a redirect + process-sub rather than a pipeline, it is unaffected by pipefail, and the exit code
+    # is taken from "$@" into rc as-is (`|| rc=$?` so set -e does not fire either). The sudo prompt
+    # goes to /dev/tty, so it is not swallowed by this redirect.
     #
-    # VERBOSE=1 이면 step 의 stdout 도 tee 로 콘솔+로그 양쪽에 흘려 colcon `[n/total]`,
-    # apt 퍼센트 같은 step-내 진행률을 실시간으로 보여준다. 기본(비-verbose)은 stdout 을
-    # 로그 전용으로 두는 대신, 살아있음을 알리는 경과시간 heartbeat 를 콘솔에 띄운다.
+    # When VERBOSE=1, the step's stdout is also teed to both console+log so colcon `[n/total]`,
+    # apt percentages and other in-step progress are shown in real time. By default (non-verbose), stdout
+    # is kept log-only; instead an elapsed-time heartbeat is shown on the console to signal liveness.
     local rc=0 teepid tfd hbpid=""
     exec {tfd}> >(tee -a "$log" >&2); teepid=$!
     if [[ "${VERBOSE:-0}" == 1 ]]; then
         "$@" >&"$tfd" 2>&1 || rc=$?
     else
         if [[ -t 2 && "$interactive" -eq 0 ]]; then
-            echo "  (상세 진행: tail -f ${log})" >&2
+            echo "  (detailed progress: tail -f ${log})" >&2
             _step_heartbeat "${name}" & hbpid=$!
         fi
         "$@" >>"$log" 2>&"$tfd" || rc=$?
         if [[ -n "$hbpid" ]]; then
             kill "$hbpid" 2>/dev/null || true
             wait "$hbpid" 2>/dev/null || true
-            printf '\r\033[K' >&2   # heartbeat 잔여 라인 제거
+            printf '\r\033[K' >&2   # clear leftover heartbeat line
         fi
     fi
     exec {tfd}>&-
@@ -203,42 +208,42 @@ run_step() {
         step_end_ok
     else
         step_end_fail
-        echo "  ↳ 상세 로그: ${log}" >&2
+        echo "  ↳ detailed log: ${log}" >&2
         exit 1
     fi
 }
 
 # ============================================================================
-# 3) steps — install step 정의 (install.sh 전체 시퀀스에서 호출)
+# 3) steps — install step definitions (called from the full install.sh sequence)
 # ============================================================================
-# 선행: 위 state/run_step 섹션. 호출자가 RESOURCE_DIR 를 설정한다.
+# Prerequisite: the state/run_step sections above. The caller sets RESOURCE_DIR.
 #
-# 번호 규칙: 각 스테이지 함수는 offset 을 받아 run_step 번호 = offset + 로컬k 로 계산한다.
-#   install.sh: run_stage_a01 0 → (reboot=step6, install.sh 인라인) → run_stage_a02 6
-#               → run_stage_a03 10 → run_stage_a04 11 → step 13-16(install 전용, install.sh 인라인).
-# offset 인자는 향후 부분 실행/재배치 여지를 위해 남겨 둔다 — 현재 호출자는 install.sh 하나.
-# state key(name)는 offset/번호와 무관 — resume 호환에 영향 없음(같은 name 이면 skip 동일).
+# Numbering rule: each stage function takes an offset and computes the run_step number = offset + local-k.
+#   install.sh: run_stage_a01 0 → (reboot=step6, inline in install.sh) → run_stage_a02 6
+#               → run_stage_a03 10 → run_stage_a04 11 → steps 13-17 (install-only, inline in install.sh).
+# The offset argument is kept for future partial-run/reordering flexibility — currently the only caller is install.sh.
+# The state key (name) is independent of offset/number — no effect on resume compatibility (same name → same skip).
 #
-# reboot(step6)는 본 섹션에 두지 않는다: install.sh 의 reboot wrapper 가 메시지/UNATTENDED
-# 분기/exit-vs-continue 를 소유해 run_step 의 일반 step 프레이밍과 다르기 때문이다.
-# install.sh 가 reboot 를 인라인으로 소유한다(behavior-preserving 우선).
+# reboot (step6) is not placed in this section: install.sh's reboot wrapper owns the messaging/UNATTENDED
+# branch/exit-vs-continue, which differs from run_step's generic step framing.
+# install.sh owns reboot inline (behavior-preserving first).
 
-# 스테이지별 step 수 (reboot 제외). 단계 추가 시 여기 한 곳만 갱신하면
-# install_steps_total() 의 전체 분모가 따라온다.
+# Per-stage step count (excluding reboot). When adding a step, updating only here makes
+# the overall denominator in install_steps_total() follow.
 STAGE_A01_COUNT=5
 STAGE_A02_COUNT=4
 STAGE_A03_COUNT=1
 STAGE_A04_COUNT=1
-INSTALL_EXTRA_COUNT=4   # install 전용: dds(13) / toolkit(14) / container(15) / network(16)
+INSTALL_EXTRA_COUNT=5   # install-only: dds(13) / toolkit(14) / container(15) / dev_ws(16) / network(17)
 
-# install.sh 전체 분모: a01 5 + reboot 1 + a02 4 + a03 1 + a04 1 + extra 4 = 16.
+# install.sh overall denominator: a01 5 + reboot 1 + a02 4 + a03 1 + a04 1 + extra 5 = 17.
 install_steps_total() {
     echo $(( STAGE_A01_COUNT + 1 + STAGE_A02_COUNT + STAGE_A03_COUNT \
              + STAGE_A04_COUNT + INSTALL_EXTRA_COUNT ))
 }
 
-# a01: 커널 베이스라인 → NVIDIA → Docker → ROS2 desktop → ROS2 extras (reboot 은 호출자 인라인).
-# ros2-packages.sh 는 desktop/extras 두 서브커맨드를 각각 별도 step·별도 프로세스로 실행한다.
+# a01: kernel baseline → NVIDIA → Docker → ROS2 desktop → ROS2 extras (reboot is inline in the caller).
+# ros2-packages.sh runs the desktop/extras subcommands as separate steps in separate processes.
 run_stage_a01() {
     local off="$1"
     run_step $((off + 1)) a01_kernel_baseline bash "${RESOURCE_DIR}/kernel-baseline.sh"
@@ -248,8 +253,8 @@ run_stage_a01() {
     run_step $((off + 5)) a01_ros2_extras     bash "${RESOURCE_DIR}/ros2-packages.sh" extras
 }
 
-# a02: Doosan DSR → RealSense SDK → RealSense ROS 래퍼 → colcon 빌드.
-# realsense-install.sh 는 sdk/ros 두 서브커맨드를 각각 별도 step·별도 프로세스로 실행한다.
+# a02: Doosan DSR → RealSense SDK → RealSense ROS wrapper → colcon build.
+# realsense-install.sh runs the sdk/ros subcommands as separate steps in separate processes.
 run_stage_a02() {
     local off="$1"
     run_step $((off + 1)) a02_dsr_project    bash "${RESOURCE_DIR}/dsr-project-install.sh"
@@ -264,7 +269,7 @@ run_stage_a03() {
     run_step $((off + 1)) a03_vscode bash "${RESOURCE_DIR}/vscode-install.sh"
 }
 
-# a04: 음성 사전 점검(.env). 사용자 입력을 받으므로 --interactive (heartbeat 억제).
+# a04: voice pre-check (.env). Takes user input, so --interactive (suppress heartbeat).
 run_stage_a04() {
     local off="$1"
     run_step --interactive $((off + 1)) a04_voice_env bash "${RESOURCE_DIR}/voice-env-check.sh"

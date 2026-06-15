@@ -1,9 +1,14 @@
 #!/usr/bin/env bash
-# ENTRYPOINT — 모든 컨테이너 실행 시 ROS2 환경을 source 한 뒤 사용자 명령으로 exec.
+# =============================================================
+#  ros2_jazzy_test — ROS2 Jazzy workstation installer
+#  Copyright (c) 2026 ROKEY bootcamp. All rights reserved.
+# =============================================================
+#
+# ENTRYPOINT — source the ROS2 environment on every container start, then exec the user command.
 set -euo pipefail
 
-# /opt/ros/${ROS_DISTRO}/setup.bash 는 unset var 참조가 있어 set -u 하에서 깨질 수 있음.
-# source 직전만 일시적으로 -u 해제.
+# /opt/ros/${ROS_DISTRO}/setup.bash references unset vars and can break under set -u.
+# Temporarily disable -u right before the source.
 set +u
 # shellcheck source=/dev/null
 source "/opt/ros/${ROS_DISTRO}/setup.bash"
