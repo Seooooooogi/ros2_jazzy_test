@@ -42,6 +42,12 @@ DSR + RealSense + yolo/voice 통합 bringup:
 ros2 launch cobot2_bringup bringup_all.launch.py mode:=real
 ```
 
+robot_control 실행
+
+```bash
+ros2 run robot_control robot_control
+```
+
 ## 개별 기동
 
 DSR m0609:
