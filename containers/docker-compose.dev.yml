@@ -26,6 +26,8 @@ services:
     working_dir: /ws
     volumes:
       - ${YOLO_WS:-${HOME}/yolo_ws}/src:/ws/src
+      - yolo_build:/ws/build
+      - yolo_install:/ws/install
       - ./dev/bashrc:/root/.bashrc:ro
     # $$ROS_DISTRO — compose 가 $ 한 개로 축약해 컨테이너 안 bash 가 런타임에 확장(이미지 ENV=jazzy).
     command: ["bash", "-c", "set +u; source /opt/ros/$$ROS_DISTRO/setup.bash; colcon build --symlink-install || true; sleep infinity"]
@@ -38,6 +40,17 @@ services:
     working_dir: /ws
     volumes:
       - ${VOICE_WS:-${HOME}/voice_ws}/src:/ws/src
+      - voice_build:/ws/build
+      - voice_install:/ws/install
       - ./dev/bashrc:/root/.bashrc:ro
     command: ["bash", "-c", "set +u; source /opt/ros/$$ROS_DISTRO/setup.bash; colcon build --symlink-install || true; sleep infinity"]
     restart: "no"
+
+# colcon 빌드 산출물 영속화 — /ws/build·/ws/install 을 named volume 에 둬 컨테이너 재생성(down→up)
+# 후에도 보존(증분 빌드, 풀 빌드 회피). 소스(/ws/src)는 host bind-mount, 빌드 산출물만 볼륨.
+# 초기화는 'docker compose ... down -v'(볼륨째 삭제 → 다음 up 은 풀 빌드).
+volumes:
+  yolo_build:
+  yolo_install:
+  voice_build:
+  voice_install:
