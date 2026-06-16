@@ -140,7 +140,11 @@ class RobotController(Node):
         self.get_logger().info("say 'Hello Rokey' and speak what you want to pick up")
         get_keyword_future = self.get_keyword_client.call_async(self.get_keyword_request)
         rclpy.spin_until_future_complete(self, get_keyword_future)
-        if get_keyword_future.result().success:
+        # Ctrl+C(shutdown) 로 대기가 끊기면 future 가 미완료라 result() 가 None 이다.
+        # 그대로 .success 에 접근하면 죽으므로, 종료 요청이면 조용히 빠진다(main 루프가 정리).
+        if not rclpy.ok():
+            return
+        if get_keyword_future.result() is not None and get_keyword_future.result().success:
             get_keyword_result = get_keyword_future.result()
 
             # message 형식: "도구1 도구2 ... / 목적지1 목적지2 ...". 도구[i] 를 목적지[i] 에 놓는다.
@@ -176,12 +180,15 @@ class RobotController(Node):
             return
 
     def get_target_pos(self, target):
+        target_pos = None  # 미검출/종료 시에도 정의되도록 — caller 가 None 으로 받아 처리
         self.get_position_request.target = target
         self.get_logger().info("call depth position service with object_detection node")
         get_position_future = self.get_position_client.call_async(
             self.get_position_request
         )
         rclpy.spin_until_future_complete(self, get_position_future)
+        if not rclpy.ok():
+            return None
 
         if get_position_future.result():
             result = get_position_future.result().depth_position.tolist()
@@ -214,7 +221,7 @@ class RobotController(Node):
         mwait()
         gripper.close_gripper()
 
-        while gripper.get_status()[0]:
+        while rclpy.ok() and gripper.get_status()[0]:
             time.sleep(0.5)
         mwait()
 
@@ -233,16 +240,23 @@ class RobotController(Node):
             self.get_logger().warn(f"Unknown place target '{dest}', releasing at lift position")
 
         gripper.open_gripper()
-        while gripper.get_status()[0]:
+        while rclpy.ok() and gripper.get_status()[0]:
             time.sleep(0.5)
 
 
 def main(args=None):
     node = RobotController()
-    while rclpy.ok():
-        node.robot_control()
-    rclpy.shutdown()
-    node.destroy_node()
+    try:
+        while rclpy.ok():
+            node.robot_control()
+    except KeyboardInterrupt:
+        # rclpy 가 SIGINT 를 가로채 보통 KeyboardInterrupt 를 올리지 않지만(대신 rclpy.ok()
+        # 가 False 로 떨어져 위 루프와 각 spin/gripper 루프가 빠진다), 올라오는 경로도 있어
+        # 방어적으로 받아 깔끔히 내린다.
+        pass
+    finally:
+        node.destroy_node()
+        rclpy.shutdown()
 
 
 if __name__ == "__main__":
