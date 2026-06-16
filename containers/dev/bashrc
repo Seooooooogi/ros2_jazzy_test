@@ -15,3 +15,7 @@ source "/opt/ros/${ROS_DISTRO}/setup.bash"
 for _sp in /opt/venv/lib/python*/site-packages; do
     [ -d "${_sp}" ] && export PYTHONPATH="${_sp}${PYTHONPATH:+:${PYTHONPATH}}" && break
 done
+
+# exec 진입 시 워크스페이스(/ws — host ~/*_ws/src 가 /ws/src 로 mount)로 이동.
+# colcon build --symlink-install / ros2 run 을 추가 cd 없이 바로 실행할 수 있게 한다.
+cd /ws 2>/dev/null || true
