@@ -74,6 +74,14 @@ RUN pip install --no-cache-dir --upgrade pip \
  && pip install --no-cache-dir --force-reinstall "numpy<2" \
  && python3 -c "import numpy, langchain, langchain_openai, openai, pyaudio, sounddevice, scipy, openwakeword, ai_edge_litert, tflite_runtime.interpreter, dotenv; assert numpy.__version__.startswith('1.'), numpy.__version__"
 
+# rmw-cyclonedds-cpp: dev override(docker-compose.dev.yml)는 이 builder 이미지에서 직접 노드를 기동하는데
+# compose 가 RMW=rmw_cyclonedds_cpp 를 강제한다. ros-base 기본은 fastrtps 라, builder 에 cyclonedds 구현을
+# 명시 설치하지 않으면 dev 노드가 RMW 로드에 실패한다(runtime 스테이지엔 있으나 dev 는 builder 를 그대로 쓴다).
+# 무거운 pip/torch 레이어 뒤 별도 레이어로 둬 추가 시에도 그 캐시를 보존한다.
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends ros-${ROS_DISTRO}-rmw-cyclonedds-cpp \
+ && rm -rf /var/lib/apt/lists/*
+
 ############################ runtime ############################
 FROM ros:${ROS_DISTRO}-ros-base-noble AS runtime
 SHELL ["/bin/bash", "-eu", "-o", "pipefail", "-c"]
