@@ -8,7 +8,8 @@
 # resources/dsr-project-install.sh — Doosan DSR (doosan-robot2) clone + dependencies + emulator (a02 step 1).
 #
 # jazzy migration + idempotency of backup/dsr-project-install{,_25}.sh.
-#   - clone branch -b ${DSR_BRANCH}(=jazzy). Skip if already cloned (reproducibility — no git pull).
+#   - clone the ROKEY-SPARK fork's default branch (main = pinned jazzy snapshot). Skip if already
+#     cloned (reproducibility — no git pull). The fork pins the version so upstream pushes don't drift it.
 #   - workspace = ${DSR_WORKSPACE}(=~/cobot_ws). Mirror the repo's grouped source (cobot_ws/src/cobot1_ws +
 #     cobot2_ws) into src/ so the unified workspace and the container dev bind-mounts (yolo_ws/voice_ws
 #     subdirs) resolve. The CUDA/voice container packages (object_detection / voice_processing) are present
@@ -29,7 +30,10 @@ config_assert_set
 
 REPO_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"          # repo root (parent of resources/)
 WS_SRC="${DSR_WORKSPACE}/src"
-DSR_REPO_URL="https://github.com/doosan-robotics/doosan-robot2.git"
+# Pinned source: the ROKEY-SPARK fork instead of upstream doosan-robotics/doosan-robot2. The fork's
+# default branch (main) is the verified jazzy snapshot (upstream jazzy commit 816ecb5d) — pins the
+# version so the install no longer drifts on upstream pushes and survives upstream force-push/deletion.
+DSR_REPO_URL="https://github.com/ROKEY-SPARK/doosan-robot2_jazzy.git"
 
 # The host colcon ws mirrors the repo's grouped source: cobot1_ws (rokey_cobot1) + cobot2_ws
 # (robot_control, cobot2_bringup, rokey_cobot2, yolo_ws/{od_msg,object_detection}, voice_ws/voice_processing,
@@ -45,7 +49,9 @@ mkdir -p "${WS_SRC}"
 if [[ -d "${WS_SRC}/doosan-robot2/.git" ]]; then
     echo "dsr: doosan-robot2 already cloned (skip)"
 else
-    git clone -b "${DSR_BRANCH}" "${DSR_REPO_URL}" "${WS_SRC}/doosan-robot2"
+    # Clone the fork's default branch (main = pinned jazzy snapshot). The fork has no 'jazzy' branch,
+    # so do NOT pass -b "${DSR_BRANCH}" (it would fail with "Remote branch not found").
+    git clone "${DSR_REPO_URL}" "${WS_SRC}/doosan-robot2"
 fi
 
 # 2b) doosan-robot2 (jazzy) source-compat patch — fixes two name mismatches in DSR_ROBOT2.py (this distro clone).
