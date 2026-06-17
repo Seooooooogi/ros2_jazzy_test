@@ -158,7 +158,7 @@ export ROS_DOMAIN_ID="${ROS_DOMAIN_ID:-42}"
 # **The authoritative source is orchestrate.sh** (STAGE_*_COUNT + install_steps_total) — install.sh computes the
 # denominator from orchestrate.sh, and this TOTAL_STEPS is used as a fallback only when orchestrate.sh is not sourced.
 # So when adding a step, update only the STAGE constants in orchestrate.sh, and just keep this value matched to their sum.
-: "${TOTAL_STEPS:=16}"
+: "${TOTAL_STEPS:=17}"
 
 # --- Self-check ----------------------------------------------------------
 # Called by child scripts right after entry to immediately catch missing required variables.

@@ -32,9 +32,16 @@ class TestNode(Node):
         self.img_node = ImgNode()
         # camera_info_callback 이 한 번 실행돼 intrinsics 가 채워질 때까지 spin 한다.
         # 단일 spin_once + sleep 은 어떤 콜백이 처리될지 보장하지 못해(보통 color/depth 가 먼저)
-        # intrinsics 가 None 으로 남는다. timeout_sec 으로 매 spin 이 블로킹 없이 돌아 재시도한다.
+        # intrinsics 가 None 으로 남는다. timeout_sec 으로 매 spin 이 블로킹 없이 돌아 재시도하되,
+        # camera_info 토픽이 아예 안 들어오면(카메라 미실행/토픽명 불일치) 무한 대기하지 않도록 deadline 을 둔다.
         self.intrinsics = self.img_node.get_camera_intrinsic()
+        deadline = time.monotonic() + 10.0
         while self.intrinsics is None:
+            if time.monotonic() > deadline:
+                raise RuntimeError(
+                    "camera_info 를 10초 내 수신하지 못했습니다 — RealSense 노드가 실행 중이고 "
+                    "/camera/camera/color/camera_info 토픽이 발행되는지 확인하세요."
+                )
             rclpy.spin_once(self.img_node, timeout_sec=0.1)
             self.intrinsics = self.img_node.get_camera_intrinsic()
         self.gripper2cam = np.load("T_gripper2camera.npy")
