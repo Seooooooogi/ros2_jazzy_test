@@ -9,7 +9,7 @@
 #
 # Runs prerequisites (kernel/NVIDIA/Docker/ROS2) + robot/camera + VS Code + voice check + DDS tuning +
 # NVIDIA Container Toolkit + container-image fetch + static network IP as a single continuous
-# sequence ([n/16]). Step definitions are run_stage_a0N in resources/orchestrate.sh.
+# sequence ([n/17]). Step definitions are run_stage_a0N in resources/orchestrate.sh.
 # Re-run safe: completed steps are auto-skipped per the state file, continuing from where it stopped.
 # To force a specific task to re-run, use --reset (full reset) or run resources/<step>.sh directly.
 #
@@ -46,7 +46,7 @@ STEPS_TOTAL="$(install_steps_total)"
 
 usage() {
     cat <<'EOF'
-install.sh — single entry point for host setup (a01~a04 + DDS tuning + NVIDIA Container Toolkit + container images + static network IP, 16 steps total)
+install.sh — single entry point for host setup (a01~a04 + DDS tuning + NVIDIA Container Toolkit + container images + static network IP + corecode relocation, 17 steps total)
 
   bash install.sh             run the full sequence (skip already-completed steps)
   bash install.sh --unattended  unattended install — collect OPENAI_API_KEY + one confirm at start, then
@@ -241,8 +241,14 @@ run_step 15 container_fetch bash "${SCRIPT_DIR}/containers/fetch-images.sh"
 #  is created earlier by the DSR step's dsr-project-install.sh, so no separate dev-workspace step is needed.)
 run_step 16 network_static_ip bash "${RESOURCE_DIR}/network-static-ip.sh"
 
+# --- step 17: relocate the corecode tutorials into the user's home (~/corecode) ---
+# After all installs, move the repo's corecode/ tutorials to ${HOME}/corecode so they are usable
+# independently of the installer checkout location. Idempotent — skips if already relocated or the source
+# is gone (and re-run safe via the state file). Runs as the regular user → no sudo needed.
+run_step 17 corecode_relocate bash "${RESOURCE_DIR}/corecode-relocate.sh"
+
 # Clean up the unattended-resume autostart (no-op if already removed on resume entry — idempotent).
 unattended_remove_resume 2>/dev/null || true
 
 state_dump
-echo "install: all 16 steps complete — host setup + container images + static network IP done."
+echo "install: all 17 steps complete — host setup + container images + static network IP + corecode relocation done."
