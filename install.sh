@@ -66,6 +66,19 @@ Completed steps are auto-skipped, so re-running the same command skips the finis
 EOF
 }
 
+# Project copyright banner — printed to the console at the start of every actual install run, both interactive
+# and unattended (including the auto-resumed unattended terminal after the step-6 reboot), so the attribution
+# is always visible. Goes to stdout unconditionally; it is not a per-step output, so the log-routing/quiet
+# console behavior does not apply to it.
+print_copyright() {
+    cat <<'EOF'
+============================================================
+ ros2_jazzy_test — ROS2 Jazzy workstation installer
+ Copyright (c) 2026 ROKEY bootcamp. All rights reserved.
+============================================================
+EOF
+}
+
 # --verbose/-v is orthogonal to the subcommands, so split it out first into VERBOSE and keep the rest.
 # run_step in orchestrate.sh reads VERBOSE in the same shell (export is for the child resource scripts).
 VERBOSE="${VERBOSE:-0}"
@@ -95,6 +108,10 @@ case "${1:-}" in
     "") : ;;
     *) echo "install: unknown option '$1'" >&2; usage; exit 2 ;;
 esac
+
+# Show the copyright banner for an actual install run (after the utility subcommands above have exited).
+# Unconditional → it appears in interactive runs and unattended runs alike.
+print_copyright
 
 # --- preflight: prevent the accident of running halfway in a wrong environment then failing ---
 if [[ ! -f /etc/os-release ]]; then
