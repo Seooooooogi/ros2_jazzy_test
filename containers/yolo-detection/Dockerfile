@@ -64,8 +64,8 @@ RUN PYVER="$(/opt/venv/bin/python3 -c 'import sys; print(f"{sys.version_info.maj
 
 # --- 소스 COPY: 여기부터 캐시가 무효화돼도 위 torch/pip 레이어는 보존된다. ---
 # od_msg 를 먼저 둔다 (object_detection 이 from od_msg.srv import — colcon 이 위상정렬).
-COPY cobot2_ws/od_msg           /ws/src/od_msg
-COPY cobot2_ws/object_detection /ws/src/object_detection
+COPY cobot_ws/src/cobot2_ws/yolo_ws/od_msg           /ws/src/od_msg
+COPY cobot_ws/src/cobot2_ws/yolo_ws/object_detection /ws/src/object_detection
 
 WORKDIR /ws
 # object_detection 의 선언적 의존(rclpy/sensor_msgs/cv_bridge/ament_index_python/od_msg)을
@@ -81,6 +81,14 @@ RUN rosdep init 2>/dev/null || true \
 RUN set +u \
  && source "/opt/ros/${ROS_DISTRO}/setup.bash" \
  && colcon build --merge-install
+
+# rmw-cyclonedds-cpp: dev override(docker-compose.dev.yml)는 이 builder 이미지에서 직접 노드를 기동하는데
+# compose 가 RMW=rmw_cyclonedds_cpp 를 강제한다. ros-base 기본은 fastrtps 라, builder 에 cyclonedds 구현을
+# 명시 설치하지 않으면 dev 노드가 RMW 로드에 실패한다(runtime 스테이지엔 있으나 dev 는 builder 를 그대로 쓴다).
+# 무거운 torch/pip 레이어 뒤 별도 레이어로 둬 추가 시에도 그 캐시를 보존한다.
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends ros-${ROS_DISTRO}-rmw-cyclonedds-cpp \
+ && rm -rf /var/lib/apt/lists/*
 
 ############################ runtime ############################
 FROM ros:${ROS_DISTRO}-ros-base-noble AS runtime

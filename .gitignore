@@ -14,6 +14,8 @@
 *.log
 install.log
 *.jsonl
+# install.sh 상세 로그 — 레포 루트에 쌓이는 머신별 append-only 로그(재생성 가능). 루트만 anchor.
+/install_log
 
 # Downloaded artifacts / intermediate
 *.deb
@@ -43,9 +45,8 @@ venv/
 Thumbs.db
 
 # 설치 스크립트와 무관한 작업 데이터 — 추적/배포 대상 아님.
-# claude-migration: 세션 transcript(.jsonl) 등 민감 데이터 포함. corecode: 별도 튜토리얼.
+# claude-migration: 세션 transcript(.jsonl) 등 민감 데이터 포함.
 claude-migration/
-corecode/
 
 # 이 브랜치(main)는 설치 스크립트 + 컨테이너 빌드 정의를 담는 배포 소스다.
 # 개발 도구 / 내부 문서 / AI 작업 지침은 개발 브랜치에서만 추적한다.
@@ -55,12 +56,25 @@ tasks/
 docs/
 CLAUDE.md
 
-# jog 편의 복사본 — cobot2_ws 안의 원본과 byte-identical. 실기 jog 를 최상위 경로로
-# 실행하려고 둔 것이라 디스크엔 남기되 추적만 제외(중복 drift 방지). 원본은 그대로 추적.
+# corecode: 개발/연구용 튜토리얼 — 소스만 추적. 아래 둘만 제외(__pycache__·*.pyc 는 위 Python 규칙으로 이미 제외).
+# tflite: cobot2_ws/voice_processing/resource 및 containers oww_models 와 중복. json: 대용량 재생성 가능 임베딩.
+corecode/VoiceProcessing/hello_rokey_8332_32.tflite
+corecode/VoiceProcessing/class_embeddings.json
+
+# jog 편의 복사본 — cobot_ws/src/cobot2_ws/rokey_cobot2/rokey_cobot2/basic/jog_complete.py 와 byte-identical.
+# 실기 jog 검증을 최상위 경로로 실행하려고 둔 것이라 디스크엔 남기되 추적만 제외(중복 drift 방지).
+# 최상위만 anchor — cobot_ws 안의 원본은 그대로 추적.
 /jog_complete.py
 
 # 코드 인덱스 — 소스에서 재생성 가능한 산출물이라 추적 제외.
 .codegraph/
+
+# colcon 빌드 산출물 — repo 안 cobot_ws/src 에서 빌드를 돌리면 생기는 재생성 가능 디렉토리.
+# (런타임 빌드는 ~/cobot_ws 에서 돌지만, 레이아웃 검증차 repo 안에서 colcon 을 돌리는 경우 대비.)
+/log/
+cobot_ws/build/
+cobot_ws/install/
+cobot_ws/log/
 
 # 브레인스토밍/스펙 설계 산출물 (로컬 작업물 — 배포 대상 아님)
 docs/superpowers/
