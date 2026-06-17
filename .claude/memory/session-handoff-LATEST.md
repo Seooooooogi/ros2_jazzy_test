@@ -6,10 +6,16 @@
 
 ## 다음 세션 — 무엇보다 먼저
 
-**(2026-06-16 실측 세션 반영)** — 이전 ⚠ "미커밋 working tree(후속7)" **해소**: origin/feat 에 `100eb03`(셸 영어화·저작권)·`153a95e`(핸드오프)·`0bd6b79`/`34b1492`(dev_ws·dev 모드) 모두 커밋됨. 이 [실측] 머신은 origin 최신과 동기(0/0).
+**(2026-06-17 [문서] 세션 반영)** — `feat/application-containers` 가 **워크스페이스 통합**(`4c36cc5`) + **DSR clone fork 핀**(`d9d8df0`)으로 진행, origin 동기(0/0, HEAD `d9d8df0`). **ROS2 워크스페이스 레이아웃이 크게 바뀜** — 아래 ⚠ 필독. 직전 [실측] 머신은 origin 과 동기였으나 이 변경으로 **재pull + 재빌드 필요**.
 
-**즉시(다음 세션) — 내일(2026-06-17) 실물 로봇 검증 예정:**
-- **[실측] robot_control Ctrl+C 셧다운 패치 실기 검증** — `dd9c660` 코드 push 됨. 로봇 연결 후 `~/cobot2_ws` 재빌드(`colcon build --packages-select robot_control`) → Ctrl+C 깔끔 종료 실측 → OK 면 `scripts/merge-to-main.sh feat/application-containers` 로 main 승격.
+⚠ **[실측/fleet] 워크스페이스 재배치 (2026-06-17, ADR-024)** — 런타임 ws `~/cobot2_ws` → **`~/cobot_ws`** (통합 `src/` grouped 레이아웃: `cobot1_ws`+`cobot2_ws`). 다음 행동:
+- `git pull` 후 `bash resources/dsr-project-install.sh` 재실행 → repo grouped src 미러 + doosan-robot2 clone 으로 `~/cobot_ws` 생성, 이어 `colcon build`(host 는 `object_detection`/`voice_processing` `--packages-skip`, `pick_and_place_*` COLCON_IGNORE).
+- 기존 `~/cobot2_ws`·`~/yolo_ws`·`~/voice_ws` 는 **고아로 남음**(installer 자동삭제 안 함 — 파괴적). 수동 `rm -rf ~/cobot2_ws ~/yolo_ws ~/voice_ws` 권장.
+- 설치 step **17→16** (dev-ws 생성 step 폐기 — 통합 ws 가 dev bind-mount 서브디렉토리 `cobot2_ws/{yolo_ws,voice_ws}` 를 포함, network 고정IP 가 step16).
+- DSR clone 소스 = **`ROKEY-SPARK/doosan-robot2_jazzy`** fork default 브랜치 main(= 검증 jazzy 스냅샷 816ecb5d). upstream drift/force-push/삭제 위험 차단.
+
+**즉시(다음 세션) — 실물 로봇 검증 예정(2026-06-17~, 미완):**
+- **[실측] robot_control Ctrl+C 셧다운 패치 실기 검증** — `dd9c660` 코드 push 됨. 로봇 연결 + `git pull` 후 **통합 `~/cobot_ws` 재빌드**(레이아웃 바뀜 — `bash resources/dsr-project-install.sh` 로 미러 후 `colcon build`; 빠른 반복은 `--packages-select robot_control`) → Ctrl+C 깔끔 종료 실측 → OK 면 `scripts/merge-to-main.sh feat/application-containers` 로 main 승격.
 - **[실측] Calibration RG gripper pymodbus 3.x 하드웨어 검증** — open/close/move register write 의미는 실 RG 로만 검증(ADR-014, 검증 전 실로봇 운용 금지).
 - **[실측] yolo 실물 도구 검출** — 컨테이너 dev 모드·viz·`/get_3d_position` 파이프라인은 **2026-06-16 검증 완료**(아래 Last updated). 남은 건 학습 도구(hammer/screwdriver/wrench)를 실제 비춰 박스/좌표 확인(이번엔 도구 부재로 미검출 `[0,0,0]` 까지만).
 - **[기설치 머신] dds-tuning.sh 재실행** — stale cyclonedds.xml(`lo` 없는 옛 렌더)이 로봇망 NIC down 시 노드 전멸. `bash resources/dds-tuning.sh`(이 머신엔 이번 적용). 클린설치 머신은 자동이라 무관.
@@ -20,9 +26,14 @@
 
 **연계(후속3 리팩토링)**: `refactor/installer-shell`(셸 리팩토링)은 `feat/application-containers` 에 머지 완료(`68f452d`). fleet 클린설치를 그 브랜치로 돌리면 리팩토링의 실 머신 검증(키 다운로드·`apt update` 인증·reboot 경계)이 함께 끝난다. 리팩토링은 behavior-preserving 정적 검증 통과 — Last updated 후속3 참조.
 
-**신규(2026-06-15 후속5) [실측] 검증 대기**: ① Calibration `onrobot.py` 가 pymodbus 3.x 로 바뀜 → **RG gripper open/close/move 하드웨어 재검증 전 실로봇 운용 금지**(register write 의미는 import smoke 로 검증 불가, ADR-014). ② 컨테이너 dev 모드 — 이제 install.sh step16(`container_dev_ws`)이 `~/yolo_ws`·`~/voice_ws` 를 클린설치 시 자동 생성(후속6, 기설치 머신은 `bash containers/dev-ws-setup.sh`). **[실측] 검증: voice PASS(2026-06-16) — 단 그 과정에 dev-mode 결함 2건(dev `colcon build` `--merge-install` 누락 → baked 코드 silent fallback / builder 이미지 cyclonedds RMW 누락 → 노드 기동 불가) 발견·수정·push(`1f59df9`/`be74716`). yolo 도 2026-06-16 재빌드·검증 완료(RealSense D435i 연결·`/get_3d_position` round-trip·viz 화면).**
+**신규(2026-06-15 후속5) [실측] 검증 대기**: ① Calibration `onrobot.py` 가 pymodbus 3.x 로 바뀜 → **RG gripper open/close/move 하드웨어 재검증 전 실로봇 운용 금지**(register write 의미는 import smoke 로 검증 불가, ADR-014). ② 컨테이너 dev 모드 — 이제 install.sh step16(`container_dev_ws`)이 `~/yolo_ws`·`~/voice_ws` 를 클린설치 시 자동 생성(후속6, 기설치 머신은 `bash containers/dev-ws-setup.sh`). **[실측] 검증: voice PASS(2026-06-16) — 단 그 과정에 dev-mode 결함 2건(dev `colcon build` `--merge-install` 누락 → baked 코드 silent fallback / builder 이미지 cyclonedds RMW 누락 → 노드 기동 불가) 발견·수정·push(`1f59df9`/`be74716`). yolo 도 2026-06-16 재빌드·검증 완료(RealSense D435i 연결·`/get_3d_position` round-trip·viz 화면).** **(2026-06-17 경로 변경: `~/yolo_ws`·`~/voice_ws` 별도 ws + `dev-ws-setup.sh` + install.sh dev-ws step **폐기** — dev bind-mount 는 이제 통합 `~/cobot_ws/src/cobot2_ws/{yolo_ws,voice_ws}` 서브디렉토리. 위 dev-mode 검증 결과 자체는 유효, 경로만 바뀜.)**
 
 ## Last updated
+2026-06-17 ([문서]) — **[문서]** 원격 동기화: 미커밋 working tree 정리 + DSR fork 핀. 전부 `feat/application-containers` push 완료(HEAD `d9d8df0`, origin 0/0):
+① **워크스페이스 통합**(`4c36cc5`, ADR-024) — 흩어진 ROS2 소스를 단일 `cobot_ws/src` colcon 레이아웃으로 재배치. `src/` 를 grouping 디렉토리로: `cobot1_ws`(rokey_cobot1 — 학습용 DoosanBootcamInt1 **신규 편입**) + `cobot2_ws`(robot_control / cobot2_bringup / rokey_cobot2 / yolo_ws{od_msg,object_detection} / voice_ws{voice_processing} / pick_and_place_*). 이름충돌로 기존 `rokey`→`rokey_cobot2`. 런타임 ws `~/cobot2_ws`→**`~/cobot_ws`**. 컨테이너 dev bind-mount = 통합 ws 서브디렉토리(`cobot2_ws/{yolo_ws,voice_ws}`)로 변경 — 별도 `~/yolo_ws`·`~/voice_ws` + `dev-ws-setup.sh` + install.sh dev-ws step **폐기**(전체 **17→16** step, network 고정IP=step16). host build `--packages-skip object_detection voice_processing`(컨테이너 전용 — torch/openwakeword 이미지에만), `pick_and_place_*` COLCON_IGNORE. Dockerfile COPY 경로·colcon log gitignore 동반. 124 files, +1292/−136.
+② **DSR clone 소스 fork 핀**(`d9d8df0`) — `doosan-robotics/doosan-robot2 -b jazzy`→**`ROKEY-SPARK/doosan-robot2_jazzy`** fork default 브랜치 main(= 검증 jazzy 스냅샷 816ecb5d). fork 엔 jazzy 브랜치 없어 `git clone -b` 제거. upstream push drift/force-push/삭제 위험 차단. (구 `dsr-rokey-fork` 워크트리·브랜치 = 재구조화 tip 위로 rebase→conflict 2건 해소→ff 머지 후 정리·삭제.)
+**검증**: secret 0·AI attribution 0·`shellcheck -x` pass(install.sh+resources)·staged 빌드산출물 0·rebased diff 는 fork 핀만(재구조화 끌려옴 없음). **정적만** — ⚠ `~/cobot_ws` 실 재빌드·컨테이너 dev mount·fleet 클린설치는 **미검증**(실 머신 필요 — 상단 ⚠ 블록 참조).
+
 2026-06-16 (실측) — **[실측]** 원격 동기화 + 컨테이너 dev(bind-mount) 모드 voice 검증 + clean-머신 결함 2건 수정. 전부 `feat/application-containers` push 완료(HEAD `be74716`):
 ① **원격 동기화** — 이 머신을 origin 최신으로: `main` ff(`164dea1`). `feat/application-containers` 는 로컬이 갈라져(셧다운 패치+옛 핸드오프 2커밋 ahead, 원격 16 ahead) origin 채택 reset 후 셧다운 패치만 재적용. **robot_control Ctrl+C 셧다운 패치 `dd9c660` 커밋·push 완료**(원본 byte-identical 재적용). ⚠ **실기 Ctrl+C 종료 실측은 로봇 미연결로 미완** — 로봇 연결 세션에서 `colcon build --packages-select robot_control` 후 검증, main 승격은 그 뒤.
 ② **dev 모드 voice·yolo 검증 PASS** — bind-mount(`~/{voice,yolo}_ws/src`→`/ws/src`)로 두 컨테이너 모두 host 소스 live 실행(import 모듈 inode 가 host 와 동일), host↔container DDS, 노드 기동·서비스 등록 확인. **voice**: 마이크→웨이크워드 0.358→Whisper STT→GPT 추출 `해머`(target "pos1" 미추출은 음성 전사 어휘 디테일·결함 아님). **yolo**: RealSense D435i 연결→카메라 15Hz→`/get_3d_position {target:hammer}` round-trip(도구 부재로 `[0,0,0]`·`No detection`, 추론 파이프라인 실동작)→viz(camera→yolo-viz→host viewer cv2 창) 화면 표시까지 확인.
@@ -75,9 +86,9 @@
 
 ## Next Actions (priority order)
 
-1. **[실측] 전체 클린설치 검증 — 다른 노트북(fleet 머신)에서 진행** — 최신 origin `git clone` → `bash install.sh`. 새 머신엔 이미지가 없어 **step15 가 드라이브에서 실제 다운로드**(yolo 4.62GB 첫 실측 자연 발생 — `docker rmi` 불요). nvidia-container-toolkit 은 step14(reboot 이후)에서 자동 설치(SKIP_IF_NO_GPU=1 — GPU 없으면 정상 skip). a01(step1~6) NVIDIA+reboot destructive, step12 `.env` OPENAI_API_KEY interactive. **점검: 드라이브 파일 2개가 "링크 있는 사람 보기" 공유여야 다른 네트워크/무계정에서 무인 curl 가능**(이 머신 fetch 성공은 동일 계정/네트워크 영향 배제 못 함). **(2026-06-10 갱신)** 이제 **전체 17 step**(step 15 fetch, **step 16 dev 워크스페이스 생성**, **step 17 ethernet 고정 IP** `192.168.1.30/24`). `bash install.sh --unattended` 로 reboot·재개 무인 가능(GUI 세션, 복귀 후 sudo 비번 1회). **OPENAI_API_KEY 처리 버그 수정됨** — 쉘 env 에 키가 있든 `.env.example` 에 잘못 넣든 자동 처리 → 지난번 voice crash-loop 재발 안 함. yolo KeyError 도 미검출 처리(단 이미지 재빌드 전엔 옛 이미지 — 상단 배너 참조).
+1. **[실측] 전체 클린설치 검증 — 다른 노트북(fleet 머신)에서 진행** — 최신 origin `git clone` → `bash install.sh`. 새 머신엔 이미지가 없어 **step15 가 드라이브에서 실제 다운로드**(yolo 4.62GB 첫 실측 자연 발생 — `docker rmi` 불요). nvidia-container-toolkit 은 step14(reboot 이후)에서 자동 설치(SKIP_IF_NO_GPU=1 — GPU 없으면 정상 skip). a01(step1~6) NVIDIA+reboot destructive, step12 `.env` OPENAI_API_KEY interactive. **점검: 드라이브 파일 2개가 "링크 있는 사람 보기" 공유여야 다른 네트워크/무계정에서 무인 curl 가능**(이 머신 fetch 성공은 동일 계정/네트워크 영향 배제 못 함). **(2026-06-17 갱신)** 이제 **전체 16 step**(step 15 fetch, **step 16 ethernet 고정 IP** `192.168.1.30/24` — dev-ws 생성 step 폐기, 통합 `~/cobot_ws` 가 dev bind-mount 서브디렉토리 포함). DSR clone 은 `ROKEY-SPARK/doosan-robot2_jazzy` fork. `bash install.sh --unattended` 로 reboot·재개 무인 가능(GUI 세션, 복귀 후 sudo 비번 1회). **OPENAI_API_KEY 처리 버그 수정됨** — 쉘 env 에 키가 있든 `.env.example` 에 잘못 넣든 자동 처리 → 지난번 voice crash-loop 재발 안 함. yolo KeyError 도 미검출 처리(단 이미지 재빌드 전엔 옛 이미지 — 상단 배너 참조).
 
-2. **[실측/문서] cobot2_bringup 클린설치 자동 빌드 검증** — `dsr-project-install.sh` HOST_PKGS 에 등록됨(cp -a 복사 경로). 다른 노트북은 cp 경로 그대로 — clone → 빌드 시 `ros2 launch cobot2_bringup bringup_all.launch.py` resolve 확인. (이 머신은 검증용 symlink 라 무관.)
+2. **[실측/문서] cobot2_bringup 클린설치 자동 빌드 검증** — `dsr-project-install.sh` 가 이제 repo grouped src(`WS_GROUPS=(cobot1_ws cobot2_ws)`)를 통째로 `cp -a` 미러(HOST_PKGS 개별 복사 폐기, 2026-06-17). clone → 빌드 시 `ros2 launch cobot2_bringup bringup_all.launch.py` resolve 확인. host build 는 `object_detection`/`voice_processing` `--packages-skip`, `pick_and_place_*` COLCON_IGNORE 로 제외됨을 함께 확인.
 
 3. **[DONE 2026-06-11] Dockerfile 레이어 재정렬** — `containers/yolo-detection/Dockerfile` 의 torch pip 레이어를 소스 COPY 앞으로 이동 완료(`f874261`) + 재빌드·드라이브 tar/SHA256 갱신 동반 완료(`12c6fb1`). 잔여(소): voice Dockerfile 동일 안티패턴 점검 — voice 는 torch 미사용이라 재다운로드 비용이 작아 우선순위 낮음.
 
@@ -121,7 +132,7 @@
 ## Context Notes
 
 ### 이미지 드라이브 배포 (2026-06-09)
-- install.sh step15 = `containers/fetch-images.sh`: 공개 구글 드라이브 file ID 로 tar 다운로드 → SHA256 검증 → gz/zip 해제 분기 → `docker load`. 이미지 존재 시 skip(멱등). (step14=toolkit, step15=fetch, step16=dev WS 생성, step17=고정 IP.)
+- install.sh step15 = `containers/fetch-images.sh`: 공개 구글 드라이브 file ID 로 tar 다운로드 → SHA256 검증 → gz/zip 해제 분기 → `docker load`. 이미지 존재 시 skip(멱등). (step14=toolkit, step15=fetch, step16=고정 IP — dev-ws 생성 step 폐기 2026-06-17, 통합 ws 가 dev bind-mount 서브디렉토리 포함.)
 - **docker login 불요** — app 이미지는 registry pull 이 아니라 Drive tar→`docker load`. 외부 registry 에서 pull 하는 건 DSR emulator(`doosanrobot/dsr_emulator:3.0.1`, public Docker Hub anonymous) 뿐. (publish 경로 docker login+push 는 ADR-007 history 로 보존 — 현재 미사용.)
 - 대용량(>100MB) 다운로드: `drive.usercontent.google.com/download?id=..&export=download` 1차 응답이 virus-scan confirm form(HTML) → `confirm`/`uuid` 토큰 뽑아 2차 요청. 순수 bash curl(host pip 미설치 정책 — gdown 안 씀).
 - file ID/SHA256 = `resources/config.sh`(`YOLO/VOICE_IMAGE_GDRIVE_ID`, `_SHA256`). 공개 링크 ID 는 secret 아님. **해시는 레포(신뢰 출처)에, tar 만 드라이브** — 같은 출처면 동시 변조 시 검증 무의미.
@@ -166,6 +177,6 @@
 ---
 
 ## Current Focus
-- **[실측] Top priority**: **다른 노트북(fleet)에서 전체 클린설치 검증** — 새 머신이라 step15 가 드라이브에서 실제 다운로드(yolo 4.62GB 첫 전체 실측), toolkit step3 자동. 드라이브 공유("링크 있는 사람")는 [문서] 머신서 무인증 도달성+크기 검증 통과 — 타 네트워크/무계정 최종 확인은 fleet 머신.
+- **[실측] Top priority**: **다른 노트북(fleet)에서 전체 클린설치 검증** — 새 머신이라 step15 가 드라이브에서 실제 다운로드(yolo 4.62GB 첫 전체 실측), toolkit step3 자동. 드라이브 공유("링크 있는 사람")는 [문서] 머신서 무인증 도달성+크기 검증 통과 — 타 네트워크/무계정 최종 확인은 fleet 머신. **이제 16-step + 통합 `~/cobot_ws`(grouped src) + DSR fork clone 을 함께 검증**(2026-06-17 변경분 첫 실 머신 검증).
 - **[문서]**: pick_and_place_text spin 버그 + 모델/패키지 중복(object_detection vs pick_and_place_text) 정리 결정. (Dockerfile 레이어 재정렬은 2026-06-11 완료.)
 - **Friction**: 미push git 객체 + 브랜치 canonical + 모델/패키지 중복 정리 결정 대기.
