@@ -1,6 +1,6 @@
 from setuptools import find_packages, setup
 
-package_name = "rokey"
+package_name = "rokey_cobot2"
 
 setup(
     name=package_name,
@@ -18,8 +18,8 @@ setup(
     license="Apache 2.0 License",
     entry_points={
         "console_scripts": [
-            "get_current_pos=rokey.basic.get_current_pos:main",
-            "jog = rokey.basic.jog_complete:main"
+            "get_current_pos=rokey_cobot2.basic.get_current_pos:main",
+            "jog = rokey_cobot2.basic.jog_complete:main"
         ],
     },
 )

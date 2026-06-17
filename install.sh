@@ -9,7 +9,7 @@
 #
 # Runs prerequisites (kernel/NVIDIA/Docker/ROS2) + robot/camera + VS Code + voice check + DDS tuning +
 # NVIDIA Container Toolkit + container-image fetch + static network IP as a single continuous
-# sequence ([n/17]). Step definitions are run_stage_a0N in resources/orchestrate.sh.
+# sequence ([n/16]). Step definitions are run_stage_a0N in resources/orchestrate.sh.
 # Re-run safe: completed steps are auto-skipped per the state file, continuing from where it stopped.
 # To force a specific task to re-run, use --reset (full reset) or run resources/<step>.sh directly.
 #
@@ -46,7 +46,7 @@ STEPS_TOTAL="$(install_steps_total)"
 
 usage() {
     cat <<'EOF'
-install.sh — single entry point for host setup (a01~a04 + DDS tuning + NVIDIA Container Toolkit + container images + dev workspace + static network IP, 17 steps total)
+install.sh — single entry point for host setup (a01~a04 + DDS tuning + NVIDIA Container Toolkit + container images + static network IP, 16 steps total)
 
   bash install.sh             run the full sequence (skip already-completed steps)
   bash install.sh --unattended  unattended install — collect OPENAI_API_KEY + one confirm at start, then
@@ -208,20 +208,15 @@ run_step 14 nvidia_container_toolkit \
 # other machines reproduce it via this step. The file ID/SHA256 are pinned in resources/config.sh.
 run_step 15 container_fetch bash "${SCRIPT_DIR}/containers/fetch-images.sh"
 
-# --- step 16: create the container dev workspaces (~/yolo_ws, ~/voice_ws) ---
-# Copy-create the host workspaces that docker-compose.dev.yml (code-edit live-mount debugging) will mount, from the repo
-# cobot2_ws (idempotent — already-present packages are skipped). So on any machine the container
-# node code can be edited/debugged directly out of the box. No host pip install (source copy only) —
-# unrelated to production containers (baked images), and the dev override (-f docker-compose.dev.yml) is still opt-in.
-run_step 16 container_dev_ws bash "${SCRIPT_DIR}/containers/dev-ws-setup.sh"
-
-# --- step 17: static ethernet IP (robot LAN: .1 gripper / .100 robot / .30 host) ---
+# --- step 16: static ethernet IP (robot LAN: .1 gripper / .100 robot / .30 host) ---
 # After all installs, set the wired NIC to the robot-LAN static IP (nmcli). No gateway/DNS → wifi
 # internet stays. Idempotent. No confirm (reversible; the unattended mode covers it with the single consent at start).
-run_step 17 network_static_ip bash "${RESOURCE_DIR}/network-static-ip.sh"
+# (The unified host workspace — including the container dev bind-mount subdirs (cobot2_ws/yolo_ws, voice_ws) —
+#  is created earlier by the DSR step's dsr-project-install.sh, so no separate dev-workspace step is needed.)
+run_step 16 network_static_ip bash "${RESOURCE_DIR}/network-static-ip.sh"
 
 # Clean up the unattended-resume autostart (no-op if already removed on resume entry — idempotent).
 unattended_remove_resume 2>/dev/null || true
 
 state_dump
-echo "install: all 17 steps complete — host setup + container images + dev workspace + static network IP done."
+echo "install: all 16 steps complete — host setup + container images + static network IP done."

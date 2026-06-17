@@ -17,7 +17,7 @@ robot_control(실제 pick 모션 + 무한 루프)은 이 launch 에 포함하지
   - 셸에 다음 3개가 source 돼 있어야 한다(overlay 가 dsr_bringup2/robot_control/DSR_ROBOT2 를 제공):
       set -a; source <repo>/resources/config.sh; set +a   # ROS_DISTRO/ROS_DOMAIN_ID/RMW/CYCLONEDDS_*
       source /opt/ros/jazzy/setup.bash                      # underlay
-      source ~/cobot2_ws/install/setup.bash                 # overlay (colcon 빌드 산출물)
+      source ~/cobot_ws/install/setup.bash                  # overlay (colcon 빌드 산출물)
   - containers:=true 인 경우:
       * 이미지가 이미 빌드/pull 돼 있어야 한다(없으면 compose up 실패 → containers:=false 로).
       * <repo>/.env 존재(voice 의 OPENAI_API_KEY 런타임 주입; env_file 누락 시 compose 에러).

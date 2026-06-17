@@ -42,14 +42,17 @@ export ROS2_JAZZY_TEST_REPO
 # --- DSR (jazzy branch confirmed active 2026-05-26) ---------------
 : "${DSR_BRANCH:=${ROS_DISTRO}}"
 : "${DSR_EMULATOR_VERSION:=3.0.1}"
-: "${DSR_WORKSPACE:=${HOME}/cobot2_ws}"
+: "${DSR_WORKSPACE:=${HOME}/cobot_ws}"
 
 # --- Phase 4 dev workspace (container code live-mount, docker-compose.dev.yml only) ----
-# When the yolo/voice containers run in dev mode, this host path (${WS}/src) is bind-mounted to
-# the container /ws/src. containers/dev-ws-setup.sh copies the relevant cobot2_ws packages here.
+# When the yolo/voice containers run in dev mode, these host subdirectories of the unified
+# cobot_ws are bind-mounted to the container /ws/src. The subdirectory itself holds the packages
+# (yolo_ws = od_msg + object_detection, voice_ws = voice_processing) — no nested src/, so the mount
+# target is the directory itself. The packages are part of the host colcon workspace built by
+# dsr-project-install.sh, so there is no separate copy step.
 # Unrelated to production (install.sh / docker-compose.yml) — unused unless the dev override runs. Override allowed.
-: "${YOLO_WS:=${HOME}/yolo_ws}"
-: "${VOICE_WS:=${HOME}/voice_ws}"
+: "${YOLO_WS:=${DSR_WORKSPACE}/src/cobot2_ws/yolo_ws}"
+: "${VOICE_WS:=${DSR_WORKSPACE}/src/cobot2_ws/voice_ws}"
 
 # --- Kernel track (HWE) --------------------------------------------------
 # Explicitly install the HWE kernel meta so the kernel image + headers + modules-extra are always kept together.
@@ -153,7 +156,7 @@ export ROS_DOMAIN_ID="${ROS_DOMAIN_ID:-42}"
 # **The authoritative source is orchestrate.sh** (STAGE_*_COUNT + install_steps_total) — install.sh computes the
 # denominator from orchestrate.sh, and this TOTAL_STEPS is used as a fallback only when orchestrate.sh is not sourced.
 # So when adding a step, update only the STAGE constants in orchestrate.sh, and just keep this value matched to their sum.
-: "${TOTAL_STEPS:=17}"
+: "${TOTAL_STEPS:=16}"
 
 # --- Self-check ----------------------------------------------------------
 # Called by child scripts right after entry to immediately catch missing required variables.

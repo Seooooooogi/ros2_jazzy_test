@@ -1,15 +1,15 @@
 # Phase 4 컨테이너 dev override — 코드 수정 live-mount + 노드 수동 기동(디버깅용).
 #
 # base(docker-compose.yml)와 함께 머지해 쓴다:
-#   bash containers/dev-ws-setup.sh   # 최초 1회 — ~/yolo_ws·~/voice_ws 생성
+#   # 전제: install.sh(DSR 단계)가 통합 ws ~/cobot_ws 를 생성(cobot2_ws/{yolo_ws,voice_ws} 서브디렉토리 포함).
 #   docker compose -f containers/docker-compose.yml -f containers/docker-compose.dev.yml build
 #   docker compose -f containers/docker-compose.yml -f containers/docker-compose.dev.yml up -d yolo-detection
 #   docker exec -it yolo-detection bash   # 안에서: colcon build --symlink-install --merge-install && ros2 run object_detection object_detection
 #
 # 프로덕션(docker-compose.yml 단독) 대비 차이:
 #   - build.target=builder — colcon·빌드도구·/ws/src 가 있는 스테이지로 빌드(runtime 엔 colcon 없음).
-#   - host 소스(~/yolo_ws/src, ~/voice_ws/src)를 /ws/src 에 bind-mount → 수정 즉시 반영.
-#     소스는 containers/dev-ws-setup.sh 가 레포 cobot2_ws 에서 복사 생성한다.
+#   - 통합 ws 서브디렉토리(~/cobot_ws/src/cobot2_ws/{yolo_ws,voice_ws})를 /ws/src 에 bind-mount → 수정 즉시 반영.
+#     서브디렉토리 자체가 패키지를 담아(중첩 src 없음) mount 대상이 된다. 소스는 install.sh(DSR 단계)가 레포에서 복사 생성.
 #   - 노드 auto-run(CMD ros2 run) 끔 → 기동 시 1회 colcon build 후 sleep. exec 로 들어가 수동 실행.
 #   - colcon build 에 --merge-install 동반 필수: builder 이미지가 /ws/install 을 merged 레이아웃으로
 #     baked 하고, named volume(install)이 최초 생성 때 그 내용을 복사받는다. --symlink-install 단독은
@@ -28,7 +28,7 @@ services:
       target: builder
     working_dir: /ws
     volumes:
-      - ${YOLO_WS:-${HOME}/yolo_ws}/src:/ws/src
+      - ${YOLO_WS:-${HOME}/cobot_ws/src/cobot2_ws/yolo_ws}:/ws/src
       - yolo_build:/ws/build
       - yolo_install:/ws/install
       - ./dev/bashrc:/root/.bashrc:ro
@@ -42,7 +42,7 @@ services:
       target: builder
     working_dir: /ws
     volumes:
-      - ${VOICE_WS:-${HOME}/voice_ws}/src:/ws/src
+      - ${VOICE_WS:-${HOME}/cobot_ws/src/cobot2_ws/voice_ws}:/ws/src
       - voice_build:/ws/build
       - voice_install:/ws/install
       - ./dev/bashrc:/root/.bashrc:ro

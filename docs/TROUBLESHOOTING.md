@@ -56,9 +56,9 @@
 
 **복구 / 예방** (application-shell):
 - 핵심은 **colcon 빌드를 venv active 에서 수행**하는 것 — 그래야 entry_point console_script 의 shebang 이 venv python 으로 박혀 `ros2 run` 이 venv 를 본다(`resources/colcon-build.sh` 가 `HOST_VENV` 있으면 자동 activate).
-- 이미 빌드했는데 깨졌다면 venv active 상태에서 재빌드: `source ~/cobot2_ws/.venv/bin/activate && cd ~/cobot2_ws && colcon build`.
+- 이미 빌드했는데 깨졌다면 venv active 상태에서 재빌드: `source ~/cobot_ws/.venv/bin/activate && cd ~/cobot_ws && colcon build`.
 - 직접 `python3 ...` 실행/디버깅은 `source resources/activate.sh` (ROS + 워크스페이스 overlay + venv 함께 활성화).
-- 설치된 스크립트 shebang 확인: `head -1 ~/cobot2_ws/install/robot_control/lib/robot_control/robot_control` → venv python 경로여야 함.
+- 설치된 스크립트 shebang 확인: `head -1 ~/cobot_ws/install/robot_control/lib/robot_control/robot_control` → venv python 경로여야 함.
 
 ---
 

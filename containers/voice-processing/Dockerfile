@@ -26,7 +26,7 @@ RUN apt-get update \
       libsndfile1 \
  && rm -rf /var/lib/apt/lists/*
 
-COPY cobot2_ws/voice_processing /ws/src/voice_processing
+COPY cobot_ws/src/cobot2_ws/voice_ws/voice_processing /ws/src/voice_processing
 
 # openwakeword feature 모델(melspectrogram/embedding/VAD)을 레포에 vendoring 해 COPY.
 # 빌드 중 download_models 는 GitHub 릴리스에서 받는데, 504 등 transient 실패 시 에러 HTML 을

@@ -747,6 +747,8 @@
 
 **Date**: 2026-06-15
 
+**Status**: **Superseded by ADR-024 (2026-06-16)** — 워크스페이스가 단일 `~/cobot_ws` 로 통합되며 별도 `~/yolo_ws`·`~/voice_ws` 와 `dev-ws-setup.sh` 는 폐기됐다. dev override 는 이제 통합 ws 의 `cobot_ws/src/cobot2_ws/{yolo_ws,voice_ws}` 서브디렉토리를 bind-mount 한다. 아래 bind-mount + 수동 기동 디버깅 워크플로 자체는 유효하고, 워크스페이스 경로·생성 방식만 바뀌었다.
+
 **Context**:
 - yolo/voice 컨테이너는 소스를 이미지에 baked-in(COPY + colcon build) → 코드 한 줄 수정에도 이미지 재빌드 필요. 노드가 CMD 로 자동 기동돼 디버깅 시 docker logs 를 따로 봐야 함. 반복 개발에 불편.
 - 협업자가 컨테이너 노드 코드를 쉽게 수정·테스트할 경로가 필요.
@@ -765,3 +767,27 @@
 
 **Reopen 조건**:
 - 자동 재시작(파일 저장 → 노드 reload)까지 필요하면 watchmedo 등 file watcher 를 dev override 에 추가 검토.
+
+### ADR-024: 단일 `cobot_ws` 워크스페이스 통합 + grouped src 레이아웃 (2026-06-16)
+
+**Date**: 2026-06-16
+
+**Context**:
+- 그간 ROS2 소스가 세 갈래로 흩어져 있었다: host 빌드 ws `~/cobot2_ws`(robot_control·od_msg·cobot2_bringup + doosan-robot2), 컨테이너 dev용 최소 ws `~/yolo_ws`·`~/voice_ws`(ADR-023). repo 소스는 `cobot2_ws/` 평면 8패키지.
+- 통합 관리(한 워크스페이스에서 cobot1 학습 코드·cobot2 애플리케이션·doosan-robot2 드라이버를 함께) + 학습용 `rokey`(DoosanBootcamInt1) 편입 요구.
+
+**Decision**:
+- repo 소스트리를 `cobot_ws/src/` 단일 워크스페이스로 재배치, `src/` 를 grouping 디렉토리로 묶는다: `cobot1_ws`(rokey_cobot1), `cobot2_ws`(robot_control / cobot2_bringup / rokey_cobot2 / yolo_ws{od_msg,object_detection} / voice_ws{voice_processing} / pick_and_place_* ), doosan-robot2(installer 클론, repo 미저장). colcon 은 `src/` 하위를 재귀 탐색하므로 grouping 디렉토리는 유효(leaf 만 package.xml).
+- 런타임 host ws = `~/cobot_ws`(구 `~/cobot2_ws` 대체). `dsr-project-install.sh` 가 repo 의 grouped src(cobot1_ws+cobot2_ws)를 미러 복사 + doosan-robot2 클론.
+- 컨테이너 dev override 는 통합 ws 의 서브디렉토리(`cobot2_ws/yolo_ws`, `cobot2_ws/voice_ws`)를 `/ws/src` 로 bind-mount(서브디렉토리 자체가 패키지를 담아 중첩 src 없음 → mount 에서 `/src` 접미사 제거). 별도 `~/yolo_ws`·`~/voice_ws` 와 `dev-ws-setup.sh`, install.sh step `container_dev_ws` **폐기**(전체 17→16 step).
+- `rokey` 이름 충돌(같은 colcon ws 에 동명 패키지 둘 금지): DoosanBootcamInt1 rokey → `rokey_cobot1`(cobot1_ws), 기존 repo rokey → `rokey_cobot2`(cobot2_ws). 둘 다 빌드 가능, 명령은 `ros2 run rokey_cobotN ...` 로 분리.
+- host colcon build 는 컨테이너 전용 패키지(`object_detection`/`voice_processing`, torch·openwakeword 가 이미지에만)를 `--packages-skip` — 통합 ws 에 소스는 있으나(컨테이너 bind-mount 용) host 에선 실행 불가. `pick_and_place_*` 는 데모(자체 중첩 패키지 사본 보유)라 `COLCON_IGNORE` 로 빌드 제외.
+- rokey 의 `<depend>common2</depend>` → `dsr_common2`(미해소 rosdep 키 → doosan-robot2 가 제공하는 실제 패키지).
+
+**Consequences**:
+- 단일 워크스페이스로 build/install/overlay 일원화(`source ~/cobot_ws/install/setup.bash`). 컨테이너 모델 불변(서브디렉토리 부분집합 mount).
+- **기설치 머신**: `~/cobot2_ws`·`~/yolo_ws`·`~/voice_ws` 가 고아로 남음. installer 는 자동 삭제 안 함(파괴적) — 재설치 전 수동 `rm -rf ~/cobot2_ws ~/yolo_ws ~/voice_ws` 권장. state key `container_dev_ws` 는 미사용 잔존(무해).
+- `rokey_cobot1`(DoosanBootcamInt1)의 `data_recording.py` 는 `cv2` 사용 + 하드코딩 외부 절대경로(`/home/rokey4090/...`) 보유 — host apt 셋에 opencv 없어 그 노드는 build-presence 만(런타임 실행은 별도 의존 필요). 기존 이슈로 본 ADR 범위 외.
+
+**Reopen 조건**:
+- grouping 디렉토리 `_ws` 접미사(관례상 "워크스페이스" 오인 소지)를 접미사 없는 명칭으로 정리할지 재검토 가능(현재 사용자 선호로 유지).

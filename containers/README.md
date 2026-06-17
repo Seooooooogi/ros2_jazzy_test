@@ -9,16 +9,12 @@
 
 ### 1) 워크스페이스 준비
 
-`install.sh`(step16, `container_dev_ws`)가 클린설치 시 **자동 생성**한다. 기설치 머신/재생성은 수동:
+`install.sh`(DSR 단계)가 통합 워크스페이스 `~/cobot_ws` 를 레포에서 복사 생성한다 — 컨테이너 dev 모드가 mount 하는 서브디렉토리도 그 안에 포함된다(별도 생성 단계 불요).
 
-```bash
-bash containers/dev-ws-setup.sh            # 이미 있으면 skip(편집본 보호)
-bash containers/dev-ws-setup.sh --force    # 강제 덮어쓰기(편집본 폐기)
-```
-
-- 레포 `cobot2_ws` 의 패키지를 host 로 복사: `~/yolo_ws/src/{od_msg,object_detection}`, `~/voice_ws/src/voice_processing`
-- 경로는 `YOLO_WS`/`VOICE_WS` 로 변경 가능(기본 `~/yolo_ws`·`~/voice_ws`)
-- **여기서 편집**한다. 레포 공유는 수정분을 `cobot2_ws` 로 되돌려 커밋(별도 워크스페이스라 자동 동기화 아님)
+- yolo = `~/cobot_ws/src/cobot2_ws/yolo_ws`(od_msg + object_detection), voice = `~/cobot_ws/src/cobot2_ws/voice_ws`(voice_processing)
+- 이 서브디렉토리가 컨테이너 `/ws/src` 로 bind-mount 된다(서브디렉토리 자체가 패키지를 담아 중첩 src 없음).
+- mount 경로는 `YOLO_WS`/`VOICE_WS` 로 변경 가능(기본 위 경로 — `config.sh` 단일 소스).
+- **여기서 편집**한다. 레포 공유는 수정분을 레포 `cobot_ws/src/...` 로 되돌려 커밋.
 
 ### 2) 빌드 + 기동
 
@@ -28,7 +24,7 @@ docker compose $DEV build              # builder 스테이지 = dev-builder 태�
 docker compose $DEV up -d yolo-detection      # 또는 voice-processing — 각각 독립 기동
 ```
 
-- 기동 시 mount 된 소스로 1회 `colcon build --symlink-install` 후 대기(노드 자동 실행 안 함)
+- 기동 시 mount 된 소스로 1회 `colcon build --symlink-install --merge-install` 후 대기(노드 자동 실행 안 함)
 
 ### 3) 진입해서 노드 수동 실행
 

@@ -29,7 +29,7 @@ bash install.sh --help     # 도움말
 
 ```bash
 source /opt/ros/jazzy/setup.bash
-source ~/cobot2_ws/install/setup.bash   # overlay (dsr_bringup2 / robot_control 제공)
+source ~/cobot_ws/install/setup.bash   # overlay (dsr_bringup2 / robot_control 제공)
 set -a; source ~/ros2_jazzy_test/resources/config.sh; set +a   # RMW(CycloneDDS) / domain
 ```
 

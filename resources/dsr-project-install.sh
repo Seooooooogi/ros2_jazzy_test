@@ -9,10 +9,10 @@
 #
 # jazzy migration + idempotency of backup/dsr-project-install{,_25}.sh.
 #   - clone branch -b ${DSR_BRANCH}(=jazzy). Skip if already cloned (reproducibility — no git pull).
-#   - workspace = ${DSR_WORKSPACE}(=~/cobot2_ws). Copy only the host packages from the repo cobot2_ws/
-#     (robot_control, od_msg, cobot2_bringup) into src/ — the app/container packages
-#     (object_detection / voice_processing / pick_and_place_* / rokey) are handled by the separate (yolo/voice) containers,
-#     so they are excluded from the host ws. Only packages in src/ are built, naturally limiting the scope.
+#   - workspace = ${DSR_WORKSPACE}(=~/cobot_ws). Mirror the repo's grouped source (cobot_ws/src/cobot1_ws +
+#     cobot2_ws) into src/ so the unified workspace and the container dev bind-mounts (yolo_ws/voice_ws
+#     subdirs) resolve. The CUDA/voice container packages (object_detection / voice_processing) are present
+#     but excluded from the HOST build by colcon-build.sh (--packages-skip); pick_and_place_* carry COLCON_IGNORE.
 #     Copy (not symlink): so the workspace does not depend on the repo location — even running from removable
 #     media (USB) it does not break when the media is removed. The repo is the source of truth, so a re-run re-syncs from the repo.
 #   - emulator: pull the explicit tag doosanrobot/dsr_emulator:${DSR_EMULATOR_VERSION}.
@@ -31,9 +31,12 @@ REPO_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"          # repo root (parent of resou
 WS_SRC="${DSR_WORKSPACE}/src"
 DSR_REPO_URL="https://github.com/doosan-robotics/doosan-robot2.git"
 
-# Packages to build in the host colcon ws (CUDA/voice-dependent packages are excluded to the containers).
-# cobot2_bringup = the integrated bringup launch package (driver+camera+container startup, excluding robot_control).
-HOST_PKGS=(robot_control od_msg cobot2_bringup)
+# The host colcon ws mirrors the repo's grouped source: cobot1_ws (rokey_cobot1) + cobot2_ws
+# (robot_control, cobot2_bringup, rokey_cobot2, yolo_ws/{od_msg,object_detection}, voice_ws/voice_processing,
+# pick_and_place_* with COLCON_IGNORE). The whole grouped tree is copied so the container dev bind-mounts
+# (yolo_ws/voice_ws subdirs) resolve; the CUDA/voice container packages (object_detection/voice_processing)
+# are present but excluded from the HOST build by colcon-build.sh (--packages-skip) — they run only in their containers.
+WS_GROUPS=(cobot1_ws cobot2_ws)
 
 # 1) workspace src directory.
 mkdir -p "${WS_SRC}"
@@ -68,18 +71,20 @@ else
     echo "dsr: DSR_ROBOT2.py missing — patch skipped (verify the clone)" >&2
 fi
 
-# 3) Copy the repo host packages into the ws src (not symlink — so the workspace does not depend on the
-#    repo/USB location). The repo is the source of truth, so a re-run re-syncs from the repo:
-#    delete the existing target (including symlinks created by older versions) and copy fresh → re-run safe.
-#    fail-loud on missing: merely warning and moving on would let the build succeed (exit 0) but with the
-#    package missing from the workspace and state=DONE, only discovered at runtime via the absent ROS2 topic.
-for pkg in "${HOST_PKGS[@]}"; do
-    if [[ ! -d "${REPO_DIR}/cobot2_ws/${pkg}" ]]; then
-        echo "dsr: host package source missing — ${REPO_DIR}/cobot2_ws/${pkg}" >&2
+# 3) Mirror the repo's grouped source (cobot1_ws + cobot2_ws) into the ws src (not symlink — so the
+#    workspace does not depend on the repo/USB location). The repo is the source of truth, so a re-run
+#    re-syncs: delete the existing group dir then copy fresh → re-run safe. doosan-robot2 (cloned above)
+#    sits alongside and is untouched (it is not under these group dirs).
+#    fail-loud on missing: merely warning would let the build succeed (exit 0) with packages absent and
+#    state=DONE, only discovered at runtime via the missing ROS2 topic.
+REPO_SRC="${REPO_DIR}/cobot_ws/src"
+for grp in "${WS_GROUPS[@]}"; do
+    if [[ ! -d "${REPO_SRC}/${grp}" ]]; then
+        echo "dsr: repo source group missing — ${REPO_SRC}/${grp}" >&2
         exit 1
     fi
-    rm -rf "${WS_SRC:?}/${pkg}"
-    cp -a "${REPO_DIR}/cobot2_ws/${pkg}" "${WS_SRC}/${pkg}"
+    rm -rf "${WS_SRC:?}/${grp}"
+    cp -a "${REPO_SRC}/${grp}" "${WS_SRC}/${grp}"
 done
 
 # 4) apt packages for the DSR build dependency (only DSR-specific ones not in a01 ros2-install.sh / desktop core).

@@ -234,9 +234,9 @@ STAGE_A01_COUNT=5
 STAGE_A02_COUNT=4
 STAGE_A03_COUNT=1
 STAGE_A04_COUNT=1
-INSTALL_EXTRA_COUNT=5   # install-only: dds(13) / toolkit(14) / container(15) / dev_ws(16) / network(17)
+INSTALL_EXTRA_COUNT=4   # install-only: dds(13) / toolkit(14) / container(15) / network(16)
 
-# install.sh overall denominator: a01 5 + reboot 1 + a02 4 + a03 1 + a04 1 + extra 5 = 17.
+# install.sh overall denominator: a01 5 + reboot 1 + a02 4 + a03 1 + a04 1 + extra 4 = 16.
 install_steps_total() {
     echo $(( STAGE_A01_COUNT + 1 + STAGE_A02_COUNT + STAGE_A03_COUNT \
              + STAGE_A04_COUNT + INSTALL_EXTRA_COUNT ))

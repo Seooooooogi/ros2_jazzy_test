@@ -5,7 +5,7 @@
 # =============================================================
 #
 # shellcheck source-path=SCRIPTDIR
-# resources/network-static-ip.sh — set a robot-LAN static IP on the host wired NIC (install.sh step 17).
+# resources/network-static-ip.sh — set a robot-LAN static IP on the host wired NIC (install.sh step 16).
 #
 # To communicate on the robot-equipment LAN (.1 OnRobot gripper / .100 robot controller / .30 host), the host
 # wired NIC must have a static IP on the same subnet. Configured via NetworkManager (nmcli). No gateway/DNS is
