@@ -30,9 +30,13 @@ class TestNode(Node):
         super().__init__("test_node")
 
         self.img_node = ImgNode()
-        rclpy.spin_once(self.img_node)
-        time.sleep(1)
+        # camera_info_callback 이 한 번 실행돼 intrinsics 가 채워질 때까지 spin 한다.
+        # 단일 spin_once + sleep 은 어떤 콜백이 처리될지 보장하지 못해(보통 color/depth 가 먼저)
+        # intrinsics 가 None 으로 남는다. timeout_sec 으로 매 spin 이 블로킹 없이 돌아 재시도한다.
         self.intrinsics = self.img_node.get_camera_intrinsic()
+        while self.intrinsics is None:
+            rclpy.spin_once(self.img_node, timeout_sec=0.1)
+            self.intrinsics = self.img_node.get_camera_intrinsic()
         self.gripper2cam = np.load("T_gripper2camera.npy")
         self.JReady = posj([0, 0, 90, 0, 90, 0])
         self.gripper = RG(GRIPPER_NAME, TOOLCHARGER_IP, TOOLCHARGER_PORT)
