@@ -123,9 +123,11 @@ state_dump() {
 #
 # State marking/lookup is owned by the state section above; this section only bundles the skip decision + begin/end calls.
 #
-# Output policy: the step command's (`"$@"`) stdout goes only to LOG_FILE from config.sh, while stderr goes to both the console and
-# LOG_FILE. The console keeps only the progress banner from step_begin/step_end_* + warnings/errors,
-# so steps are clearly visible, and the bulk output of apt/pip/colcon goes to the log file.
+# Output policy (non-verbose, default): the step command's (`"$@"`) stdout AND stderr both go to LOG_FILE
+# from config.sh only — the console is kept clean (just the progress banner from step_begin/step_end_* + a
+# liveness heartbeat). Step warnings/errors are NOT shown on the console; they live in the log. A failure is
+# still never silent: step_end_fail prints a one-line [FAIL] + the log path. (VERBOSE=1: stdout+stderr are
+# teed to both console and log.) See the routing comment inside run_step for the fd mechanics.
 #
 # On failure it records FAIL via step_end_fail then exits directly with exit 1 — on this path
 # the ERR trap installed by the caller does not fire (exit is not a trap target). So failure reporting
@@ -182,7 +184,7 @@ run_step() {
     # then close it (EOF) and wait for the drain before the banner, making order deterministic. It is a redirect +
     # process-sub, not a pipeline, so pipefail does not apply; the exit code is taken from "$@" into rc
     # (`|| rc=$?` so set -e does not fire). The sudo prompt goes to /dev/tty either way, so it is not swallowed.
-    local rc=0 teepid="" tfd hbpid=""
+    local rc=0 teepid="" tfd=-1 hbpid=""
     if [[ "${VERBOSE:-0}" == 1 ]]; then
         exec {tfd}> >(tee -a "$log" >&2); teepid=$!
         "$@" >&"$tfd" 2>&1 || rc=$?

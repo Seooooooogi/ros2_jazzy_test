@@ -109,6 +109,11 @@ case "${1:-}" in
     *) echo "install: unknown option '$1'" >&2; usage; exit 2 ;;
 esac
 
+# Ensure the detailed-log directory exists before any $LOG_FILE write (advisory warnings / ERR trap below),
+# so an overridden LOG_FILE pointing at a not-yet-created dir does not silently drop those early writes.
+# Default path (repo root / install_log) → dirname is the repo root, so this is a harmless no-op.
+mkdir -p "$(dirname "$LOG_FILE")"
+
 # Show the copyright banner for an actual install run (after the utility subcommands above have exited).
 # Unconditional → it appears in interactive runs and unattended runs alike.
 print_copyright
