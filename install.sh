@@ -51,14 +51,15 @@ install.sh — single entry point for host setup (a01~a04 + DDS tuning + NVIDIA 
   bash install.sh             run the full sequence (skip already-completed steps)
   bash install.sh --unattended  unattended install — collect OPENAI_API_KEY + one confirm at start, then
                                 proceed automatically up to reboot; auto-resume on return (GUI session required, one sudo password after return)
-  bash install.sh --verbose   also show each step's detailed output (colcon n/total, apt %) on the console
+  bash install.sh --verbose   also show each step's detailed output + warnings/errors on the console
   bash install.sh --status    print the current progress (state)
   bash install.sh --reset     reset the state (after confirm — re-run all steps)
   bash install.sh --help      this help
 
-By default the console shows only the [n/total] progress + per-step elapsed time, and detailed output
-goes to ~/.ros2_jazzy_test/install.log. Use --verbose or the VERBOSE=1 environment variable to also show
-detailed output on the console.
+By default the console shows only the [n/total] progress + per-step elapsed time; ALL detailed output and
+any warnings/errors go to install_log in the repo root (not the console). On a step failure a one-line
+[FAIL] + the log path is shown. Use --verbose or the VERBOSE=1 environment variable to also show detailed
+output on the console.
 
 After reboot (step 6), running 'bash install.sh' again continues from step 7.
 Completed steps are auto-skipped, so re-running the same command skips the finished steps.
@@ -120,7 +121,8 @@ _SUDO_KA_PID=$!
 trap 'kill "${_SUDO_KA_PID}" 2>/dev/null || true' EXIT
 
 # Reinforces reporting of an unexpected failure location inside a child body (orthogonal to run_step's step_end_fail).
-trap 'echo "[install] failed: line $LINENO" >&2' ERR
+# One-line console notice + log path only — the failure detail itself is in the log (console stays clean).
+trap 'echo "[install] failed: line $LINENO — see ${LOG_FILE}" >&2' ERR
 
 # --- unattended install (--unattended) pre/resume handling ----------------------------
 # First run (before reboot): pre-collect OPENAI_API_KEY + one proceed-confirm + register auto-resume on return.
@@ -135,8 +137,9 @@ if [[ "${UNATTENDED}" == "1" ]]; then
         confirm_or_abort "Proceeding with the unattended install — it reboots once midway and auto-continues on return (login) (terminal auto-opens, one sudo password). Continue?"
         unattended_register_resume "${SCRIPT_DIR}"
     else
-        echo "[install] warning: --unattended but a non-interactive shell — cannot register auto-resume." >&2
-        echo "          Run it in a GUI session or re-run manually after reboot." >&2
+        # Advisory warning → log only (console stays clean). Surfaces in install_log for diagnosis.
+        { echo "[install] warning: --unattended but a non-interactive shell — cannot register auto-resume."
+          echo "          Run it in a GUI session or re-run manually after reboot."; } >>"$LOG_FILE"
     fi
 fi
 
@@ -172,8 +175,9 @@ fi
 # If it booted into the wrong (half) kernel, warn before proceeding to later steps (RealSense DKMS, etc.).
 __running="$(uname -r)"
 if [[ ! -d "/lib/modules/${__running}/kernel/drivers/net/wireless" ]]; then
-    echo "[install] warning: the current kernel (${__running}) appears to lack modules-extra — wifi/USB input may be missing." >&2
-    echo "          Boot a kernel that has modules-extra from GRUB, or see the kernel-module section in docs/TROUBLESHOOTING.md." >&2
+    # Advisory warning → log only (console stays clean). Surfaces in install_log for diagnosis.
+    { echo "[install] warning: the current kernel (${__running}) appears to lack modules-extra — wifi/USB input may be missing."
+      echo "          Boot a kernel that has modules-extra from GRUB, or see the kernel-module section in docs/TROUBLESHOOTING.md."; } >>"$LOG_FILE"
 fi
 
 # --- steps 7~10: robot/camera (a02: DSR + RealSense + colcon build) ---

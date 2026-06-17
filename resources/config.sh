@@ -107,11 +107,13 @@ export ROS2_JAZZY_TEST_REPO
 : "${STATE_FILE:=${STATE_DIR}/state}"
 
 # --- Detailed install log (append-only — never overwrite) ------------------------
-# orchestrate.sh appends the full stdout+stderr of each step command here.
-# The console keeps only the [n/total] progress and stderr (warnings/errors); bulk output (apt/pip/colcon)
-# goes to this file. It can accumulate tens of MB per run with torch/colcon — since it is a resumable re-run
-# it keeps growing, but by policy we never truncate/rotate it (the user cleans up manually if needed).
-: "${LOG_FILE:=${STATE_DIR}/install.log}"
+# orchestrate.sh appends the full stdout+stderr of each step command here. By default the console shows
+# only the [n/total] progress + heartbeat; ALL step output and any warnings/errors go to this file, not the
+# console. It lives in the repo root as `install_log` (git-ignored — machine-specific, regenerable, can reach
+# tens of MB with torch/colcon). As a resumable re-run it keeps growing; by policy never truncate/rotate it
+# (the user cleans up manually if needed). Overridable via the LOG_FILE env var (tests/CI).
+# Path resolved from this file's location (resources/config.sh) → repo root, so it is independent of cwd.
+: "${LOG_FILE:=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/install_log}"
 
 # --- apt keyring (unify every external-repo keyring under one path) ----
 : "${KEYRING_DIR:=/etc/apt/keyrings}"

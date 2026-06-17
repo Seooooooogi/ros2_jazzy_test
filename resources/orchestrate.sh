@@ -170,39 +170,36 @@ run_step() {
 
     step_begin "${n}" "${total}" "${name}"
 
-    # Output separation: command stdout is log-only, stderr goes to console (>&2) + log (tee -a).
-    # The console keeps only the progress banner + warnings/errors; the bulk stdout of apt/pip/colcon goes to the log.
+    # Output routing:
+    #   default (non-verbose): the command's stdout AND stderr both go to the log only — the console is kept
+    #     clean (only the [n/total] banner + a liveness heartbeat). Step warnings/errors are NOT printed to the
+    #     console; they live in the log. A failure is still never silent: step_end_fail prints a one-line
+    #     [FAIL] + the log path below.
+    #   VERBOSE=1: stdout+stderr are teed to both console and log in real time (colcon [n/total], apt %).
     #
-    # tee is an async process-sub, so it may still be flushing leftover buffer after the command ends. If left
-    # as-is, the [OK]/[FAIL] banner from step_end_* prints before the command's last stderr, so output
-    # gets interleaved. So we launch tee once on a dedicated fd via exec and capture its PID, then after the command ends close the fd
-    # to give EOF and wait for the drain to finish before printing the banner, making the order deterministic.
-    #
-    # Since it is a redirect + process-sub rather than a pipeline, it is unaffected by pipefail, and the exit code
-    # is taken from "$@" into rc as-is (`|| rc=$?` so set -e does not fire either). The sudo prompt
-    # goes to /dev/tty, so it is not swallowed by this redirect.
-    #
-    # When VERBOSE=1, the step's stdout is also teed to both console+log so colcon `[n/total]`,
-    # apt percentages and other in-step progress are shown in real time. By default (non-verbose), stdout
-    # is kept log-only; instead an elapsed-time heartbeat is shown on the console to signal liveness.
-    local rc=0 teepid tfd hbpid=""
-    exec {tfd}> >(tee -a "$log" >&2); teepid=$!
+    # The verbose tee is an async process-sub that may still be flushing after the command ends; if left open the
+    # [OK]/[FAIL] banner could interleave with the command's last line. So we open tee on a dedicated fd via exec,
+    # then close it (EOF) and wait for the drain before the banner, making order deterministic. It is a redirect +
+    # process-sub, not a pipeline, so pipefail does not apply; the exit code is taken from "$@" into rc
+    # (`|| rc=$?` so set -e does not fire). The sudo prompt goes to /dev/tty either way, so it is not swallowed.
+    local rc=0 teepid="" tfd hbpid=""
     if [[ "${VERBOSE:-0}" == 1 ]]; then
+        exec {tfd}> >(tee -a "$log" >&2); teepid=$!
         "$@" >&"$tfd" 2>&1 || rc=$?
+        exec {tfd}>&-
+        wait "$teepid" 2>/dev/null || true
     else
         if [[ -t 2 && "$interactive" -eq 0 ]]; then
-            echo "  (detailed progress: tail -f ${log})" >&2
+            echo "  (detailed log: tail -f ${log})" >&2
             _step_heartbeat "${name}" & hbpid=$!
         fi
-        "$@" >>"$log" 2>&"$tfd" || rc=$?
+        "$@" >>"$log" 2>&1 || rc=$?
         if [[ -n "$hbpid" ]]; then
             kill "$hbpid" 2>/dev/null || true
             wait "$hbpid" 2>/dev/null || true
             printf '\r\033[K' >&2   # clear leftover heartbeat line
         fi
     fi
-    exec {tfd}>&-
-    wait "$teepid" 2>/dev/null || true
 
     if [[ $rc -eq 0 ]]; then
         step_end_ok

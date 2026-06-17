@@ -14,6 +14,8 @@
 *.log
 install.log
 *.jsonl
+# install.sh 상세 로그 — 레포 루트에 쌓이는 머신별 append-only 로그(재생성 가능). 루트만 anchor.
+/install_log
 
 # Downloaded artifacts / intermediate
 *.deb
