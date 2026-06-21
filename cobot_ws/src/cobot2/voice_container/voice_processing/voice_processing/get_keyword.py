@@ -28,7 +28,7 @@ from voice_processing.stt import STT
 # current_dir = os.getcwd()
 # package_path = get_package_share_directory("pick_and_place_voice")
 
-# env_path = "/home/rokey/cobot_ws/src/cobot2_ws/pick_and_place_voice/resource/.env"
+# env_path = "/home/rokey/cobot_ws/src/cobot2/pick_and_place_voice/resource/.env"
 # load_dotenv(dotenv_path=env_path)
 # is_load = load_dotenv(dotenv_path=os.path.join(f"{package_path}/resource/.env"))
 # openai_api_key = os.getenv("OPENAI_API_KEY")

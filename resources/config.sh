@@ -47,12 +47,12 @@ export ROS2_JAZZY_TEST_REPO
 # --- Phase 4 dev workspace (container code live-mount, docker-compose.dev.yml only) ----
 # When the yolo/voice containers run in dev mode, these host subdirectories of the unified
 # cobot_ws are bind-mounted to the container /ws/src. The subdirectory itself holds the packages
-# (yolo_ws = od_msg + object_detection, voice_ws = voice_processing) — no nested src/, so the mount
+# (yolo_container = od_msg + object_detection, voice_container = voice_processing) — no nested src/, so the mount
 # target is the directory itself. The packages are part of the host colcon workspace built by
 # dsr-project-install.sh, so there is no separate copy step.
 # Unrelated to production (install.sh / docker-compose.yml) — unused unless the dev override runs. Override allowed.
-: "${YOLO_WS:=${DSR_WORKSPACE}/src/cobot2_ws/yolo_ws}"
-: "${VOICE_WS:=${DSR_WORKSPACE}/src/cobot2_ws/voice_ws}"
+: "${YOLO_WS:=${DSR_WORKSPACE}/src/cobot2/yolo_container}"
+: "${VOICE_WS:=${DSR_WORKSPACE}/src/cobot2/voice_container}"
 
 # --- Kernel track (HWE) --------------------------------------------------
 # Explicitly install the HWE kernel meta so the kernel image + headers + modules-extra are always kept together.

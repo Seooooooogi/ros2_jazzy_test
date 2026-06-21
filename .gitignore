@@ -49,11 +49,11 @@ Thumbs.db
 claude-migration/
 
 # corecode: 개발/연구용 튜토리얼 — 소스만 추적. 아래 둘만 제외(__pycache__·*.pyc 는 위 Python 규칙으로 이미 제외).
-# tflite: cobot2_ws/voice_processing/resource 및 containers oww_models 와 중복. json: 대용량 재생성 가능 임베딩.
+# tflite: cobot2/voice_container/voice_processing/resource 및 containers oww_models 와 중복. json: 대용량 재생성 가능 임베딩.
 corecode/VoiceProcessing/hello_rokey_8332_32.tflite
 corecode/VoiceProcessing/class_embeddings.json
 
-# jog 편의 복사본 — cobot_ws/src/cobot2_ws/rokey_cobot2/rokey_cobot2/basic/jog_complete.py 와 byte-identical.
+# jog 편의 복사본 — cobot_ws/src/cobot2/rokey_cobot2/rokey_cobot2/basic/jog_complete.py 와 byte-identical.
 # 실기 jog 검증을 최상위 경로로 실행하려고 둔 것이라 디스크엔 남기되 추적만 제외(중복 drift 방지).
 # 최상위만 anchor — cobot_ws 안의 원본은 그대로 추적.
 /jog_complete.py

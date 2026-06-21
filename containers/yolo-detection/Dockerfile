@@ -64,8 +64,8 @@ RUN PYVER="$(/opt/venv/bin/python3 -c 'import sys; print(f"{sys.version_info.maj
 
 # --- 소스 COPY: 여기부터 캐시가 무효화돼도 위 torch/pip 레이어는 보존된다. ---
 # od_msg 를 먼저 둔다 (object_detection 이 from od_msg.srv import — colcon 이 위상정렬).
-COPY cobot_ws/src/cobot2_ws/yolo_ws/od_msg           /ws/src/od_msg
-COPY cobot_ws/src/cobot2_ws/yolo_ws/object_detection /ws/src/object_detection
+COPY cobot_ws/src/cobot2/yolo_container/od_msg           /ws/src/od_msg
+COPY cobot_ws/src/cobot2/yolo_container/object_detection /ws/src/object_detection
 
 WORKDIR /ws
 # object_detection 의 선언적 의존(rclpy/sensor_msgs/cv_bridge/ament_index_python/od_msg)을

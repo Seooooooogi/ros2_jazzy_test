@@ -8,7 +8,11 @@
 
 **(2026-06-17 [문서] 세션 반영)** — `feat/application-containers` 가 **워크스페이스 통합**(`4c36cc5`) + **DSR clone fork 핀**(`d9d8df0`)으로 진행, origin 동기(0/0, HEAD `d9d8df0`). **ROS2 워크스페이스 레이아웃이 크게 바뀜** — 아래 ⚠ 필독. 직전 [실측] 머신은 origin 과 동기였으나 이 변경으로 **재pull + 재빌드 필요**.
 
-⚠ **[실측/fleet] 워크스페이스 재배치 (2026-06-17, ADR-024)** — 런타임 ws `~/cobot2_ws` → **`~/cobot_ws`** (통합 `src/` grouped 레이아웃: `cobot1_ws`+`cobot2_ws`). 다음 행동:
+⚠ **[실측/fleet] 워크스페이스 grouping 디렉토리 rename (2026-06-21, ADR-025)** — `cobot_ws/src` 의 grouping·서브디렉토리 4개 rename(**아래 ADR-024 노트의 옛 이름을 대체**): `cobot1_ws`→`cobot1`, `cobot2_ws`→`cobot2`, `cobot2/yolo_ws`→`cobot2/yolo_container`, `cobot2/voice_ws`→`cobot2/voice_container`. 순수 디렉토리 rename(패키지명·colcon 빌드 무영향). 신규 진입점 `reinstall-workspace.sh`(repo 루트, 워크스페이스만 재설치) 추가. 다음 행동:
+- **[실측] 검증 대기**: `bash reinstall-workspace.sh` 로 `~/cobot_ws` 재미러+빌드(소스 재미러가 delete-then-copy 라 옛 이름 디렉토리 자동 정리) → `colcon build` 성공 + `ros2 launch cobot2_bringup bringup_all.launch.py` resolve 확인. 컨테이너는 Dockerfile `COPY` 경로 변경분 **재빌드** 필요(`containers/build-all.sh` 또는 dev compose build).
+- 이 머신([문서])은 ~/cobot_ws·ROS2 부재라 정적 검증(shellcheck + grep 감사)만 완료 — 실빌드는 fleet 머신 몫.
+
+⚠ **[실측/fleet] 워크스페이스 재배치 (2026-06-17, ADR-024)** — 런타임 ws `~/cobot2_ws` → **`~/cobot_ws`** (통합 `src/` grouped 레이아웃: `cobot1_ws`+`cobot2_ws` → **현재는 ADR-025 로 `cobot1`+`cobot2`**). 다음 행동:
 - `git pull` 후 `bash resources/dsr-project-install.sh` 재실행 → repo grouped src 미러 + doosan-robot2 clone 으로 `~/cobot_ws` 생성, 이어 `colcon build`(host 는 `object_detection`/`voice_processing` `--packages-skip`, `pick_and_place_*` COLCON_IGNORE).
 - 기존 `~/cobot2_ws`·`~/yolo_ws`·`~/voice_ws` 는 **고아로 남음**(installer 자동삭제 안 함 — 파괴적). 수동 `rm -rf ~/cobot2_ws ~/yolo_ws ~/voice_ws` 권장.
 - 설치 step **17→16** (dev-ws 생성 step 폐기 — 통합 ws 가 dev bind-mount 서브디렉토리 `cobot2_ws/{yolo_ws,voice_ws}` 를 포함, network 고정IP 가 step16).

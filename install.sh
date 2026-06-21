@@ -237,7 +237,7 @@ run_step 15 container_fetch bash "${SCRIPT_DIR}/containers/fetch-images.sh"
 # --- step 16: static ethernet IP (robot LAN: .1 gripper / .100 robot / .30 host) ---
 # After all installs, set the wired NIC to the robot-LAN static IP (nmcli). No gateway/DNS → wifi
 # internet stays. Idempotent. No confirm (reversible; the unattended mode covers it with the single consent at start).
-# (The unified host workspace — including the container dev bind-mount subdirs (cobot2_ws/yolo_ws, voice_ws) —
+# (The unified host workspace — including the container dev bind-mount subdirs (cobot2/yolo_container, voice_container) —
 #  is created earlier by the DSR step's dsr-project-install.sh, so no separate dev-workspace step is needed.)
 run_step 16 network_static_ip bash "${RESOURCE_DIR}/network-static-ip.sh"
 

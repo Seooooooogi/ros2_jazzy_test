@@ -791,3 +791,26 @@
 
 **Reopen 조건**:
 - grouping 디렉토리 `_ws` 접미사(관례상 "워크스페이스" 오인 소지)를 접미사 없는 명칭으로 정리할지 재검토 가능(현재 사용자 선호로 유지).
+
+### ADR-025: 워크스페이스 grouping 디렉토리 rename + 워크스페이스 전용 재설치 스크립트 (2026-06-21)
+
+**Date**: 2026-06-21
+
+**Status**: ADR-024 의 Reopen 조건(`_ws` 접미사 정리) 을 해소한다.
+
+**Context**:
+- ADR-024 의 grouping 디렉토리명 `cobot1_ws`·`cobot2_ws` + 컨테이너 서브디렉토리 `yolo_ws`·`voice_ws` 의 `_ws` 접미사가 colcon "워크스페이스" 로 오인될 소지(실제로는 단일 `cobot_ws` 안의 grouping/패키지 묶음). 특히 `yolo_ws`·`voice_ws` 는 컨테이너 전용 패키지 묶음이라 "ws" 보다 "container" 가 의미 정확.
+- 전체 17-step `install.sh` 없이 워크스페이스(`~/cobot_ws`)만 다시 깔 진입점 부재 — 소스 수정·rename 후 재빌드에 풀 설치는 과함.
+
+**Decision**:
+- repo `cobot_ws/src/` grouping·서브디렉토리 4개 rename: `cobot1_ws`→`cobot1`, `cobot2_ws`→`cobot2`, `cobot2/yolo_ws`→`cobot2/yolo_container`, `cobot2/voice_ws`→`cobot2/voice_container`. **순수 디렉토리 rename** — ROS2 패키지명(`rokey_cobot1`/`robot_control`/`od_msg`/`object_detection`/`voice_processing` 등)은 불변, colcon 이 `src/` 재귀 탐색이라 빌드 무영향.
+- 경로 하드코딩 동반 갱신: `dsr-project-install.sh::WS_GROUPS=(cobot1 cobot2)`, `config.sh::YOLO_WS/VOICE_WS`, 두 컨테이너 `Dockerfile` `COPY` 경로, `docker-compose.dev.yml` bind-mount fallback, `.dockerignore` 화이트리스트.
+- 신규 진입점 `reinstall-workspace.sh`(repo 루트): `dsr-project-install.sh` + `colcon-build.sh` 를 위임 호출 — 기본 증분(소스 재미러 + colcon 증분), `--clean` 으로 doosan-robot2 재클론 + build/install/log 삭제 후 풀 빌드.
+
+**Consequences**:
+- `_ws` 오인 소지 제거, 컨테이너 전용 묶음은 `_container` 로 의도 명시.
+- **기설치 머신**: 옛 이름 디렉토리가 `~/cobot_ws/src` 에 잔존 — `bash reinstall-workspace.sh`(소스 재미러가 delete-then-copy 라 새 이름으로 정리) 또는 `--clean` 으로 재설치 권장.
+- 컨테이너 이미지: `Dockerfile` `COPY` 경로 변경 → **재빌드 시** 새 경로 필요(기존 baked 이미지는 불변).
+
+**Reopen 조건**:
+- 없음(naming 안정화). 추가 grouping 도입 시 동일 무접미사 컨벤션 유지.
