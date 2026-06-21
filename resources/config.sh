@@ -133,7 +133,10 @@ export RMW_IMPLEMENTATION="${RMW_IMPLEMENTATION:-rmw_cyclonedds_cpp}"
 # CycloneDDS config XML path + URI. dds-tuning.sh detects the install machine's wired NIC and
 # renders to this path (a machine-specific artifact, not tracked in the repo). On non-CycloneDDS RMW it is
 # ignored, so always exporting it is harmless. For containers, compose mounts this file.
-: "${CYCLONEDDS_XML:=${STATE_DIR}/cyclonedds.xml}"
+# Lives under the XDG config dir (not STATE_DIR) on purpose: this is runtime config read on every ROS2 run,
+# whereas STATE_DIR holds installer bookkeeping (resume state / image tars). Keeping them apart means wiping
+# the installer state dir does not delete the live DDS config.
+: "${CYCLONEDDS_XML:=${XDG_CONFIG_HOME:-${HOME}/.config}/cyclonedds/cyclonedds.xml}"
 export CYCLONEDDS_URI="${CYCLONEDDS_URI:-file://${CYCLONEDDS_XML}}"
 
 # NIC override for DDS to use (comma-separated allowed). If empty, dds-tuning.sh auto-detects all physical wired NICs

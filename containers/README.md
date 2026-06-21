@@ -43,6 +43,6 @@ voice 는 `docker exec -it voice-processing bash` → `ros2 run voice_processing
 
 ### 전제 (프로덕션과 동일)
 
-- `~/.ros2_jazzy_test/cyclonedds.xml` 렌더 완료(dds-tuning) — base compose 가 read-only mount.
+- `~/.config/cyclonedds/cyclonedds.xml` 렌더 완료(dds-tuning) — base compose 가 read-only mount.
 - voice: `.env` 의 `OPENAI_API_KEY` + 마이크(`/dev/snd`).
 - yolo: host 가 RealSense 토픽(`/camera/camera/*`)을 publish 중이어야 추론 입력 존재.

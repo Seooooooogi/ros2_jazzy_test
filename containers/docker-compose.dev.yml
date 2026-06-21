@@ -19,7 +19,7 @@
 #     (entrypoint 는 PID1 전용이라 docker exec 로 띄운 셸엔 그 환경이 실리지 않는다.)
 #
 # network_mode host·GPU(yolo)·/dev/snd+audio(voice)·env·env_file·cyclonedds.xml mount 은 base 에서 상속.
-# 전제(base 와 동일): ~/.ros2_jazzy_test/cyclonedds.xml(dds-tuning) + (voice).env. 카메라 토픽은 host 소유.
+# 전제(base 와 동일): ~/.config/cyclonedds/cyclonedds.xml(dds-tuning) + (voice).env. 카메라 토픽은 host 소유.
 
 services:
   yolo-detection:

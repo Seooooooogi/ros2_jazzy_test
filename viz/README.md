@@ -34,7 +34,7 @@ ros2 topic hz /camera/camera/color/image_raw   # 프레임 확인
 ```
 
 ### 2. yolo-viz 컨테이너 기동
-전제: `~/.ros2_jazzy_test/cyclonedds.xml` 존재(dds-tuning), `.env` 의 `DOCKERHUB_USER`/`YOLO_TAG` 가 빌드된 yolo 이미지를 가리켜야 함.
+전제: `~/.config/cyclonedds/cyclonedds.xml` 존재(dds-tuning), `.env` 의 `DOCKERHUB_USER`/`YOLO_TAG` 가 빌드된 yolo 이미지를 가리켜야 함.
 ```
 set -a; source resources/config.sh; set +a
 docker compose -f containers/docker-compose.yml --profile viz up -d yolo-viz
