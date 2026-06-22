@@ -40,6 +40,22 @@ source /opt/ros/jazzy/setup.bash
 source ~/cobot_ws/install/setup.bash   # overlay (dsr_bringup2 / robot_control 제공)
 set -a; source ~/ros2_jazzy_test/resources/config.sh; set +a   # RMW(CycloneDDS) / domain
 ```
+## 로봇 기동 준비 (host)
+
+1. **DSR 드라이버** — 실기 `mode:=real`, 에뮬레이터 `mode:=virtual`
+
+   ```bash
+   ros2 launch dsr_bringup2 dsr_bringup2_rviz.launch.py \
+     mode:=real host:=192.168.1.100 port:=12345 model:=m0609 name:=dsr01
+   ```
+
+2. **RealSense 카메라** (host, `align_depth.enable:=true` 필수)
+
+   ```bash
+   ros2 launch realsense2_camera rs_align_depth_launch.py \
+     depth_module.depth_profile:=848x480x30 rgb_camera.color_profile:=1280x720x30 \
+     align_depth.enable:=true enable_rgbd:=true pointcloud.enable:=true initial_reset:=true
+   ```
 
 ## 컨테이너 노드 개별 실행 (디버깅)
 
@@ -65,34 +81,11 @@ docker exec -it voice-processing bash
 ros2 run voice_processing get_keyword
 ```
 
-- 자세한 dev 모드 설명은 `containers/README.md` 참조.
+ **robot_control (host)** 
 
-## robot_control 전체 실행 순서
-
-1. **DSR 드라이버** — 실기 `mode:=real`, 에뮬레이터 `mode:=virtual`
-
-   ```bash
-   ros2 launch dsr_bringup2 dsr_bringup2_rviz.launch.py \
-     mode:=real host:=192.168.1.100 port:=12345 model:=m0609 name:=dsr01
-   ```
-
-2. **RealSense 카메라** (host, `align_depth.enable:=true` 필수)
-
-   ```bash
-   ros2 launch realsense2_camera rs_align_depth_launch.py \
-     depth_module.depth_profile:=848x480x30 rgb_camera.color_profile:=1280x720x30 \
-     align_depth.enable:=true enable_rgbd:=true pointcloud.enable:=true initial_reset:=true
-   ```
-
-3. **yolo 노드*
-
-4. **voice 노드**
-
-5. **robot_control** (host — 오케스트레이터, 위 두 서비스 + DSR 의 client)
-
-   ```bash
-   ros2 run robot_control robot_control
-   ```
+```bash
+ros2 run robot_control robot_control
+```
 
 > **통합 기동**
 >
