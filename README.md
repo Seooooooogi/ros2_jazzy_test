@@ -59,10 +59,11 @@ set -a; source ~/ros2_jazzy_test/resources/config.sh; set +a   # RMW(CycloneDDS)
 
 ## 컨테이너 노드 개별 실행 (디버깅)
 
+**매 터미널마다 실행**
 ```bash
-# 프로덕션 정의 + dev override 를 함께 머지 (cwd 무관 — 절대경로)
 DEV="-f $HOME/ros2_jazzy_test/containers/docker-compose.yml -f $HOME/ros2_jazzy_test/containers/docker-compose.dev.yml"
-docker compose $DEV build            # 최초 1회 — dev-builder 이미지 (프로덕션 이미지와 분리)
+# 최초 1회 실행 — dev-builder 이미지 (프로덕션 이미지와 분리)
+docker compose $DEV build
 ```
 
 **yolo**
