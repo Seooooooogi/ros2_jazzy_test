@@ -154,7 +154,7 @@ host 미설치 (ADR-008) — 아래는 두 컨테이너 이미지 **안에서** 
 | ai-edge-litert | 2.1.5 | `>=2.0.2,<3` | tflite-runtime(Py3.12 wheel 없음) 대체. `tflite_runtime→ai_edge_litert` shim 으로 openwakeword 의 `.tflite` 로드 |
 | onnxruntime | 1.26.0 | `<2,>=1.10.0` (openwakeword 실제 의존, 명시 설치) | |
 | scikit-learn / tqdm / requests | 1.8.0 / 4.67 / 2.34 | (openwakeword 실제 의존, 명시) | `--no-deps` 로 빠진 base 의존 보충 |
-| scipy | 1.17.1 | `<2` | |
+| scipy | 1.17.1 | `<1.18` | 1.18+ 은 런타임 numpy>=2.0 요구(np.long 사용) → numpy<2 재핀과 충돌. `<2` 면 1.18 로 drift |
 | sounddevice | 0.5.5 | — | |
 | PyAudio | 0.2.14 | — | apt `portaudio19-dev` 빌드 의존 |
 
@@ -177,7 +177,7 @@ host 미설치 (ADR-008) — 아래는 두 컨테이너 이미지 **안에서** 
 | langchain / langchain-openai / openai | `<2` / `<2` / `<3` | voice 컨테이너 미러링 |
 | openwakeword (+ ai-edge-litert, shim) | `==0.6.0 --no-deps` / `>=2.0.2,<3` | voice 컨테이너와 동일 레시피 (`tflite_runtime`→`ai_edge_litert`) |
 | pymodbus | `<4` (3.x) | onrobot.py 가 3.x API(`slave=`)로 이관됨 |
-| scipy / pyaudio / sounddevice / python-dotenv | `<2` / — / — / — | |
+| scipy / pyaudio / sounddevice / python-dotenv | `<2` / — / — / — | ⚠ scipy 1.18+ 은 런타임 numpy>=2.0 요구(np.long) → numpy<2 재핀과 충돌. 컨테이너는 `<1.18` 로 고정함. 이 shell 변종도 동일 수정 요망(미검증 — host-python-deps.sh 부재) |
 | numpy | `<2` (마지막 `--force-reinstall`) | ultralytics 호환 (ADR-002) |
 
 > 시스템 라이브러리(apt): `portaudio19-dev libportaudio2 libsndfile1 libasound2-dev ffmpeg libgl1` (+ python3-dev/venv/pip).

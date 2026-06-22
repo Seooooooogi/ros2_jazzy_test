@@ -49,8 +49,11 @@ RUN set +u \
 # openwakeword 가 tflite-runtime/onnxruntime 를 transitive 로 끌어온다.
 RUN python3 -m venv --system-site-packages /opt/venv
 ENV PATH="/opt/venv/bin:${PATH}"
-# 메이저 상한 핀 (실측: langchain 1.3.2 / langchain-openai 1.2.2 / openai 2.38 / scipy 1.17).
+# 메이저 상한 핀 (실측: langchain 1.3.2 / langchain-openai 1.2.2 / openai 2.38 / scipy 1.17.1).
 # langchain 은 메이저 사이에 import 경로가 바뀌므로(과거 langchain.prompts 제거) 상한 핀 특히 중요.
+# scipy 는 1.18 부터 런타임이 numpy>=2.0 을 요구(코드가 np.long 사용 — numpy 1.x 엔 없는 alias)하므로
+# 마지막의 numpy<2 재핀과 충돌해 import 검증이 깨진다 → 1.17.x 로 상한(<1.18). 그냥 scipy<2 로 두면
+# 1.18 로 떠올라(transitive drift) 빌드 실패.
 #
 # openwakeword 0.6.0 의 wakeword 모델은 .tflite 라 tflite 백엔드가 필요한데, 0.6.0 은 의존으로
 # tflite-runtime(>=2.8) 을 강제한다 — 그런데 tflite-runtime 은 Python 3.12 wheel 이 없다(최대 3.11).
@@ -64,7 +67,7 @@ ENV PATH="/opt/venv/bin:${PATH}"
 RUN pip install --no-cache-dir --upgrade pip \
  && pip install --no-cache-dir \
       "langchain<2" "langchain-openai<2" "openai<3" \
-      pyaudio sounddevice "scipy<2" python-dotenv \
+      pyaudio sounddevice "scipy<1.18" python-dotenv \
  && pip install --no-cache-dir --no-deps "openwakeword==0.6.0" \
  && pip install --no-cache-dir \
       "onnxruntime<2,>=1.10.0" "tqdm<5,>=4.0" "scikit-learn<2,>=1" "requests<3,>=2.0" \
