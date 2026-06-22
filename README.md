@@ -81,6 +81,8 @@ docker exec -it voice-processing bash
 ros2 run voice_processing get_keyword
 ```
 
+- (선택, 단독 테스트) 노드가 뜬 채 **다른 터미널**에서 서비스를 직접 호출 → `robot_control` 없이 마이크·wakeword 동작만 확인(호출 후 wakeword 발화): `docker exec -it voice-processing bash -ic 'ros2 service call /get_keyword std_srvs/srv/Trigger "{}"'`
+
  **robot_control (host)** 
 
 ```bash

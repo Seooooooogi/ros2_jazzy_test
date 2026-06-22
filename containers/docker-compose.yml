@@ -24,6 +24,8 @@
 
 services:
   yolo-detection:
+    container_name: yolo-detection   # 고정 이름 — dev override 도 상속(`docker exec -it yolo-detection`). 미설정 시 <project>-<svc>-1.
+                                      # 트레이드오프: 같은 데몬에서 prod/dev 동시 기동·scale 불가(단일 인스턴스 전제).
     image: docker.io/${DOCKERHUB_USER:-local}/ros2-jazzy-yolo:${YOLO_TAG:-dev}
     build:
       context: ..
@@ -85,6 +87,8 @@ services:
     command: ["python3", "/opt/viz/live_detection.py"]
 
   voice-processing:
+    container_name: voice-processing   # 고정 이름 — dev override 도 상속(`docker exec -it voice-processing`). 미설정 시 <project>-<svc>-1.
+                                        # 트레이드오프: 같은 데몬에서 prod/dev 동시 기동·scale 불가(단일 인스턴스 전제).
     image: docker.io/${DOCKERHUB_USER:-local}/ros2-jazzy-voice:${VOICE_TAG:-dev}
     build:
       context: ..
