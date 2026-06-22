@@ -5,7 +5,7 @@
 # =============================================================
 #
 # shellcheck source-path=SCRIPTDIR
-# resources/colcon-build.sh — cobot2_ws colcon build (a02 step 4).
+# resources/colcon-build.sh — cobot_ws colcon build (a02 step 4).
 #
 # A single build after DSR + RealSense install (avoid duplicate builds — the DSR/RealSense child scripts do not build).
 # The unified ws src/ (mirrored from the repo by dsr-project-install.sh) contains all grouped packages; the

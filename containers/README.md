@@ -11,7 +11,7 @@
 
 `install.sh`(DSR 단계)가 통합 워크스페이스 `~/cobot_ws` 를 레포에서 복사 생성한다 — 컨테이너 dev 모드가 mount 하는 서브디렉토리도 그 안에 포함된다(별도 생성 단계 불요).
 
-- yolo = `~/cobot_ws/src/cobot2_ws/yolo_ws`(od_msg + object_detection), voice = `~/cobot_ws/src/cobot2_ws/voice_ws`(voice_processing)
+- yolo = `~/cobot_ws/src/cobot2/yolo_container`(od_msg + object_detection), voice = `~/cobot_ws/src/cobot2/voice_container`(voice_processing)
 - 이 서브디렉토리가 컨테이너 `/ws/src` 로 bind-mount 된다(서브디렉토리 자체가 패키지를 담아 중첩 src 없음).
 - mount 경로는 `YOLO_WS`/`VOICE_WS` 로 변경 가능(기본 위 경로 — `config.sh` 단일 소스).
 - **여기서 편집**한다. 레포 공유는 수정분을 레포 `cobot_ws/src/...` 로 되돌려 커밋.
@@ -43,6 +43,6 @@ voice 는 `docker exec -it voice-processing bash` → `ros2 run voice_processing
 
 ### 전제 (프로덕션과 동일)
 
-- `~/.ros2_jazzy_test/cyclonedds.xml` 렌더 완료(dds-tuning) — base compose 가 read-only mount.
+- `~/.config/cyclonedds/cyclonedds.xml` 렌더 완료(dds-tuning) — base compose 가 read-only mount.
 - voice: `.env` 의 `OPENAI_API_KEY` + 마이크(`/dev/snd`).
 - yolo: host 가 RealSense 토픽(`/camera/camera/*`)을 publish 중이어야 추론 입력 존재.

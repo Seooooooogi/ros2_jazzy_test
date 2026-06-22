@@ -24,6 +24,8 @@
 
 services:
   yolo-detection:
+    container_name: yolo-detection   # 고정 이름 — dev override 도 상속(`docker exec -it yolo-detection`). 미설정 시 <project>-<svc>-1.
+                                      # 트레이드오프: 같은 데몬에서 prod/dev 동시 기동·scale 불가(단일 인스턴스 전제).
     image: docker.io/${DOCKERHUB_USER:-local}/ros2-jazzy-yolo:${YOLO_TAG:-dev}
     build:
       context: ..
@@ -43,7 +45,7 @@ services:
       - CYCLONEDDS_URI=file:///cyclonedds.xml
     volumes:
       # host 가 dds-tuning.sh 로 렌더한 cyclonedds 설정을 컨테이너에 read-only mount.
-      - ${CYCLONEDDS_XML:-${HOME}/.ros2_jazzy_test/cyclonedds.xml}:/cyclonedds.xml:ro
+      - ${CYCLONEDDS_XML:-${HOME}/.config/cyclonedds/cyclonedds.xml}:/cyclonedds.xml:ro
     deploy:                     # GPU 예약 — 런타임 필드(빌드엔 무영향). nvidia-container-toolkit 필요(host).
       resources:
         reservations:
@@ -70,7 +72,7 @@ services:
       - CYCLONEDDS_URI=file:///cyclonedds.xml
       - PYTHONUNBUFFERED=1       # 모델 로드·추론 로그를 docker logs 에 실시간 노출.
     volumes:
-      - ${CYCLONEDDS_XML:-${HOME}/.ros2_jazzy_test/cyclonedds.xml}:/cyclonedds.xml:ro
+      - ${CYCLONEDDS_XML:-${HOME}/.config/cyclonedds/cyclonedds.xml}:/cyclonedds.xml:ro
       # `../` 는 의도적 — compose 파일이 containers/ 에 있어 volume 상대경로는 파일 기준이다.
       # repo-root 의 viz/live_detection.py 를 가리키려면 한 단계 위로 올라간다.
       - ../viz/live_detection.py:/opt/viz/live_detection.py:ro
@@ -85,6 +87,8 @@ services:
     command: ["python3", "/opt/viz/live_detection.py"]
 
   voice-processing:
+    container_name: voice-processing   # 고정 이름 — dev override 도 상속(`docker exec -it voice-processing`). 미설정 시 <project>-<svc>-1.
+                                        # 트레이드오프: 같은 데몬에서 prod/dev 동시 기동·scale 불가(단일 인스턴스 전제).
     image: docker.io/${DOCKERHUB_USER:-local}/ros2-jazzy-voice:${VOICE_TAG:-dev}
     build:
       context: ..
@@ -102,7 +106,7 @@ services:
       # 컨테이너 stdout 은 block-buffered 라 미설정 시 docker logs 에 실시간 안 뜬다.
       - PYTHONUNBUFFERED=1
     volumes:
-      - ${CYCLONEDDS_XML:-${HOME}/.ros2_jazzy_test/cyclonedds.xml}:/cyclonedds.xml:ro
+      - ${CYCLONEDDS_XML:-${HOME}/.config/cyclonedds/cyclonedds.xml}:/cyclonedds.xml:ro
       # ALSA 기본 캡처를 실제 마이크(DMIC)로 고정. 컨테이너 raw 기본값은 마이크 미연결 아날로그
       # 입력이라 무음만 잡힌다. wakeword/STT 둘 다 sounddevice 기본 장치를 쓰므로 이 매핑이 필요.
       - ./voice-processing/asound.conf:/etc/asound.conf:ro
