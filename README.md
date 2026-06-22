@@ -1,3 +1,5 @@
+# ROS2_Jazzy_Test
+
 - Ubuntu 워크스테이션을 **ROS2 Jazzy 로봇 개발 환경**으로 일관되게 셋업하는 bash 설치 스크립트 모음
 - 대상: Ubuntu 24.04 (noble) + NVIDIA GPU 워크스테이션
 
