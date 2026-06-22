@@ -19,9 +19,7 @@ bash install.sh --status   # 어느 단계까지 끝났는지 상태 출력
 bash install.sh --reset    # 설치 상태 초기화 (처음부터 다시)
 bash install.sh --help     # 도움말
 ```
-
-- 콘솔 출력: `[n/total]` 진행률 + 경고/에러만
-- 단계별 상세 출력은 레포 루트 `install_log` 에 기록 (git 미추적 · 재생성 가능)
+- 단계별 상세 출력은 레포 루트 `install_log` 에 기록
 
 ## 워크스페이스만 다시 설치
 
@@ -37,7 +35,7 @@ bash reinstall-workspace.sh --help
 
 ```bash
 source /opt/ros/jazzy/setup.bash
-source ~/cobot_ws/install/setup.bash   # overlay (dsr_bringup2 / robot_control 제공)
+source ~/cobot_ws/install/setup.bash
 set -a; source ~/ros2_jazzy_test/resources/config.sh; set +a   # RMW(CycloneDDS) / domain
 ```
 ## 로봇 기동 준비 (host)
