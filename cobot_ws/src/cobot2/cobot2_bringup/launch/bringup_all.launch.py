@@ -50,7 +50,7 @@ from launch.actions import (
 from launch.conditions import IfCondition
 from launch.event_handlers import OnShutdown
 from launch.launch_description_sources import PythonLaunchDescriptionSource
-from launch.substitutions import LaunchConfiguration
+from launch.substitutions import LaunchConfiguration, PythonExpression
 
 # 레포 소스 트리 루트 — compose 파일(containers/)과 config.sh(resources/)는 colcon 이
 # install 하지 않는 레포 자산이라 여기서 직접 참조한다. 이 launch 는 cobot2_bringup 패키지로
@@ -78,12 +78,12 @@ _COMPOSE_DOWN = (
 def generate_launch_description():
     args = [
         DeclareLaunchArgument(
-            "mode", default_value="virtual",
-            description="virtual=에뮬레이터(안전 기본) | real=실기 컨트롤러 연결",
+            "mode", default_value="virtual", choices=["virtual", "real"],
+            description="virtual=에뮬레이터(안전 기본) | real=실기 컨트롤러 연결. 그 외 값은 launch 에러(오타 차단)",
         ),
         DeclareLaunchArgument(
             "host", default_value="192.168.1.100",
-            description="로봇 IP(실기 고정 192.168.1.100). virtual 에뮬레이터에선 미사용",
+            description="실기(mode:=real) 로봇 IP. mode:=virtual 이면 무시되고 127.0.0.1(로컬 에뮬레이터)로 강제",
         ),
         DeclareLaunchArgument("port", default_value="12345", description="DSR 컨트롤러 포트(DRFL). 기본 12345"),
         DeclareLaunchArgument(
@@ -110,12 +110,23 @@ def generate_launch_description():
         "examples", "align_depth", "rs_align_depth_launch.py",
     )
 
+    # 안전 게이트(fail-safe): mode 가 정확히 'real' 일 때만 실기 IP(host 인자)를 드라이버에 넘기고,
+    # 그 외(virtual·예기치 못한 값)는 전부 loopback(127.0.0.1, 로컬 에뮬레이터)으로 강제한다.
+    # dsr_hardware2 는 받은 host 로 무조건 open_connection 하고 mode 로 접속 대상을 바꾸지 않으므로
+    # (mode 분기는 전부 연결 이후 단계), 실기 IP 를 virtual 에 넘기면 켜져있는 실 로봇에 그대로 붙는다.
+    # 'real 일 때만 실기' 화이트리스트라 mode 오타/대문자/공백 등은 실기로 새지 않고 loopback 으로 떨어진다
+    # (위 choices 가 1차로 비정상 mode 를 launch 에러로 막고, 이 식이 2차 방어).
+    robot_host = PythonExpression(
+        ["'", LaunchConfiguration("host"),
+         "' if '", LaunchConfiguration("mode"), "' == 'real' else '127.0.0.1'"]
+    )
+
     # 로봇 드라이버/컨트롤러. model/name 은 robot_control 의 하드코딩(m0609/dsr01)과 일치시켜 고정.
     robot_bringup = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(dsr_launch),
         launch_arguments={
             "mode": LaunchConfiguration("mode"),
-            "host": LaunchConfiguration("host"),
+            "host": robot_host,
             "port": LaunchConfiguration("port"),
             "model": "m0609",
             "name": "dsr01",

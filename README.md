@@ -40,13 +40,17 @@ source /opt/ros/jazzy/setup.bash
 source ~/cobot_ws/install/setup.bash
 set -a; source ~/ros2_jazzy_test/resources/config.sh; set +a   # RMW(CycloneDDS) / domain
 ```
-## 로봇 기동 준비 (host)
+## 개별 기동 (디버깅)
 
-1. **DSR 드라이버** — 실기 `mode:=real`, 에뮬레이터 `mode:=virtual`
+1. **DSR 드라이버** (`dsr_bringup2`)
 
    ```bash
+   # 실기
    ros2 launch dsr_bringup2 dsr_bringup2_rviz.launch.py \
      mode:=real host:=192.168.1.100 port:=12345 model:=m0609 name:=dsr01
+   # 에뮬레이터
+   ros2 launch dsr_bringup2 dsr_bringup2_rviz.launch.py \
+     mode:=virtual model:=m0609 name:=dsr01
    ```
 
 2. **RealSense 카메라** (host, `align_depth.enable:=true` 필수)
@@ -87,20 +91,27 @@ ros2 run voice_processing get_keyword
 docker exec -it voice-processing bash -ic 'ros2 service call /get_keyword std_srvs/srv/Trigger "{}"'
 ```
 
- **robot_control (host)** 
+## 통합 실행 — real / virtual 모드
+
+### real mode (실기)
+
+```bash
+ros2 launch cobot2_bringup bringup_all.launch.py mode:=real   # 실기 + 카메라 + production 컨테이너(노드 auto-run, 이미지 사전빌드 필요)
+ros2 run robot_control robot_control                          # 별도 터미널: pick & place
+```
+
+### virtual mode (에뮬레이터)
+
+```bash
+ros2 launch cobot2_bringup bringup_all.launch.py mode:=virtual   # 에뮬레이터 + 카메라 + production 컨테이너(노드 auto-run)
+ros2 run robot_control robot_control                             # 별도 터미널: pick & place
+```
+
+### robot_control (host)
 
 ```bash
 ros2 run robot_control robot_control
 ```
-
-> **통합 기동**
->
-> ```bash
-> ros2 launch cobot2_bringup bringup_all.launch.py mode:=real   # DSR + 카메라 + yolo/voice 컨테이너
-> ros2 run robot_control robot_control                          # 인프라 기동 후 별도 터미널
-> ```
->
-> 프로덕션 컨테이너만 따로 띄우려면: `docker compose -f ~/ros2_jazzy_test/containers/docker-compose.yml up -d` (노드 auto-run · 종료는 `... down`).
 
 ## 시각화 (선택) — 실시간 카메라 + YOLO + 음성 상태
 
