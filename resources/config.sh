@@ -136,8 +136,17 @@ export RMW_IMPLEMENTATION="${RMW_IMPLEMENTATION:-rmw_cyclonedds_cpp}"
 # Lives under the XDG config dir (not STATE_DIR) on purpose: this is runtime config read on every ROS2 run,
 # whereas STATE_DIR holds installer bookkeeping (resume state / image tars). Keeping them apart means wiping
 # the installer state dir does not delete the live DDS config.
-: "${CYCLONEDDS_XML:=${XDG_CONFIG_HOME:-${HOME}/.config}/cyclonedds/cyclonedds.xml}"
-export CYCLONEDDS_URI="${CYCLONEDDS_URI:-file://${CYCLONEDDS_XML}}"
+#
+# CYCLONEDDS_XML is the SINGLE SOURCE OF TRUTH for the path. Both the host (CYCLONEDDS_URI below) and the
+# compose services (volume mount source: `${CYCLONEDDS_XML:-.../.config/cyclonedds/cyclonedds.xml}`) derive
+# from it, so the host nodes and the file mounted into the containers are guaranteed to be the same file.
+# To point elsewhere (CI / special networks), override CYCLONEDDS_XML — never CYCLONEDDS_URI alone.
+# URI is therefore FORCE-derived (no `:-` default): a stale CYCLONEDDS_URI lingering in the shell — e.g. an
+# old `~/.bashrc` export left by a prior render path — must NOT win over the current CYCLONEDDS_XML, or the
+# host (URI) and the mounted container file (XML) silently diverge to two different files and host↔container
+# discovery breaks with no error. Exported (not bare `:=`) so compose sees it even without `set -a`.
+export CYCLONEDDS_XML="${CYCLONEDDS_XML:-${XDG_CONFIG_HOME:-${HOME}/.config}/cyclonedds/cyclonedds.xml}"
+export CYCLONEDDS_URI="file://${CYCLONEDDS_XML}"
 
 # NIC override for DDS to use (comma-separated allowed). If empty, dds-tuning.sh auto-detects all physical wired NICs
 # (excluding wireless/docker/virtual). Specify explicitly only on CI / special networks.
