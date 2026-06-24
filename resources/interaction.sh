@@ -10,10 +10,10 @@
 #
 # Bundles three concerns in one file — all on one axis: "interaction with people/credentials":
 #   1) env-load   — safely load/record .env credentials without hardcoding them in scripts (manual parsing, no `source`).
+#                   Used by openai-key-setup.sh (the final install step) — _set_env_key/_relocate_example_secret.
 #   2) confirm    — explicit consent before irreversible operations (reboot / purge / driver swap).
-#   3) resume     — pre-collect credentials at start + auto-resume the install after the step-6 reboot via GUI autostart.
+#   3) resume     — register/remove a one-shot GUI autostart entry so install.sh auto-resumes after the step-6 reboot.
 #
-# The resume section uses the env-load functions below (_load_env/_set_env_key/_relocate_example_secret).
 # Functions resolve at call time, so only definition order matters, independent of the caller's source order.
 
 # ============================================================================
@@ -164,10 +164,10 @@ confirm_or_abort_assumable() {
 }
 
 # ============================================================================
-# 3) resume — pre-collect credentials + auto-resume the install across the reboot
+# 3) resume — auto-resume the install across the step-6 reboot
 # ============================================================================
-# Pre-collect credentials (OPENAI_API_KEY) at start + auto-resume install.sh after reboot via GUI autostart.
-# Uses the env-load section above (_load_env/_require_env/_set_env_key/_relocate_example_secret).
+# Register/remove a one-shot GUI autostart entry so install.sh continues automatically after its reboot.
+# (OPENAI_API_KEY is no longer pre-collected here — it is install.sh's final step, openai-key-setup.sh.)
 #
 # Mechanism: GNOME autostart (.desktop) opens a terminal on login to run install-resume-launcher.sh
 # → relaunches install.sh. When install.sh re-enters on resume, it immediately removes
@@ -175,40 +175,6 @@ confirm_or_abort_assumable() {
 
 RESUME_AUTOSTART_DIR="${HOME}/.config/autostart"
 RESUME_AUTOSTART_FILE="${RESUME_AUTOSTART_DIR}/ros2-jazzy-install-resume.desktop"
-
-# Pre-collect OPENAI_API_KEY and write it to .env → after reboot, step12 (voice) passes non-interactively.
-# The value is not printed to screen/log (read -s). Passes through if already set.
-install_collect_secrets() {
-    local repo="$1"
-    local env_file="${repo}/.env" env_example="${repo}/.env.example"
-    if [[ ! -f "${env_file}" ]]; then
-        if [[ -f "${env_example}" ]]; then
-            cp "${env_example}" "${env_file}"; chmod 600 "${env_file}"
-            echo "[install] created .env (copied from .env.example)." >&2
-        else
-            echo "[install] neither .env nor .env.example exists — a credential template is required." >&2
-            return 1
-        fi
-    fi
-    # If the tracked file (.env.example) holds a real key, move it to .env and restore the example (secret prevention).
-    _relocate_example_secret "${env_file}" "${env_example}" OPENAI_API_KEY
-    # Key presence is judged from the .env file content (not the shell env) — containers read only .env.
-    if grep -qE '^[[:space:]]*OPENAI_API_KEY=.+' "${env_file}"; then
-        echo "[install] OPENAI_API_KEY confirmed (.env) — voice step passes non-interactively." >&2
-        return 0
-    fi
-    echo "[install] enter OPENAI_API_KEY (not shown; empty + Enter = skip):" >&2
-    printf '  OPENAI_API_KEY: ' >&2
-    local key=""
-    read -rs key; echo >&2
-    if [[ -n "${key}" ]]; then
-        _set_env_key "${env_file}" OPENAI_API_KEY "${key}"
-        echo "[install] saved to .env." >&2
-    else
-        echo "[install] skipped — will ask again at the voice step after reboot (auto-resume pauses there)." >&2
-    fi
-    return 0
-}
 
 # Register auto-resume after reboot: launch install-resume-launcher.sh from a terminal on login.
 register_resume_autostart() {
