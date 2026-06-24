@@ -36,9 +36,9 @@ usage() {
     cat <<EOF
 setup-app.sh — set up the cobot2 application (workspace + containers) on top of the base install.sh.
 
-  bash setup-app.sh                 workspace (driver + cobot2 + RealSense + colcon) + containers (toolkit + fetch)
+  bash setup-app.sh                 workspace (driver + cobot2 + RealSense + colcon) + containers (toolkit + images + OPENAI key)
   bash setup-app.sh --workspace-only   only the colcon workspace
-  bash setup-app.sh --containers-only  only the container layer (toolkit + images)
+  bash setup-app.sh --containers-only  only the container layer (toolkit + images + OPENAI key)
   bash setup-app.sh --clean         wipe the doosan-robot2 clone + build/install/log first, then rebuild
                                     (cobot2 source is NOT touched). Asks to confirm unless --yes.
   bash setup-app.sh --build         build the container images from source instead of fetching prebuilt
@@ -71,7 +71,7 @@ fi
 # progress denominator (purely for the [n/total] display).
 TOTAL=0
 [[ ${DO_WORKSPACE} -eq 1 ]] && TOTAL=$(( TOTAL + 5 ))   # cobot2-verify + dsr + rs-sdk + rs-ros + colcon
-[[ ${DO_CONTAINERS} -eq 1 ]] && TOTAL=$(( TOTAL + 2 ))  # toolkit + images
+[[ ${DO_CONTAINERS} -eq 1 ]] && TOTAL=$(( TOTAL + 3 ))  # toolkit + images + openai-key
 STEP_N=0
 step() { STEP_N=$(( STEP_N + 1 )); echo; echo "[${STEP_N}/${TOTAL}] $*"; }
 
@@ -123,6 +123,9 @@ do_containers() {
     else
         step "fetch container images (prebuilt)";     bash "${SCRIPT_DIR}/containers/fetch-images.sh"
     fi
+    # OPENAI_API_KEY → repo-root .env (the voice container mounts it). Interactive prompt; empty = skip
+    # (editable in .env later). Idempotent: passes through if the key is already set.
+    step "OPENAI_API_KEY (.env for the voice container)"; bash "${RESOURCE_DIR}/openai-key-setup.sh"
 }
 
 echo "[setup-app] workspace=${DSR_WORKSPACE} | workspace:$([[ ${DO_WORKSPACE} -eq 1 ]] && echo on || echo off) containers:$([[ ${DO_CONTAINERS} -eq 1 ]] && echo on || echo off)$([[ ${CLEAN} -eq 1 ]] && echo ' | clean')$([[ ${BUILD} -eq 1 ]] && echo ' | build')"

@@ -5,13 +5,12 @@
 # =============================================================
 #
 # shellcheck source-path=SCRIPTDIR
-# resources/openai-key-setup.sh — OPENAI_API_KEY setup (final install step, no host package install).
+# resources/openai-key-setup.sh — OPENAI_API_KEY setup (run by setup-app.sh during container setup; no host install).
 #
-# The voice/inference Python packages live only inside the application containers (set up separately by
-# setup-app.sh), which read OPENAI_API_KEY from the repo-root .env via a runtime mount. This step's sole job
-# is to put that key into .env at the end of the base install. It NEVER fail-stops: if the key is missing it
-# prompts once (hidden input), and an empty answer is fine — the user can edit .env directly later.
-# The credential value is hidden on input + never printed to console/log.
+# The voice/inference Python packages live only inside the application containers, which read OPENAI_API_KEY
+# from the repo-root .env via a runtime mount. This step's sole job is to put that key into .env. It NEVER
+# fail-stops: if the key is missing it prompts once (hidden input), and an empty answer is fine — the user can
+# edit .env directly later. The credential value is hidden on input + never printed to console/log.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

@@ -8,9 +8,10 @@
 # install.sh — single entry point for the BASE host workstation environment.
 #
 # Sets up only the base environment (kernel/NVIDIA/Docker/ROS2 + reboot + VS Code + DDS tuning + static
-# network IP + corecode relocation + OPENAI key) as a single continuous sequence ([n/11]). The cobot2
-# APPLICATION layer (DSR driver + RealSense + cobot2 colcon build + container toolkit/images) is NOT here —
-# it lives in setup-app.sh, run after this base install. This repo no longer ships the cobot2 source.
+# network IP + corecode relocation) as a single continuous sequence ([n/10]). The cobot2 APPLICATION layer
+# (DSR driver + RealSense + cobot2 colcon build + container toolkit/images + the OPENAI key the voice
+# container needs) is NOT here — it lives in setup-app.sh, run after this base install. This repo no longer
+# ships the cobot2 source.
 # Re-run safe: completed steps are auto-skipped per the state file, continuing from where it stopped.
 # To force a specific task to re-run, use --reset (full reset) or run resources/<step>.sh directly.
 #
@@ -48,7 +49,7 @@ STEPS_TOTAL="$(install_steps_total)"
 
 usage() {
     cat <<'EOF'
-install.sh — single entry point for the BASE host environment (kernel/NVIDIA/Docker/ROS2 + reboot + VS Code + DDS tuning + static network IP + corecode relocation + OPENAI key, 11 steps total)
+install.sh — single entry point for the BASE host environment (kernel/NVIDIA/Docker/ROS2 + reboot + VS Code + DDS tuning + static network IP + corecode relocation, 10 steps total)
 
   bash install.sh             run the full sequence (skip already-completed steps)
   bash install.sh --verbose   also show each step's detailed output + warnings/errors on the console
@@ -59,11 +60,11 @@ install.sh — single entry point for the BASE host environment (kernel/NVIDIA/D
 The run asks one confirm at the start, then proceeds automatically. It reboots once at step 6 and
 auto-resumes on return (login) via a one-shot GUI autostart entry — no manual re-run needed (GUI session
 required; one sudo password after return). If the autostart cannot register, re-run 'bash install.sh' after
-reboot to continue. The final step (11) prompts for OPENAI_API_KEY (empty = skip; editable in .env later).
-Completed steps are auto-skipped on any re-run.
+reboot to continue. Completed steps are auto-skipped on any re-run.
 
-The cobot2 application (DSR driver + RealSense + workspace build + containers) is set up separately by
-setup-app.sh after this base install — this repo no longer ships the cobot2 source.
+The cobot2 application (DSR driver + RealSense + workspace build + containers + the OPENAI_API_KEY the voice
+container needs) is set up separately by setup-app.sh after this base install — this repo no longer ships
+the cobot2 source.
 
 By default the console shows only the [n/total] progress + per-step elapsed time; ALL detailed output and
 any warnings/errors go to install_log in the repo root (not the console). On a step failure a one-line
@@ -227,16 +228,11 @@ run_step 9 network_static_ip bash "${RESOURCE_DIR}/network-static-ip.sh"
 # location. Idempotent — skips if already relocated or the source is gone. Runs as the regular user (no sudo).
 run_step 10 corecode_relocate bash "${RESOURCE_DIR}/corecode-relocate.sh"
 
-# --- step 11: OPENAI_API_KEY setup (final step) ---
-# Write OPENAI_API_KEY into the repo-root .env so the application container can read it later (set up via setup-app.sh).
-# Interactive prompt (empty = skip; the key can be edited into .env directly afterwards). Never fail-stops.
-# --interactive suppresses the heartbeat so the hidden-input prompt is not garbled.
-run_step --interactive 11 openai_key bash "${RESOURCE_DIR}/openai-key-setup.sh"
-
 # Clean up the resume autostart (no-op if already removed on resume entry — idempotent).
 remove_resume_autostart 2>/dev/null || true
 
 state_dump
-echo "install: all 11 steps complete — base host environment ready."
-echo "         next: place the cobot2 source at ${DSR_WORKSPACE}/src/cobot2, then run 'bash setup-app.sh' (workspace + containers)."
+echo "install: all 10 steps complete — base host environment ready."
+echo "         next: place the cobot2 source at ${DSR_WORKSPACE}/src/cobot2, then run 'bash setup-app.sh'"
+echo "               (workspace + containers; OPENAI_API_KEY is prompted there for the voice container)."
 echo "         detailed log: ${LOG_FILE}"

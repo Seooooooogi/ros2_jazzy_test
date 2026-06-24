@@ -834,9 +834,9 @@
 
 **Decision** (사용자 결정 4건):
 - **cobot2 추적 제거**: `git rm cobot_ws/src/cobot2`(88 파일) + `.gitignore` `/cobot_ws/src/`. 취득 = **현재 사용자 수동 배치**(`~/cobot_ws/src/cobot2`), 추후 git clone/tarball fetch 로 교체 예정 → `setup-app.sh::obtain_cobot2` 단일 함수로 격리(교체 시 본문만 수정).
-- **install.sh = base 환경만(11 step)**: kernel/NVIDIA/Docker/ROS2 + reboot + VS Code + DDS 튜닝 + 정적 IP + corecode + **OPENAI key(마지막 step)**. DSR 드라이버 + RealSense + colcon + 컨테이너 toolkit/fetch 는 제거.
-- **`setup-app.sh`(신규, 통합)**: 워크스페이스(`dsr-project-install.sh` → `obtain_cobot2` → `realsense-install.sh` → `colcon-build.sh`) + 컨테이너(`nvidia-container-toolkit-install.sh` → `containers/fetch-images.sh`). 플래그 `--workspace-only`/`--containers-only`/`--clean`/`--build`. `reinstall-workspace.sh` 흡수·폐기.
-- **OPENAI key = install.sh 마지막 step**: `voice-env-check.sh` → `openai-key-setup.sh` 개명. 빈 입력 skip + `.env` 수동 편집 가능(시작 pre-collection 제거).
+- **install.sh = base 환경만(10 step)**: kernel/NVIDIA/Docker/ROS2 + reboot + VS Code + DDS 튜닝 + 정적 IP + corecode. DSR 드라이버 + RealSense + colcon + 컨테이너 toolkit/fetch + OPENAI key 는 제거.
+- **`setup-app.sh`(신규, 통합)**: 워크스페이스(`obtain_cobot2` → `dsr-project-install.sh` → `realsense-install.sh` → `colcon-build.sh`) + 컨테이너(`nvidia-container-toolkit-install.sh` → `containers/fetch-images.sh` → `openai-key-setup.sh`). 플래그 `--workspace-only`/`--containers-only`/`--clean`/`--build`. `reinstall-workspace.sh` 흡수·폐기.
+- **OPENAI key = `setup-app.sh` 컨테이너 단계**(install.sh 아님): 키 소비처가 voice 컨테이너라 컨테이너 셋업과 같은 곳에서 입력. `voice-env-check.sh` → `openai-key-setup.sh` 개명. 빈 입력 skip + `.env` 수동 편집 가능(install.sh 의 시작 pre-collection·마지막 step 둘 다 제거).
 - 동반: `dsr-project-install.sh` mirror 루프 제거(순수 DSR 드라이버), `orchestrate.sh` `run_stage_a02`/`a04` 제거(total 17→11), `config.sh` `TOTAL_STEPS=11`, `interaction.sh` `install_collect_secrets` 삭제.
 
 **Consequences**:

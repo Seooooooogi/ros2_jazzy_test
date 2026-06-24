@@ -220,7 +220,7 @@ run_step() {
 #
 # Numbering rule: each stage function takes an offset and computes the run_step number = offset + local-k.
 #   install.sh: run_stage_a01 0 → (reboot=step6, inline in install.sh) → run_stage_a03 6
-#               → steps 8-11 (dds / network / corecode / openai-key, install-only, inline in install.sh).
+#               → steps 8-10 (dds / network / corecode, install-only, inline in install.sh).
 # The application layer (DSR driver + RealSense + cobot2 colcon build + containers) is no longer part of
 # install.sh — it lives in setup-app.sh (run after the base install).
 # The offset argument is kept for future partial-run/reordering flexibility — currently the only caller is install.sh.
@@ -234,9 +234,9 @@ run_step() {
 # the overall denominator in install_steps_total() follow.
 STAGE_A01_COUNT=5
 STAGE_A03_COUNT=1
-INSTALL_EXTRA_COUNT=4   # install-only: dds(8) / network(9) / corecode(10) / openai-key(11)
+INSTALL_EXTRA_COUNT=3   # install-only: dds(8) / network(9) / corecode(10)
 
-# install.sh overall denominator: a01 5 + reboot 1 + a03 1 + extra 4 = 11.
+# install.sh overall denominator: a01 5 + reboot 1 + a03 1 + extra 3 = 10.
 install_steps_total() {
     echo $(( STAGE_A01_COUNT + 1 + STAGE_A03_COUNT + INSTALL_EXTRA_COUNT ))
 }

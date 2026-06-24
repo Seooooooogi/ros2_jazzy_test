@@ -12,22 +12,24 @@
 git clone https://github.com/Seooooooogi/ros2_jazzy_test.git
 cd ros2_jazzy_test
 
-# 2) base 환경 설치 (kernel/NVIDIA/Docker/ROS2 + reboot + VS Code + DDS + 정적 IP + corecode + OPENAI key)
+# 2) base 환경 설치 (kernel/NVIDIA/Docker/ROS2 + reboot + VS Code + DDS + 정적 IP + corecode, 10 step)
 bash install.sh
 ```
 - 시작 시 confirm 1회, 이후 자동 진행
 - step 6 에서 1회 자동 reboot → 로그인 시 GUI autostart 로 자동 재개 (GUI 세션 필요, 복귀 후 sudo 비번 1회)
-- **마지막 단계(11)에서 OPENAI_API_KEY 입력** (빈 입력 = skip, 이후 `.env` 직접 편집 가능)
 - autostart 등록 불가 환경이면 reboot 후 `bash install.sh` 재실행 (완료 단계는 자동 skip)
+- OPENAI_API_KEY 는 install.sh 가 묻지 않음 — 아래 setup-app.sh(컨테이너 단계)에서 입력
 
 ```bash
 # 3) cobot2 애플리케이션 소스 배치 — 이 레포는 cobot2 를 제공하지 않는다
 mkdir -p ~/cobot_ws/src
 cp -a <cobot2-source> ~/cobot_ws/src/cobot2
 
-# 4) 애플리케이션 셋업 — 워크스페이스(DSR 드라이버 + RealSense + cobot2 colcon 빌드) + 컨테이너(toolkit + 이미지 fetch)
+# 4) 애플리케이션 셋업 — 워크스페이스(DSR 드라이버 + RealSense + cobot2 colcon 빌드)
+#    + 컨테이너(toolkit + 이미지 fetch + OPENAI_API_KEY 입력)
 bash setup-app.sh
 ```
+- 컨테이너 단계에서 OPENAI_API_KEY 입력 (빈 입력 = skip, 이후 `.env` 직접 편집 가능) — voice 컨테이너가 사용
 
 ## 추가 옵션
 
@@ -42,7 +44,7 @@ bash install.sh --help     # 도움말
 
 ```bash
 bash setup-app.sh --workspace-only   # 워크스페이스만 (DSR 드라이버 + RealSense + colcon)
-bash setup-app.sh --containers-only  # 컨테이너만 (toolkit + 이미지 fetch)
+bash setup-app.sh --containers-only  # 컨테이너만 (toolkit + 이미지 fetch + OPENAI key)
 bash setup-app.sh --clean            # doosan-robot2 재클론 + build/install/log 삭제 후 풀 빌드 (cobot2 보존)
 bash setup-app.sh --build            # 컨테이너를 fetch 대신 소스에서 빌드 (cobot2 를 repo cobot_ws/src/cobot2 에 둬야 함)
 bash setup-app.sh --help
