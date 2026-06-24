@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # =============================================================
-#  ros2_jazzy_test — ROS2 Jazzy workstation installer
+#  Cobot2 Jazzy Installer
 #  Copyright (c) 2026 ROKEY bootcamp. All rights reserved.
 # =============================================================
 #
@@ -79,7 +79,7 @@ EOF
 print_copyright() {
     cat <<'EOF'
 ============================================================
- ros2_jazzy_test — ROS2 Jazzy workstation installer
+ Cobot2 Jazzy Installer
  Copyright (c) 2026 ROKEY bootcamp. All rights reserved.
 ============================================================
 EOF
@@ -233,6 +233,8 @@ remove_resume_autostart 2>/dev/null || true
 
 state_dump
 echo "install: all 10 steps complete — base host environment ready."
-echo "         next: place the cobot2 source at ${DSR_WORKSPACE}/src/cobot2, then run 'bash setup-app.sh'"
-echo "               (workspace + containers; OPENAI_API_KEY is prompted there for the voice container)."
-echo "         detailed log: ${LOG_FILE}"
+echo "  next:"
+echo "    1) place the cobot2 source at ${DSR_WORKSPACE}/src/cobot2"
+echo "    2) run 'bash setup-app.sh' (workspace + containers)"
+echo "       OPENAI_API_KEY is prompted there for the voice container."
+echo "  detailed log: ${LOG_FILE}"
