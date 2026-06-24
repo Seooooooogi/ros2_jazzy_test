@@ -101,7 +101,7 @@ docker compose -f ~/ros2_jazzy_test/containers/docker-compose.yml up -d voice-pr
 **robot_control**
 
 ```bash
-ros2 run robot_control robot_control   # 실물 로봇이 존재할 경우에만
+ros2 run robot_control robot_control   # real / virtual(에뮬레이터) 모두 동작 — RealSense 연결 필요 (virtual 은 실물 로봇 불필요)
 ```
 
 ### 2) 통합 기동
@@ -109,5 +109,5 @@ ros2 run robot_control robot_control   # 실물 로봇이 존재할 경우에만
 ```bash
 # 로봇 드라이버 + 카메라 + 컨테이너 (Ctrl+C 로 일괄 정리). 실기=mode:=real / 에뮬레이터=mode:=virtual
 bash ~/ros2_jazzy_test/containers/bringup.sh mode:=real
-ros2 run robot_control robot_control   # 실물 로봇이 존재할 경우에만
+ros2 run robot_control robot_control   # real / virtual(에뮬레이터) 모두 동작 — RealSense 연결 필요 (virtual 은 실물 로봇 불필요)
 ```
