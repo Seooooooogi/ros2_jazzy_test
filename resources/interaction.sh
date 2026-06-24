@@ -5,15 +5,15 @@
 # =============================================================
 #
 # shellcheck shell=bash
-# resources/interaction.sh — install UX/secret helpers (.env loader + confirm prompt + unattended install).
+# resources/interaction.sh — install UX/secret helpers (.env loader + confirm prompt + resume autostart).
 # Source-only library — no `set -euo` here (the calling entry point owns shell options).
 #
 # Bundles three concerns in one file — all on one axis: "interaction with people/credentials":
 #   1) env-load   — safely load/record .env credentials without hardcoding them in scripts (manual parsing, no `source`).
 #   2) confirm    — explicit consent before irreversible operations (reboot / purge / driver swap).
-#   3) unattended — unattended install (--unattended): pre-collect credentials + auto-resume after reboot via GUI autostart.
+#   3) resume     — pre-collect credentials at start + auto-resume the install after the step-6 reboot via GUI autostart.
 #
-# The unattended section uses the env-load functions below (_load_env/_set_env_key/_relocate_example_secret).
+# The resume section uses the env-load functions below (_load_env/_set_env_key/_relocate_example_secret).
 # Functions resolve at call time, so only definition order matters, independent of the caller's source order.
 
 # ============================================================================
@@ -164,29 +164,29 @@ confirm_or_abort_assumable() {
 }
 
 # ============================================================================
-# 3) unattended — unattended install (--unattended) helpers
+# 3) resume — pre-collect credentials + auto-resume the install across the reboot
 # ============================================================================
 # Pre-collect credentials (OPENAI_API_KEY) at start + auto-resume install.sh after reboot via GUI autostart.
 # Uses the env-load section above (_load_env/_require_env/_set_env_key/_relocate_example_secret).
 #
 # Mechanism: GNOME autostart (.desktop) opens a terminal on login to run install-resume-launcher.sh
-# → relaunches install.sh --unattended. When install.sh re-enters on resume, it immediately removes
+# → relaunches install.sh. When install.sh re-enters on resume, it immediately removes
 # the autostart (one-shot) so it does not re-fire on every login.
 
-UNATTENDED_AUTOSTART_DIR="${HOME}/.config/autostart"
-UNATTENDED_AUTOSTART_FILE="${UNATTENDED_AUTOSTART_DIR}/ros2-jazzy-install-resume.desktop"
+RESUME_AUTOSTART_DIR="${HOME}/.config/autostart"
+RESUME_AUTOSTART_FILE="${RESUME_AUTOSTART_DIR}/ros2-jazzy-install-resume.desktop"
 
 # Pre-collect OPENAI_API_KEY and write it to .env → after reboot, step12 (voice) passes non-interactively.
 # The value is not printed to screen/log (read -s). Passes through if already set.
-unattended_collect_secrets() {
+install_collect_secrets() {
     local repo="$1"
     local env_file="${repo}/.env" env_example="${repo}/.env.example"
     if [[ ! -f "${env_file}" ]]; then
         if [[ -f "${env_example}" ]]; then
             cp "${env_example}" "${env_file}"; chmod 600 "${env_file}"
-            echo "[unattended] created .env (copied from .env.example)." >&2
+            echo "[install] created .env (copied from .env.example)." >&2
         else
-            echo "[unattended] neither .env nor .env.example exists — a credential template is required." >&2
+            echo "[install] neither .env nor .env.example exists — a credential template is required." >&2
             return 1
         fi
     fi
@@ -194,24 +194,24 @@ unattended_collect_secrets() {
     _relocate_example_secret "${env_file}" "${env_example}" OPENAI_API_KEY
     # Key presence is judged from the .env file content (not the shell env) — containers read only .env.
     if grep -qE '^[[:space:]]*OPENAI_API_KEY=.+' "${env_file}"; then
-        echo "[unattended] OPENAI_API_KEY confirmed (.env) — voice step passes non-interactively." >&2
+        echo "[install] OPENAI_API_KEY confirmed (.env) — voice step passes non-interactively." >&2
         return 0
     fi
-    echo "[unattended] enter OPENAI_API_KEY (not shown; empty + Enter = skip):" >&2
+    echo "[install] enter OPENAI_API_KEY (not shown; empty + Enter = skip):" >&2
     printf '  OPENAI_API_KEY: ' >&2
     local key=""
     read -rs key; echo >&2
     if [[ -n "${key}" ]]; then
         _set_env_key "${env_file}" OPENAI_API_KEY "${key}"
-        echo "[unattended] saved to .env." >&2
+        echo "[install] saved to .env." >&2
     else
-        echo "[unattended] skipped — will ask again at the voice step after reboot (auto-resume pauses there)." >&2
+        echo "[install] skipped — will ask again at the voice step after reboot (auto-resume pauses there)." >&2
     fi
     return 0
 }
 
 # Register auto-resume after reboot: launch install-resume-launcher.sh from a terminal on login.
-unattended_register_resume() {
+register_resume_autostart() {
     local repo="$1"
     local launcher="${repo}/resources/install-resume-launcher.sh"
     local exec_line=""
@@ -220,12 +220,12 @@ unattended_register_resume() {
     elif command -v x-terminal-emulator >/dev/null; then
         exec_line="x-terminal-emulator -e bash \"${launcher}\""
     else
-        echo "[unattended] no terminal emulator — auto-resume not possible." >&2
-        echo "             after reboot, run 'bash install.sh --unattended' manually." >&2
+        echo "[install] no terminal emulator — auto-resume not possible." >&2
+        echo "             after reboot, run 'bash install.sh' manually." >&2
         return 0
     fi
-    mkdir -p "${UNATTENDED_AUTOSTART_DIR}"
-    cat > "${UNATTENDED_AUTOSTART_FILE}" <<EOF
+    mkdir -p "${RESUME_AUTOSTART_DIR}"
+    cat > "${RESUME_AUTOSTART_FILE}" <<EOF
 [Desktop Entry]
 Type=Application
 Name=ros2_jazzy_test install resume
@@ -234,14 +234,14 @@ Exec=${exec_line}
 Terminal=false
 X-GNOME-Autostart-enabled=true
 EOF
-    echo "[unattended] registered auto-resume after reboot: ${UNATTENDED_AUTOSTART_FILE}" >&2
+    echo "[install] registered auto-resume after reboot: ${RESUME_AUTOSTART_FILE}" >&2
 }
 
 # Remove the autostart entry (idempotent) — called on resume entry (to guarantee one-shot) and on completion.
-unattended_remove_resume() {
-    if [[ -f "${UNATTENDED_AUTOSTART_FILE}" ]]; then
-        rm -f "${UNATTENDED_AUTOSTART_FILE}"
-        echo "[unattended] removed auto-resume entry: ${UNATTENDED_AUTOSTART_FILE}" >&2
+remove_resume_autostart() {
+    if [[ -f "${RESUME_AUTOSTART_FILE}" ]]; then
+        rm -f "${RESUME_AUTOSTART_FILE}"
+        echo "[install] removed auto-resume entry: ${RESUME_AUTOSTART_FILE}" >&2
     fi
     return 0
 }

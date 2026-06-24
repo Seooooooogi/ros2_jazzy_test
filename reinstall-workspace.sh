@@ -10,7 +10,7 @@
 #   resources/dsr-project-install.sh  — clone doosan-robot2 (fork) + mirror repo grouped src + DSR deps + emulator
 #   resources/colcon-build.sh         — rosdep + colcon build (container-only packages --packages-skip)
 # Both source config.sh themselves and are independent of install.sh's step/state machinery, so calling them
-# directly is safe. The repo grouped source (cobot1/cobot2) is always re-mirrored fresh (delete-then-copy in
+# directly is safe. The repo grouped source (cobot2) is always re-mirrored fresh (delete-then-copy in
 # dsr-project-install.sh), so a rename or source edit in the repo propagates to ~/cobot_ws on every run.
 #
 # Modes:

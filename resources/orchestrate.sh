@@ -192,7 +192,8 @@ run_step() {
         wait "$teepid" 2>/dev/null || true
     else
         if [[ -t 2 && "$interactive" -eq 0 ]]; then
-            echo "  (detailed log: tail -f ${log})" >&2
+            # No per-step log hint here — the heartbeat shows liveness, and the log path is surfaced only
+            # on failure (step_end_fail below) or once at the very end of install.sh. Keeps the console clean.
             _step_heartbeat "${name}" & hbpid=$!
         fi
         "$@" >>"$log" 2>&1 || rc=$?
@@ -223,9 +224,9 @@ run_step() {
 # The offset argument is kept for future partial-run/reordering flexibility — currently the only caller is install.sh.
 # The state key (name) is independent of offset/number — no effect on resume compatibility (same name → same skip).
 #
-# reboot (step6) is not placed in this section: install.sh's reboot wrapper owns the messaging/UNATTENDED
-# branch/exit-vs-continue, which differs from run_step's generic step framing.
-# install.sh owns reboot inline (behavior-preserving first).
+# reboot (step6) is not placed in this section: install.sh's reboot wrapper owns the messaging and the
+# exit-vs-continue (it terminates the process), which differs from run_step's generic step framing.
+# install.sh owns reboot inline.
 
 # Per-stage step count (excluding reboot). When adding a step, updating only here makes
 # the overall denominator in install_steps_total() follow.
