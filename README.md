@@ -11,8 +11,11 @@ git clone https://github.com/Seooooooogi/ros2_jazzy_test.git
 cd ros2_jazzy_test
 
 # 2) 전체 설치
-bash install.sh --unattended
+bash install.sh
 ```
+- 시작 시 OPENAI_API_KEY + confirm 1회 입력, 이후 자동 진행
+- step 6 에서 1회 자동 reboot → 로그인 시 GUI autostart 로 자동 재개 (GUI 세션 필요, 복귀 후 sudo 비번 1회)
+- autostart 등록 불가 환경이면 reboot 후 `bash install.sh` 재실행 (완료 단계는 자동 skip)
 
 ## 추가 옵션
 

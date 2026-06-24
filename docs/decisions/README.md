@@ -720,6 +720,11 @@
 - 완전 무인(복귀 후 sudo 비번도 제거)이 필요하면 → 임시 NOPASSWD sudoers + systemd 부팅 서비스(대안 A) 재검토(보안 트레이드오프·cleanup 신중).
 - DHCP/복수 로봇 LAN 동시 구성, headless 서버 무인이 필요하면 → 해당 케이스 별도 설계.
 
+**Amendment (2026-06-24)**:
+- **`--unattended` 플래그 제거 — 무인 동작을 단일 기본 동작으로 승격**. opt-in 수동 모드와 무인 모드의 실질 차이가 사라져 분기 유지 비용만 남음. 이제 `bash install.sh` 가 항상 시작 confirm/키수집 + 자동 reboot + GUI autostart 자동 재개를 수행. tty 시작 confirm 이 reboot 동의를 포괄(비대화형 첫 실행은 경고 후 자동 진행 — 기존 무인 비-tty 동작과 동일).
+- 헬퍼 명명 중립화: `unattended_*` → `install_collect_secrets`/`register_resume_autostart`/`remove_resume_autostart`(별도 "모드" 아님). 실제 위치는 `resources/interaction.sh`(709 줄의 `resources/unattended.sh` 표기는 번들 후 부정확 — 정정).
+- **자동 재개 gnome-terminal 입력 데드락 수정**: sudo keepalive 의 `sleep` 자식이 서브셸 kill 후 스크립트 process group 에 orphan 으로 남아, 재개 터미널의 `exec bash` 전환 후 foreground pgroup 을 점유해 입력 차단(최대 ~60s). keepalive 서브셸이 자체 TERM/EXIT trap 으로 in-flight `sleep` 을 정리하도록 변경(같은 session 유지 → sudo `tty_tickets` keepalive 보존). launcher 는 `exec bash` 직전 `stty sane` 복원.
+
 ---
 
 ### ADR-022: a01–a04 스테이지 스크립트 폐기 — install.sh 단일 진입점 (ADR-011 부분 supersede, 2026-06-12)

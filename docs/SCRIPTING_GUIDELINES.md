@@ -7,7 +7,7 @@
 | 구분 | `set -euo pipefail` | 예시 |
 |---|---|---|
 | **실행 진입점** (직접 `bash X.sh`) | **필수** (shebang 다음 줄) | `install.sh`, `a0N`, `resources/` 설치 본문(kernel-baseline, docker-install …) |
-| **source 전용 라이브러리** (`source X.sh`) | **두지 않는다** | `config.sh`, `orchestrate.sh`(state + run_step + step 정의), `interaction.sh`(env-load + confirm + unattended), `activate.sh`, `apt-repo.sh` |
+| **source 전용 라이브러리** (`source X.sh`) | **두지 않는다** | `config.sh`, `orchestrate.sh`(state + run_step + step 정의), `interaction.sh`(env-load + confirm + resume autostart), `activate.sh`, `apt-repo.sh` |
 
 - sourced 파일에 `set -e` 를 넣으면 **호출자 셸 옵션을 오염**시킨다(호출 셸 전체가 errexit). 셸 옵션은 호출 진입점이 소유한다.
 - source 전용 라이브러리는 헤더 주석에 `# source 전용 라이브러리 — set -euo 를 여기 두지 않는다(호출 진입점이 셸 옵션을 소유).` 한 줄 명시.

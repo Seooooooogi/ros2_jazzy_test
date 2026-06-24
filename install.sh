@@ -19,8 +19,9 @@
 #   bash install.sh --reset    reset the state (after confirm — re-run all steps)
 #   bash install.sh --help
 #
-# After reboot (step 6), running 'bash install.sh' again continues from step 7.
-# (With --unattended, reboot/resume are automatic so no manual re-run is needed — assumes a GUI session.)
+# The install reboots once at step 6 to apply the driver/docker group, then auto-resumes on return
+# (login) via a one-shot GUI autostart entry — no manual re-run needed (assumes a GUI session). If the
+# autostart cannot register (no terminal emulator), re-run 'bash install.sh' after reboot to continue from step 7.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -34,7 +35,7 @@ if [[ "$(id -u)" -eq 0 ]]; then
     exit 1
 fi
 
-# step engine (state + run_step + step definitions) + install UX (confirm + env-load + unattended).
+# step engine (state + run_step + step definitions) + install UX (confirm + env-load + auto-resume).
 # shellcheck source=resources/config.sh
 source "${RESOURCE_DIR}/config.sh"
 # shellcheck source=resources/orchestrate.sh
@@ -49,27 +50,26 @@ usage() {
 install.sh — single entry point for host setup (a01~a04 + DDS tuning + NVIDIA Container Toolkit + container images + static network IP + corecode relocation, 17 steps total)
 
   bash install.sh             run the full sequence (skip already-completed steps)
-  bash install.sh --unattended  unattended install — collect OPENAI_API_KEY + one confirm at start, then
-                                proceed automatically up to reboot; auto-resume on return (GUI session required, one sudo password after return)
   bash install.sh --verbose   also show each step's detailed output + warnings/errors on the console
   bash install.sh --status    print the current progress (state)
   bash install.sh --reset     reset the state (after confirm — re-run all steps)
   bash install.sh --help      this help
 
+The run collects OPENAI_API_KEY + asks one confirm at the start, then proceeds automatically. It reboots
+once at step 6 and auto-resumes on return (login) via a one-shot GUI autostart entry — no manual re-run
+needed (GUI session required; one sudo password after return). If the autostart cannot register, re-run
+'bash install.sh' after reboot to continue. Completed steps are auto-skipped on any re-run.
+
 By default the console shows only the [n/total] progress + per-step elapsed time; ALL detailed output and
 any warnings/errors go to install_log in the repo root (not the console). On a step failure a one-line
 [FAIL] + the log path is shown. Use --verbose or the VERBOSE=1 environment variable to also show detailed
 output on the console.
-
-After reboot (step 6), running 'bash install.sh' again continues from step 7.
-Completed steps are auto-skipped, so re-running the same command skips the finished steps.
 EOF
 }
 
-# Project copyright banner — printed to the console at the start of every actual install run, both interactive
-# and unattended (including the auto-resumed unattended terminal after the step-6 reboot), so the attribution
-# is always visible. Goes to stdout unconditionally; it is not a per-step output, so the log-routing/quiet
-# console behavior does not apply to it.
+# Project copyright banner — printed to the console at the start of every actual install run, including the
+# auto-resumed terminal after the step-6 reboot, so the attribution is always visible. Goes to stdout
+# unconditionally; it is not a per-step output, so the log-routing/quiet console behavior does not apply to it.
 print_copyright() {
     cat <<'EOF'
 ============================================================
@@ -82,16 +82,14 @@ EOF
 # --verbose/-v is orthogonal to the subcommands, so split it out first into VERBOSE and keep the rest.
 # run_step in orchestrate.sh reads VERBOSE in the same shell (export is for the child resource scripts).
 VERBOSE="${VERBOSE:-0}"
-UNATTENDED="${UNATTENDED:-0}"
 __args=()
 for __a in "$@"; do
     case "$__a" in
         -v|--verbose) VERBOSE=1 ;;
-        --unattended) UNATTENDED=1 ;;
         *) __args+=("$__a") ;;
     esac
 done
-export VERBOSE UNATTENDED
+export VERBOSE
 # expansion guard against the empty-array + set -u → unbound-var error (bash<4.4). Do not simplify to "${__args[@]}".
 set -- "${__args[@]+"${__args[@]}"}"
 
@@ -115,7 +113,7 @@ esac
 mkdir -p "$(dirname "$LOG_FILE")"
 
 # Show the copyright banner for an actual install run (after the utility subcommands above have exited).
-# Unconditional → it appears in interactive runs and unattended runs alike.
+# Unconditional → it appears on the first run and on the auto-resumed terminal after the reboot alike.
 print_copyright
 
 # --- preflight: prevent the accident of running halfway in a wrong environment then failing ---
@@ -135,10 +133,20 @@ if ! sudo -v; then
 fi
 
 # sudo keepalive — refresh the sudo cache every 60s during long steps (driver/colcon) to avoid re-entry.
-# Keeps the unattended-resume flow (one sudo password after return) from re-prompting until the end. Cleaned up on exit.
+# Keeps the auto-resume flow (one sudo password after return) from re-prompting until the end. Cleaned up on exit.
 # set +e inside the subshell — so the keepalive does not die silently on a transient sudo -n failure or sleep interrupt.
-# It runs only while the parent is alive, and is cleaned up by the EXIT trap below when the parent exits.
-( set +e; while kill -0 "$$" 2>/dev/null; do sudo -n true 2>/dev/null; sleep 60; done ) &
+# It must stay in this script's session so `sudo -n` refreshes the SAME tty timestamp (tty_tickets) the foreground
+# script uses — a detached (setsid) session would warm a different ticket and not actually keep it alive.
+# The subshell traps its own teardown and kills the in-flight `sleep`: otherwise the EXIT trap below kills only the
+# subshell, orphaning the `sleep` child into this script's process group. In the GUI auto-resume terminal that orphan
+# would sit in the terminal's foreground process group and block input after the launcher hands off to `exec bash`.
+( set +e
+  trap 'kill "${_ka_sleep:-0}" 2>/dev/null; exit 0' TERM EXIT
+  while kill -0 "$$" 2>/dev/null; do
+      sudo -n true 2>/dev/null
+      sleep 60 & _ka_sleep=$!
+      wait "${_ka_sleep}"
+  done ) &
 _SUDO_KA_PID=$!
 trap 'kill "${_SUDO_KA_PID}" 2>/dev/null || true' EXIT
 
@@ -146,23 +154,21 @@ trap 'kill "${_SUDO_KA_PID}" 2>/dev/null || true' EXIT
 # One-line console notice + log path only — the failure detail itself is in the log (console stays clean).
 trap 'echo "[install] failed: line $LINENO — see ${LOG_FILE}" >&2' ERR
 
-# --- unattended install (--unattended) pre/resume handling ----------------------------
+# --- pre-collect credentials + register auto-resume across the step-6 reboot ----------------------------
 # First run (before reboot): pre-collect OPENAI_API_KEY + one proceed-confirm + register auto-resume on return.
 #   → after the step-6 reboot, step12 (voice) passes non-interactively since the key already exists, and reboot is not re-confirmed.
 # Resume (after reboot): remove the autostart entry immediately (one-shot — prevents re-firing on every login). sudo is entered once
 #   in this terminal via the sudo -v above.
-if [[ "${UNATTENDED}" == "1" ]]; then
-    if step_should_skip a01_reboot; then
-        unattended_remove_resume
-    elif [[ -t 0 ]]; then
-        unattended_collect_secrets "${SCRIPT_DIR}" || true
-        confirm_or_abort "Proceeding with the unattended install — it reboots once midway and auto-continues on return (login) (terminal auto-opens, one sudo password). Continue?"
-        unattended_register_resume "${SCRIPT_DIR}"
-    else
-        # Advisory warning → log only (console stays clean). Surfaces in install_log for diagnosis.
-        { echo "[install] warning: --unattended but a non-interactive shell — cannot register auto-resume."
-          echo "          Run it in a GUI session or re-run manually after reboot."; } >>"$LOG_FILE"
-    fi
+if step_should_skip a01_reboot; then
+    remove_resume_autostart
+elif [[ -t 0 ]]; then
+    install_collect_secrets "${SCRIPT_DIR}" || true
+    confirm_or_abort "The install reboots once midway and auto-continues on return (login) (terminal auto-opens, one sudo password). Continue?"
+    register_resume_autostart "${SCRIPT_DIR}"
+else
+    # Advisory warning → log only (console stays clean). Surfaces in install_log for diagnosis.
+    { echo "[install] warning: non-interactive shell — cannot register auto-resume."
+      echo "          Run it in a GUI session, or re-run 'bash install.sh' manually after reboot."; } >>"$LOG_FILE"
 fi
 
 # --- steps 1~5: prerequisites (a01: kernel baseline / NVIDIA / Docker / ROS2 jazzy / extras) ---
@@ -178,18 +184,12 @@ run_stage_a01 0
 # The skip decision looks only at DONE, so the next run asks for reboot again — intended, since consent was not yet given.
 if ! step_should_skip a01_reboot; then
     step_begin 6 "${STEPS_TOTAL}" a01_reboot
-    if [[ "${UNATTENDED}" == "1" ]]; then
-        echo "[install] unattended mode: rebooting automatically (consent given at start applies)."
-    else
-        confirm_or_abort "Prerequisites (kernel/driver/Docker/ROS2) complete. Reboot now to apply the driver and docker group?"
-    fi
+    # Reboot consent was given by the start confirm above (a tty run) — do not re-ask. A non-interactive
+    # first run skipped that confirm with a logged warning and proceeds automatically here.
+    echo "[install] prerequisites (kernel/driver/Docker/ROS2) complete — rebooting to apply the driver and docker group."
     step_end_ok
     echo
-    if [[ "${UNATTENDED}" == "1" ]]; then
-        echo ">>> Rebooting. It auto-resumes on return (login) — no manual run needed."
-    else
-        echo ">>> Rebooting. After return, running 'bash install.sh' again continues from step 7."
-    fi
+    echo ">>> Rebooting. It auto-resumes on return (login) — no manual run needed."
     sudo reboot
 fi
 
@@ -236,7 +236,7 @@ run_step 15 container_fetch bash "${SCRIPT_DIR}/containers/fetch-images.sh"
 
 # --- step 16: static ethernet IP (robot LAN: .1 gripper / .100 robot / .30 host) ---
 # After all installs, set the wired NIC to the robot-LAN static IP (nmcli). No gateway/DNS → wifi
-# internet stays. Idempotent. No confirm (reversible; the unattended mode covers it with the single consent at start).
+# internet stays. Idempotent. No confirm (reversible; the single consent at the start of the run covers it).
 # (The unified host workspace — including the container dev bind-mount subdirs (cobot2/yolo_container, voice_container) —
 #  is created earlier by the DSR step's dsr-project-install.sh, so no separate dev-workspace step is needed.)
 run_step 16 network_static_ip bash "${RESOURCE_DIR}/network-static-ip.sh"
@@ -247,8 +247,9 @@ run_step 16 network_static_ip bash "${RESOURCE_DIR}/network-static-ip.sh"
 # is gone (and re-run safe via the state file). Runs as the regular user → no sudo needed.
 run_step 17 corecode_relocate bash "${RESOURCE_DIR}/corecode-relocate.sh"
 
-# Clean up the unattended-resume autostart (no-op if already removed on resume entry — idempotent).
-unattended_remove_resume 2>/dev/null || true
+# Clean up the resume autostart (no-op if already removed on resume entry — idempotent).
+remove_resume_autostart 2>/dev/null || true
 
 state_dump
 echo "install: all 17 steps complete — host setup + container images + static network IP + corecode relocation done."
+echo "         detailed log: ${LOG_FILE}"
