@@ -96,6 +96,7 @@ docker compose -f ~/ros2_jazzy_test/containers/docker-compose.yml up -d yolo-det
 
 ```bash
 docker compose -f ~/ros2_jazzy_test/containers/docker-compose.yml up -d voice-processing
+docker logs -f voice-processing   # 로그 보기 (Ctrl+C 로 빠져나와도 컨테이너는 계속 실행)
 ```
 
 **robot_control**
