@@ -819,3 +819,31 @@
 
 **Reopen 조건**:
 - 없음(naming 안정화). 추가 grouping 도입 시 동일 무접미사 컨벤션 유지.
+
+---
+
+### ADR-026: cobot2 소스 외부화 — install.sh = base 인스톨러 / setup-app.sh = 애플리케이션 셋업 (2026-06-24)
+
+**Date**: 2026-06-24
+
+**Status**: ADR-024/025 의 "repo 가 cobot2 grouped src 를 제공·미러" 전제를 부분 supersede.
+
+**Context**:
+- cobot2 애플리케이션 코드를 이 레포에서 직접 제공하지 않기로 결정 — 공개/공유 인스톨러에 앱 소스를 싣지 않는다.
+- 기존: `install.sh` 17-step 이 base 환경 + cobot2 mirror/colcon 빌드 + 컨테이너 + 키를 한 시퀀스에 처리(cobot2 가 repo 안에 있어 self-contained). 앱 코드 분리 요구로 이 결합이 깨짐.
+
+**Decision** (사용자 결정 4건):
+- **cobot2 추적 제거**: `git rm cobot_ws/src/cobot2`(88 파일) + `.gitignore` `/cobot_ws/src/`. 취득 = **현재 사용자 수동 배치**(`~/cobot_ws/src/cobot2`), 추후 git clone/tarball fetch 로 교체 예정 → `setup-app.sh::obtain_cobot2` 단일 함수로 격리(교체 시 본문만 수정).
+- **install.sh = base 환경만(11 step)**: kernel/NVIDIA/Docker/ROS2 + reboot + VS Code + DDS 튜닝 + 정적 IP + corecode + **OPENAI key(마지막 step)**. DSR 드라이버 + RealSense + colcon + 컨테이너 toolkit/fetch 는 제거.
+- **`setup-app.sh`(신규, 통합)**: 워크스페이스(`dsr-project-install.sh` → `obtain_cobot2` → `realsense-install.sh` → `colcon-build.sh`) + 컨테이너(`nvidia-container-toolkit-install.sh` → `containers/fetch-images.sh`). 플래그 `--workspace-only`/`--containers-only`/`--clean`/`--build`. `reinstall-workspace.sh` 흡수·폐기.
+- **OPENAI key = install.sh 마지막 step**: `voice-env-check.sh` → `openai-key-setup.sh` 개명. 빈 입력 skip + `.env` 수동 편집 가능(시작 pre-collection 제거).
+- 동반: `dsr-project-install.sh` mirror 루프 제거(순수 DSR 드라이버), `orchestrate.sh` `run_stage_a02`/`a04` 제거(total 17→11), `config.sh` `TOTAL_STEPS=11`, `interaction.sh` `install_collect_secrets` 삭제.
+
+**Consequences**:
+- 레포 단독으로 cobot2 빌드/검증 불가 — cobot2 배치 후에만 성립. "각 Phase 검증 = cobot2 동작" 원칙은 사용자 배치를 전제로 한다.
+- 컨테이너 fetch(프리빌트)는 cobot2 소스 불요. `--build` 는 producer 가 cobot2 를 repo `cobot_ws/src/cobot2`(Docker build context) 에 둬야 동작.
+- 기설치 머신: 런타임 `~/cobot_ws/src/cobot2` 는 레포 밖이라 영향 없음(레포의 중복본만 제거).
+- 백업: `~/ros2_jazzy_test_backup_20260624_125202.tar.gz`(작업 전 전체 스냅샷).
+
+**Reopen 조건**:
+- cobot2 취득을 자동화(별도 git repo clone / tarball fetch)할 때 → `obtain_cobot2` 본문 교체(설계상 격리). 소스 위치·핀 방식은 그때 별도 결정.

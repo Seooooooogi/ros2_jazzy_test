@@ -6,6 +6,8 @@ ROS2 Humble installer → ROS2 Jazzy installer 마이그레이션. Ubuntu + NVID
 
 **host Python 책임 (ADR-008, 2026-05-27)**: host venv 폐기. application Python 패키지 (PyTorch / ultralytics / langchain / openai 등) 는 모두 Phase 4 컨테이너 안. host 는 system Python (apt, ROS2 bindings) + colcon 워크스페이스만 책임. host 에서 `pip install` 자체 안 함 → PEP 668 우회 불필요.
 
+**cobot2 외부화 (사용자 결정 2026-06-24)**: cobot2 애플리케이션 소스는 이 레포에서 제공하지 않는다(추적 제외). 레포 = **base 환경 인스톨러**(`install.sh`, 11 step) + **애플리케이션 셋업**(`setup-app.sh` — 워크스페이스 + 컨테이너). cobot2 는 사용자가 `~/cobot_ws/src/cobot2` 에 직접 배치(취득 방식은 추후 git clone/fetch 로 교체 예정 — `setup-app.sh::obtain_cobot2` 단일 함수로 격리). OPENAI key 입력은 install.sh 마지막 step.
+
 ## Hard Rules (never bend)
 
 1. **ROS distro 단일 진실 소스** — `humble` / `jazzy` 같은 distro 문자열을 스크립트마다 박지 않는다. 단일 환경변수 `ROS_DISTRO` 또는 `resources/config.sh` 같은 공통 파일에서 1회 정의하고 모든 스크립트가 참조. 다음 distro 마이그레이션 (jazzy → kilted/lyrical) 때 같은 작업을 반복하지 않기 위한 안전장치.
@@ -33,9 +35,10 @@ ROS2 Humble installer → ROS2 Jazzy installer 마이그레이션. Ubuntu + NVID
 
 ## Quick Ref
 
-- Entry (권장): `bash install.sh` — a01~a04 전체를 단일 시퀀스(`[n/17]`)로 실행. 시작 시 OPENAI_API_KEY+confirm 1회, 이후 자동 진행. step 6 에서 1회 자동 reboot → 복귀(로그인) 시 GUI autostart 로 자동 재개(GUI 세션 필요, 복귀 후 sudo 비번 1회). autostart 등록 불가 환경이면 reboot 후 `bash install.sh` 재실행(완료 step 은 자동 skip). 옵션: `--status`(상태), `--reset`(state 초기화), `--verbose`/`VERBOSE=1`(콘솔 상세 출력), `--help`. 콘솔엔 `[n/total]` 진행률만 남고(경고/에러 포함 각 step 의 상세 출력 apt/pip/colcon 은 레포 루트 `install_log` append-only 로 빠진다). 단계 실패 시 콘솔엔 한 줄 `[FAIL]` + 로그 경로만, 설치 종료 시 로그 경로 1회.
-- 단계 재실행: 별도 스테이지 진입점 없음 — `bash install.sh` 재실행 시 완료 step 은 state 기준 자동 skip 되어 끊긴 지점부터 이어진다. 특정 작업만 강제 재실행은 `--reset`(전체 초기화) 또는 해당 `resources/<step>.sh` 직접 실행. (구 `a01-a04` 스테이지 스크립트는 resumable 단일 진입점 install.sh 로 흡수·폐기 — state 기반 skip 이라 per-stage 강제 재실행은 본래도 불가했음.)
-- 순차 의미: `a01 → reboot → a02 → a03 → a04`(state key 네임스페이스 = 내부 단계 그룹). RealSense 는 a02 에 포함, humble 원본 realsense 스크립트는 `backup/` 보존. `run_step` 은 `resources/orchestrate.sh`(state + run_step + step 정의 통합 엔진)로 중앙화(install.sh 가 `STEPS_TOTAL` 만 설정).
+- Entry (권장): `bash install.sh` — **base 환경**만 단일 시퀀스(`[n/11]`)로 실행(kernel/NVIDIA/Docker/ROS2 + reboot + VS Code + DDS + 정적 IP + corecode + OPENAI key). 시작 시 confirm 1회, 이후 자동 진행. step 6 에서 1회 자동 reboot → 복귀(로그인) 시 GUI autostart 로 자동 재개(GUI 세션 필요, 복귀 후 sudo 비번 1회). **마지막 step 11 = OPENAI_API_KEY 입력**(빈 입력 skip, 이후 `.env` 편집 가능). autostart 등록 불가 환경이면 reboot 후 `bash install.sh` 재실행(완료 step 자동 skip). 옵션: `--status`/`--reset`/`--verbose`(`VERBOSE=1`)/`--help`. 콘솔엔 `[n/total]` 진행률만(상세 출력은 레포 루트 `install_log`). 단계 실패 시 `[FAIL]` + 로그 경로, 종료 시 로그 경로 1회.
+- 애플리케이션 셋업: `bash setup-app.sh` — 워크스페이스(`obtain_cobot2`(수동 배치 검증) → `dsr-project-install.sh`(DSR 드라이버) → `realsense-install.sh` sdk/ros → `colcon-build.sh`) + 컨테이너(`nvidia-container-toolkit-install.sh` → `containers/fetch-images.sh`). 플래그 `--workspace-only`/`--containers-only`/`--clean`/`--build`/`-y`/`--help`. (구 `reinstall-workspace.sh` 흡수·폐기.)
+- 단계 재실행: `bash install.sh` 재실행 시 완료 step 은 state 기준 자동 skip 되어 끊긴 지점부터 이어진다. 특정 작업만 강제 재실행은 `--reset`(전체 초기화) 또는 해당 `resources/<step>.sh` 직접 실행.
+- 순차 의미: install.sh = `a01(1-5) → reboot(6) → a03 vscode(7) → dds(8) → network(9) → corecode(10) → openai-key(11)`. (구 a02=DSR/RealSense/colcon, a04=voice 는 install.sh 에서 제거 → `setup-app.sh` 로 이동.) `run_step` 은 `resources/orchestrate.sh`(state + run_step + step 정의 통합 엔진)로 중앙화(install.sh 가 `STEPS_TOTAL` 만 설정).
 - 정적 검증: `shellcheck *.sh resources/*.sh scripts/*.sh`
 - Compatibility matrix: `docs/COMPATIBILITY.md` (Phase 1 산출물)
 - 트러블슈팅 카탈로그: `docs/TROUBLESHOOTING.md` (Phase 3 산출물)
