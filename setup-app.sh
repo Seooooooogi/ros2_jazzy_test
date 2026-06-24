@@ -1,16 +1,17 @@
 #!/usr/bin/env bash
 # =============================================================
-#  ros2_jazzy_test — ROS2 Jazzy workstation installer
+#  Cobot2 Jazzy Installer
 #  Copyright (c) 2026 ROKEY bootcamp. All rights reserved.
 # =============================================================
 #
 # setup-app.sh — application layer setup, separate from the base host install (install.sh).
 #
 # install.sh sets up only the base host environment (OS / NVIDIA / Docker / ROS2 + reboot + VS Code +
-# DDS tuning + static IP + corecode + OPENAI key). This script sets up the cobot2 APPLICATION on top:
+# DDS tuning + static IP + corecode). This script sets up the cobot2 APPLICATION on top:
 #
 #   workspace : doosan-robot2 driver clone + DSR deps + emulator → verify cobot2 source → RealSense → colcon build.
-#   containers: nvidia-container-toolkit → application container images (fetch prebuilt, or --build from source).
+#   containers: nvidia-container-toolkit → application container images (fetch prebuilt, or --build from source)
+#               → OPENAI_API_KEY into .env (the voice container needs it).
 #
 # The cobot2 application source is NOT shipped by this repo. The user places it at ${DSR_WORKSPACE}/src/cobot2
 # (see obtain_cobot2 below — isolated so it can later be swapped for a git clone / tarball fetch). Without it,
@@ -28,7 +29,7 @@ config_assert_set
 
 DO_WORKSPACE=1
 DO_CONTAINERS=1
-CLEAN=0
+RESET=0
 BUILD=0
 ASSUME_YES=0
 
@@ -39,14 +40,24 @@ setup-app.sh — set up the cobot2 application (workspace + containers) on top o
   bash setup-app.sh                 workspace (driver + cobot2 + RealSense + colcon) + containers (toolkit + images + OPENAI key)
   bash setup-app.sh --workspace-only   only the colcon workspace
   bash setup-app.sh --containers-only  only the container layer (toolkit + images + OPENAI key)
-  bash setup-app.sh --clean         wipe the doosan-robot2 clone + build/install/log first, then rebuild
+  bash setup-app.sh --reset         wipe the doosan-robot2 clone + build/install/log first, then rebuild
                                     (cobot2 source is NOT touched). Asks to confirm unless --yes.
   bash setup-app.sh --build         build the container images from source instead of fetching prebuilt
                                     (requires cobot2 source at ${DSR_WORKSPACE}/src/cobot2 — Docker build context).
-  bash setup-app.sh -y, --yes       skip the --clean confirmation (non-interactive).
+  bash setup-app.sh -y, --yes       skip the --reset confirmation (non-interactive).
   bash setup-app.sh -h, --help      this help.
 
 The cobot2 application source is NOT shipped by this repo — place it at ${DSR_WORKSPACE}/src/cobot2 before running.
+EOF
+}
+
+# Project copyright banner — printed to the console at the start of every actual run (same as install.sh).
+print_copyright() {
+    cat <<'EOF'
+============================================================
+ Cobot2 Jazzy Installer
+ Copyright (c) 2026 ROKEY bootcamp. All rights reserved.
+============================================================
 EOF
 }
 
@@ -54,7 +65,7 @@ while [[ $# -gt 0 ]]; do
     case "$1" in
         --workspace-only)  DO_CONTAINERS=0 ;;
         --containers-only) DO_WORKSPACE=0 ;;
-        --clean)           CLEAN=1 ;;
+        --reset)           RESET=1 ;;
         --build)           BUILD=1 ;;
         -y|--yes)          ASSUME_YES=1 ;;
         -h|--help)         usage; exit 0 ;;
@@ -68,12 +79,22 @@ if [[ ${DO_WORKSPACE} -eq 0 && ${DO_CONTAINERS} -eq 0 ]]; then
     exit 2
 fi
 
+# Copyright banner for an actual run (the --help subcommand above has already exited).
+print_copyright
+
 # progress denominator (purely for the [n/total] display).
 TOTAL=0
 [[ ${DO_WORKSPACE} -eq 1 ]] && TOTAL=$(( TOTAL + 5 ))   # cobot2-verify + dsr + rs-sdk + rs-ros + colcon
 [[ ${DO_CONTAINERS} -eq 1 ]] && TOTAL=$(( TOTAL + 3 ))  # toolkit + images + openai-key
 STEP_N=0
-step() { STEP_N=$(( STEP_N + 1 )); echo; echo "[${STEP_N}/${TOTAL}] $*"; }
+# Per-step banner — same framed [n/total] format as install.sh (orchestrate.sh step_begin).
+step() {
+    STEP_N=$(( STEP_N + 1 ))
+    echo
+    echo "============================================================"
+    echo "[${STEP_N}/${TOTAL}] ${*}"
+    echo "============================================================"
+}
 
 # obtain_cobot2 — get the cobot2 application source into ${DSR_WORKSPACE}/src/cobot2.
 # CURRENT POLICY: manual placement by the user — verify presence, fail loud if absent.
@@ -91,18 +112,18 @@ obtain_cobot2() {
     exit 1
 }
 
-do_clean() {
+do_reset() {
     # Destructive but regenerable (re-clone + rebuild). cobot2 (user-placed) is preserved.
     if [[ ${ASSUME_YES} -ne 1 ]]; then
         if [[ -t 0 ]]; then
-            read -r -p "[setup-app] --clean will rm -rf ${DSR_WORKSPACE}/src/doosan-robot2 and ${DSR_WORKSPACE}/{build,install,log} (cobot2 kept). Continue? [y/N] " reply
+            read -r -p "[setup-app] --reset will rm -rf ${DSR_WORKSPACE}/src/doosan-robot2 and ${DSR_WORKSPACE}/{build,install,log} (cobot2 kept). Continue? [y/N] " reply
             [[ "${reply}" =~ ^[Yy]$ ]] || { echo "[setup-app] aborted."; exit 1; }
         else
-            echo "[setup-app] --clean needs confirmation but no TTY — re-run with --yes." >&2
+            echo "[setup-app] --reset needs confirmation but no TTY — re-run with --yes." >&2
             exit 1
         fi
     fi
-    echo "[setup-app] cleaning: doosan-robot2 clone + build/install/log (cobot2 kept)"
+    echo "[setup-app] reset: wiping doosan-robot2 clone + build/install/log (cobot2 kept)"
     rm -rf "${DSR_WORKSPACE}/src/doosan-robot2" \
            "${DSR_WORKSPACE}/build" "${DSR_WORKSPACE}/install" "${DSR_WORKSPACE}/log"
 }
@@ -128,9 +149,9 @@ do_containers() {
     step "OPENAI_API_KEY (.env for the voice container)"; bash "${RESOURCE_DIR}/openai-key-setup.sh"
 }
 
-echo "[setup-app] workspace=${DSR_WORKSPACE} | workspace:$([[ ${DO_WORKSPACE} -eq 1 ]] && echo on || echo off) containers:$([[ ${DO_CONTAINERS} -eq 1 ]] && echo on || echo off)$([[ ${CLEAN} -eq 1 ]] && echo ' | clean')$([[ ${BUILD} -eq 1 ]] && echo ' | build')"
+echo "[setup-app] workspace=${DSR_WORKSPACE} | workspace:$([[ ${DO_WORKSPACE} -eq 1 ]] && echo on || echo off) containers:$([[ ${DO_CONTAINERS} -eq 1 ]] && echo on || echo off)$([[ ${RESET} -eq 1 ]] && echo ' | reset')$([[ ${BUILD} -eq 1 ]] && echo ' | build')"
 
-[[ ${CLEAN} -eq 1 ]] && do_clean
+[[ ${RESET} -eq 1 ]] && do_reset
 [[ ${DO_WORKSPACE} -eq 1 ]] && do_workspace
 [[ ${DO_CONTAINERS} -eq 1 ]] && do_containers
 

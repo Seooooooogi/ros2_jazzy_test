@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # =============================================================
-#  ros2_jazzy_test — ROS2 Jazzy workstation installer
+#  Cobot2 Jazzy Installer
 #  Copyright (c) 2026 ROKEY bootcamp. All rights reserved.
 # =============================================================
 #
@@ -10,7 +10,7 @@
 #
 # Bundles three concerns in one file — all on one axis: "interaction with people/credentials":
 #   1) env-load   — safely load/record .env credentials without hardcoding them in scripts (manual parsing, no `source`).
-#                   Used by openai-key-setup.sh (the final install step) — _set_env_key/_relocate_example_secret.
+#                   Used by openai-key-setup.sh (run by setup-app.sh during container setup) — _set_env_key/_relocate_example_secret.
 #   2) confirm    — explicit consent before irreversible operations (reboot / purge / driver swap).
 #   3) resume     — register/remove a one-shot GUI autostart entry so install.sh auto-resumes after the step-6 reboot.
 #
