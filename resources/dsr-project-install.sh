@@ -10,8 +10,8 @@
 # jazzy migration + idempotency of backup/dsr-project-install{,_25}.sh.
 #   - clone the ROKEY-SPARK fork's default branch (main = pinned jazzy snapshot). Skip if already
 #     cloned (reproducibility — no git pull). The fork pins the version so upstream pushes don't drift it.
-#   - workspace = ${DSR_WORKSPACE}(=~/cobot_ws). Mirror the repo's grouped source (cobot_ws/src/cobot1 +
-#     cobot2) into src/ so the unified workspace and the container dev bind-mounts (yolo_container/voice_container
+#   - workspace = ${DSR_WORKSPACE}(=~/cobot_ws). Mirror the repo's grouped source (cobot_ws/src/cobot2)
+#     into src/ so the unified workspace and the container dev bind-mounts (yolo_container/voice_container
 #     subdirs) resolve. The CUDA/voice container packages (object_detection / voice_processing) are present
 #     but excluded from the HOST build by colcon-build.sh (--packages-skip); pick_and_place_* carry COLCON_IGNORE.
 #     Copy (not symlink): so the workspace does not depend on the repo location — even running from removable
@@ -35,12 +35,12 @@ WS_SRC="${DSR_WORKSPACE}/src"
 # version so the install no longer drifts on upstream pushes and survives upstream force-push/deletion.
 DSR_REPO_URL="https://github.com/ROKEY-SPARK/doosan-robot2_jazzy.git"
 
-# The host colcon ws mirrors the repo's grouped source: cobot1 (rokey_cobot1) + cobot2
+# The host colcon ws mirrors the repo's grouped source: cobot2
 # (robot_control, cobot2_bringup, rokey_cobot2, yolo_container/{od_msg,object_detection}, voice_container/voice_processing,
 # pick_and_place_* with COLCON_IGNORE). The whole grouped tree is copied so the container dev bind-mounts
 # (yolo_container/voice_container subdirs) resolve; the CUDA/voice container packages (object_detection/voice_processing)
 # are present but excluded from the HOST build by colcon-build.sh (--packages-skip) — they run only in their containers.
-WS_GROUPS=(cobot1 cobot2)
+WS_GROUPS=(cobot2)
 
 # 1) workspace src directory.
 mkdir -p "${WS_SRC}"
@@ -77,7 +77,7 @@ else
     echo "dsr: DSR_ROBOT2.py missing — patch skipped (verify the clone)" >&2
 fi
 
-# 3) Mirror the repo's grouped source (cobot1 + cobot2) into the ws src (not symlink — so the
+# 3) Mirror the repo's grouped source (cobot2) into the ws src (not symlink — so the
 #    workspace does not depend on the repo/USB location). The repo is the source of truth, so a re-run
 #    re-syncs: delete the existing group dir then copy fresh → re-run safe. doosan-robot2 (cloned above)
 #    sits alongside and is untouched (it is not under these group dirs).
