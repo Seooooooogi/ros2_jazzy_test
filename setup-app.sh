@@ -18,6 +18,10 @@
 # the workspace step fails loud rather than building a partial workspace that only breaks at runtime.
 #
 # Run after install.sh (and its reboot) completes. Supersedes the old reinstall-workspace.sh.
+#
+# Console shows only the [n/total] step banner + a liveness heartbeat; each step's detailed output
+# (apt / colcon / docker) goes to the repo-root install_log. --verbose (or VERBOSE=1) also streams it
+# to the console. sudo password prompts use /dev/tty, so they stay visible even when output is routed.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -26,6 +30,11 @@ RESOURCE_DIR="${SCRIPT_DIR}/resources"
 # shellcheck source=resources/config.sh
 source "${RESOURCE_DIR}/config.sh"
 config_assert_set
+
+# Per-step detail is routed here (same install_log as install.sh); console stays clean unless --verbose.
+LOG="${LOG_FILE}"
+mkdir -p "$(dirname "${LOG}")"
+VERBOSE="${VERBOSE:-0}"
 
 DO_WORKSPACE=1
 DO_CONTAINERS=1
@@ -44,6 +53,7 @@ setup-app.sh — set up the cobot2 application (workspace + containers) on top o
                                     (cobot2 source is NOT touched). Asks to confirm unless --yes.
   bash setup-app.sh --build         build the container images from source instead of fetching prebuilt
                                     (requires cobot2 source at ${DSR_WORKSPACE}/src/cobot2 — Docker build context).
+  bash setup-app.sh --verbose       also stream each step's detailed output to the console (default: only install_log).
   bash setup-app.sh -y, --yes       skip the --reset confirmation (non-interactive).
   bash setup-app.sh -h, --help      this help.
 
@@ -63,6 +73,7 @@ EOF
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
+        -v|--verbose)      VERBOSE=1 ;;
         --workspace-only)  DO_CONTAINERS=0 ;;
         --containers-only) DO_WORKSPACE=0 ;;
         --reset)           RESET=1 ;;
@@ -94,6 +105,42 @@ step() {
     echo "============================================================"
     echo "[${STEP_N}/${TOTAL}] ${*}"
     echo "============================================================"
+}
+
+# Liveness heartbeat while a routed step runs (so the clean console does not look stuck). First draw is
+# delayed 2s so a sudo password prompt at step start (sudo uses /dev/tty) is not overwritten.
+_hb() {
+    local name="$1" start="$SECONDS" e
+    while :; do
+        sleep 2
+        e=$(( SECONDS - start ))
+        printf '\r  ⋯ %s (%02d:%02d)\033[K' "$name" $(( e / 60 )) $(( e % 60 )) >&2
+    done
+}
+
+# run <label> <cmd...> — print the step banner, then run the command with its detailed output routed to
+# the log (console keeps just the banner + heartbeat). VERBOSE=1 / --verbose also tees it to the console.
+# On failure: one-line [FAIL] + the log path, then exit. (Interactive / quick steps call step() directly.)
+run() {
+    local label="$1"; shift
+    step "${label}"
+    { echo; echo "===== setup-app: ${label} — $(date '+%F %T') ====="; } >>"${LOG}"
+    local rc=0 hb=""
+    if [[ "${VERBOSE}" == 1 ]]; then
+        set +e; "$@" 2>&1 | tee -a "${LOG}"; rc=${PIPESTATUS[0]}; set -e
+    else
+        if [[ -t 2 ]]; then _hb "${label}" & hb=$!; fi
+        "$@" >>"${LOG}" 2>&1 || rc=$?
+        if [[ -n "${hb}" ]]; then
+            kill "${hb}" 2>/dev/null || true
+            wait "${hb}" 2>/dev/null || true
+            printf '\r\033[K' >&2
+        fi
+    fi
+    if [[ ${rc} -ne 0 ]]; then
+        echo "[setup-app] FAILED: ${label} (rc=${rc}) — see ${LOG}" >&2
+        exit "${rc}"
+    fi
 }
 
 # obtain_cobot2 — get the cobot2 application source into ${DSR_WORKSPACE}/src/cobot2.
@@ -129,23 +176,22 @@ do_reset() {
 }
 
 do_workspace() {
-    step "cobot2 source (verify)";          obtain_cobot2
-    step "doosan-robot2 driver + DSR deps"; bash "${RESOURCE_DIR}/dsr-project-install.sh"
-    step "RealSense SDK";                   bash "${RESOURCE_DIR}/realsense-install.sh" sdk
-    step "RealSense ROS2 wrapper";          bash "${RESOURCE_DIR}/realsense-install.sh" ros
-    step "colcon build";                    bash "${RESOURCE_DIR}/colcon-build.sh"
+    step "cobot2 source (verify)"; obtain_cobot2   # quick verify — stays on the console
+    run "doosan-robot2 driver + DSR deps" bash "${RESOURCE_DIR}/dsr-project-install.sh"
+    run "RealSense SDK"                   bash "${RESOURCE_DIR}/realsense-install.sh" sdk
+    run "RealSense ROS2 wrapper"          bash "${RESOURCE_DIR}/realsense-install.sh" ros
+    run "colcon build"                    bash "${RESOURCE_DIR}/colcon-build.sh"
 }
 
 do_containers() {
-    step "NVIDIA Container Toolkit"
-    env ASSUME_YES=1 SKIP_IF_NO_GPU=1 bash "${RESOURCE_DIR}/nvidia-container-toolkit-install.sh"
+    run "NVIDIA Container Toolkit" env ASSUME_YES=1 SKIP_IF_NO_GPU=1 bash "${RESOURCE_DIR}/nvidia-container-toolkit-install.sh"
     if [[ ${BUILD} -eq 1 ]]; then
-        step "build container images (from source)"; bash "${SCRIPT_DIR}/containers/build-all.sh"
+        run "build container images (from source)" bash "${SCRIPT_DIR}/containers/build-all.sh"
     else
-        step "fetch container images (prebuilt)";     bash "${SCRIPT_DIR}/containers/fetch-images.sh"
+        run "fetch container images (prebuilt)" bash "${SCRIPT_DIR}/containers/fetch-images.sh"
     fi
-    # OPENAI_API_KEY → repo-root .env (the voice container mounts it). Interactive prompt; empty = skip
-    # (editable in .env later). Idempotent: passes through if the key is already set.
+    # OPENAI_API_KEY → repo-root .env (the voice container mounts it). INTERACTIVE prompt → stays on the
+    # console (not routed to the log). Empty = skip (editable in .env later); idempotent if already set.
     step "OPENAI_API_KEY (.env for the voice container)"; bash "${RESOURCE_DIR}/openai-key-setup.sh"
 }
 
@@ -159,3 +205,4 @@ echo
 echo "[setup-app] done."
 [[ ${DO_WORKSPACE} -eq 1 ]] && echo "  workspace: source ${DSR_WORKSPACE}/install/setup.bash"
 [[ ${DO_CONTAINERS} -eq 1 ]] && echo "  containers: docker images | run via containers/docker-compose.yml"
+echo "  detailed log: ${LOG}"
