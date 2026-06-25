@@ -6,6 +6,13 @@
 
 ## 다음 세션 — 무엇보다 먼저
 
+**(2026-06-25 [문서] 세션 반영) — 교육생 실습 runbook 작성 ⇒ 내일 [실측] 실기**: `docs/TRAINEE_PRACTICE_PATH.md` 신규(실행형 — host venv → docker 4단계 실습 경로). **다음 [실측] 세션은 이 문서를 먼저 열고 단계별 환경설정**. 요지:
+- **4단계**: ① Calibration(host, 하드웨어) → `T_gripper2camera.npy` ② YOLO 학습(host venv, GPU) → `best.pt` ③ 모델→yolo 컨테이너 객체인식 ④ voice 컨테이너에 corecode 스크립트 주입(mic_test/wakeup_word/STT/keyword_extraction).
+- **확정 결정**: Step 2 = host 학습 dev venv(A안), Python **3.12 는 `uv venv --python 3.12`** 로 공급(system python 무변경). 운영 추론만 컨테이너.
+- **⚠ Step 4 선행 수정**: `corecode/VoiceProcessing/keyword_extraction.py:5` `langchain.prompts`→`langchain_core.prompts` (langchain<2 에서 제거됨, host/컨테이너 공통 — import smoke FAIL 실측). 미수정.
+- **이번 세션 smoke 실측**(격리 uv venv, host apt 무변경): cobot2 application-shell 의존성 스택 numpy<2 공존 PASS(numpy 2.5.0→1.26.4 재핀 재현), corecode `.py` syntax 전부 PASS, `onrobot`/`ultralytics` import PASS, `keyword_extraction` FAIL(위), voice audio = **PortAudio(system lib) 경계** 발견(host venv 못 넘음 → 컨테이너가 apt+`/dev/snd`로 해결 = 학습 핵심). 배경 비교문서 `docs/CONTAINER_VS_HOST.md` 동반 신규.
+- **상태**: 두 신규 문서 + 본 핸드오프 갱신 **uncommitted**(이 [문서] 머신). 실기 노트북에서 내일 열려면 **commit+push 필요**(사용자 확인 대기).
+
 **(2026-06-23 [실측] 세션 반영)** — `feat/application-containers`(`47adcaa`)·`main`(`6d38a1a`) 둘 다 origin 동기. 이번 세션 **main 승격 완료**(`scripts/merge-to-main.sh` → main `6d38a1a`, push): ① **CycloneDDS 경로 단일화**(config.sh — stale `~/.bashrc` URI 가 compose 마운트와 갈라져 host↔container discovery 가 조용히 깨지던 버그 → `CYCLONEDDS_XML` 단일 소스 + URI 강제 파생), ② **virtual 안전 게이트**(bringup_all — `mode:=virtual` 이 host 인자(실기 IP)를 드라이버에 그대로 넘겨 켜져있는 실 로봇에 붙던 버그 → `real 일 때만 실기 IP` 화이트리스트 + `choices=[virtual,real]`), ③ **voice `.env` 빌드 footgun 제거**(setup.py `glob('resource/.env')`), ④ **real/virtual README 분리** + dsr_bringup 디버깅. **머신 상태(세션 끝)**: voice/yolo **dev** 컨테이너 + realsense(host launch PID 18298) 가동, cyclonedds 신경로(`~/.config/cyclonedds/cyclonedds.xml`) 렌더·`~/.bashrc` 갱신 완료, host↔container discovery 정상(`/get_keyword`·`/get_3d_position` introspect OK).
 
 **즉시 OPEN (다음 [실측]):**
