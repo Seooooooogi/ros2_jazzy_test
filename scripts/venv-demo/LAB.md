@@ -99,6 +99,105 @@ grep -E "ppv_(robot_control|object_detection|voice_processing)\.(robot_control|d
 ```
 
 기대 출력: `imports OK` / `node-name strings OK` / `ast OK` / entry_point 3줄.
+
+### A2-5. 마이크 입력 장치 고정 (16kHz 네이티브 DMIC)
+
+**배경**: 이 워크스테이션 SOF DMIC 는 두 가지 캡처 장치로 노출된다.
+- `hw:1,6` (48kHz 계열): 정적에서도 클리핑 노이즈 → wakeword confidence ≈ 0.001
+- `hw:1,7` (16kHz 네이티브): 깨끗한 DMIC → confidence 0.7+
+
+기본값(pyaudio 기본 장치)은 `hw:1,6` 쪽으로 가거나 resample 왜곡 → wakeword 탐지 실패.
+아래 단계로 pyaudio(wakeword) 와 sounddevice(STT) 모두 `hw:1,7` 로 고정한다.
+
+#### A2-5-1. audio_device.py 복사 (컨테이너 donor → monolithic)
+
+```bash
+cp ~/cobot_ws/src/cobot2/voice_container/voice_processing/voice_processing/audio_device.py \
+   ~/cobot_ws/src/cobot2/pick_and_place_voice/ppv_voice_processing/audio_device.py
+```
+
+`audio_device.py` 의 `resolve_input_device()`: `VOICE_MIC_DEVICE` 환경변수 → 16kHz 네이티브 자동탐색 → None(ALSA 기본값 fallback). sounddevice 인덱스 기준.
+
+#### A2-5-2. pyaudio 장치 인덱스 probe
+
+> **각 머신마다 인덱스가 다를 수 있다.** 아래 명령으로 hw:1,7(16kHz, 입력채널>0) 에 해당하는 인덱스를 확인한다.
+
+```bash
+# venv 활성화 후 실행 (A3/A4 완료 상태)
+~/.cobot2_venv_demo/venv/bin/python -c "
+import pyaudio
+p = pyaudio.PyAudio()
+[print(i, p.get_device_info_by_index(i)['name'],
+       int(p.get_device_info_by_index(i)['defaultSampleRate']),
+       p.get_device_info_by_index(i)['maxInputChannels'])
+ for i in range(p.get_device_count())]
+"
+```
+
+hw:1,7 / 16000Hz / 입력채널>0 에 해당하는 인덱스 N 을 기록한다.
+**이 실습 머신 = 인덱스 9** (`sof-hda-dsp: - (hw:1,7)`, 16000Hz, 2ch).
+
+#### A2-5-3. MicController.py 교정
+
+rate 48kHz → 16kHz, `input_device_index` 주석 해제, device_index 실측 값으로 치환.
+
+```bash
+cd ~/cobot_ws/src/cobot2/pick_and_place_voice/ppv_voice_processing
+sed -i 's/^    rate: int = 48000/    rate: int = 16000/' MicController.py
+sed -i 's/^            # input_device_index=self.config.device_index/            input_device_index=self.config.device_index,/' MicController.py
+# N 을 Step probe 에서 확인한 인덱스 정수로 교체 (이 머신 = 9)
+sed -i 's/^    device_index: int = 10/    device_index: int = 9/' MicController.py
+grep -n "rate: int\|device_index: int\|input_device_index" MicController.py
+```
+
+기대 출력: `rate: int = 16000` / `device_index: int = 9` / `input_device_index=self.config.device_index,`.
+
+#### A2-5-4. stt.py 교정 (STT 녹음도 깨끗한 장치로)
+
+```bash
+cd ~/cobot_ws/src/cobot2/pick_and_place_voice/ppv_voice_processing
+sed -i '/^import scipy.io.wavfile as wav/a from ppv_voice_processing.audio_device import resolve_input_device' stt.py
+sed -i 's/sd\.rec(int(self\.duration \* self\.samplerate), samplerate=self\.samplerate, channels=1, dtype=.int16.)/sd.rec(int(self.duration * self.samplerate), samplerate=self.samplerate, channels=1, dtype="int16", device=resolve_input_device())/' stt.py
+grep -n "audio_device\|resolve_input_device\|sd\.rec" stt.py
+```
+
+기대 출력: `from ppv_voice_processing.audio_device import resolve_input_device` + `sd.rec(... device=resolve_input_device())`.
+
+#### A2-5-5. 검증
+
+```bash
+cd ~/cobot_ws/src/cobot2/pick_and_place_voice/ppv_voice_processing
+python3 -c "import ast; [ast.parse(open(f).read()) for f in ['audio_device.py','MicController.py','stt.py']]; print('ast OK')"
+grep -q "from ppv_voice_processing.audio_device import resolve_input_device" stt.py && echo "stt import OK"
+grep -q "input_device_index=self.config.device_index," MicController.py && echo "mic device OK"
+```
+
+기대 출력: `ast OK` / `stt import OK` / `mic device OK`.
+
+Device sanity (venv python 필요, A3/A4 완료 후):
+
+```bash
+~/.cobot2_venv_demo/venv/bin/python -c "
+import sys
+sys.path.insert(0, '/home/rokey/cobot_ws/src/cobot2/pick_and_place_voice')
+from ppv_voice_processing.audio_device import resolve_input_device
+import pyaudio
+idx = resolve_input_device()
+print('resolve_input_device() =', idx)
+p = pyaudio.PyAudio()
+info = p.get_device_info_by_index(idx)
+print('device:', info['name'], '| rate:', int(info['defaultSampleRate']))
+stream = p.open(format=pyaudio.paInt16, channels=1, rate=16000, input=True,
+                frames_per_buffer=1024, input_device_index=idx)
+data = stream.read(1024, exception_on_overflow=False)
+print('read bytes:', len(data))
+stream.stop_stream(); stream.close(); p.terminate()
+print('pyaudio open/read/close OK')
+"
+```
+
+> **Live wakeword 검증** ("Hello Rokey" 발화 → confidence > 0.3)은 Task 7 voice 실행 절차에서 수행한다.
+
 ### A3. venv 생성
 
 시스템 apt 패키지(pyaudio 컴파일, 오디오 파일 처리)를 먼저 확보한 뒤 venv 를 만든다.
