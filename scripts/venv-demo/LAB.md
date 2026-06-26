@@ -30,7 +30,75 @@ ls ~/ros2_jazzy_test/resources/config.sh
 
 ## Part A — 1회 환경 구성
 ### A1. 원본 패키지 활성화 (COLCON_IGNORE 제거)
+
+두 패키지는 기본 비활성(COLCON_IGNORE) 상태다. 파일을 지우면 colcon 이 인식한다.
+
+```bash
+rm ~/cobot_ws/src/cobot2/pick_and_place_text/COLCON_IGNORE
+rm ~/cobot_ws/src/cobot2/pick_and_place_voice/COLCON_IGNORE
+```
+
+확인:
+
+```bash
+ls ~/cobot_ws/src/cobot2/pick_and_place_text/COLCON_IGNORE 2>&1 || echo "OK: 삭제됨"
+ls ~/cobot_ws/src/cobot2/pick_and_place_voice/COLCON_IGNORE 2>&1 || echo "OK: 삭제됨"
+```
+
 ### A2. voice 번들 rename + 마이크 fix
+
+#### A2-1. 패키지 디렉토리 rename
+
+`pick_and_place_voice` 안에 `robot_control`, `object_detection`, `voice_processing` 세 디렉토리가 있다.
+host colcon 워크스페이스에 이미 동일 이름 패키지가 있어 충돌하므로 `ppv_` 접두를 붙인다.
+
+```bash
+cd ~/cobot_ws/src/cobot2/pick_and_place_voice
+mv robot_control    ppv_robot_control
+mv object_detection ppv_object_detection
+mv voice_processing ppv_voice_processing
+```
+
+#### A2-2. import 교정 (line-anchored, 6줄)
+
+> `^from ...` 앵커를 써서 노드명 문자열(`"robot_control_node"`, `'object_detection_node'`)은 건드리지 않는다.
+
+```bash
+cd ~/cobot_ws/src/cobot2/pick_and_place_voice
+sed -i 's/^from robot_control\.onrobot import RG/from ppv_robot_control.onrobot import RG/' ppv_robot_control/robot_control.py
+sed -i 's/^from object_detection\.realsense import ImgNode/from ppv_object_detection.realsense import ImgNode/' ppv_object_detection/detection.py
+sed -i 's/^from object_detection\.yolo import YoloModel/from ppv_object_detection.yolo import YoloModel/' ppv_object_detection/detection.py
+sed -i 's/^from voice_processing\.MicController import/from ppv_voice_processing.MicController import/' ppv_voice_processing/get_keyword.py
+sed -i 's/^from voice_processing\.wakeup_word import WakeupWord/from ppv_voice_processing.wakeup_word import WakeupWord/' ppv_voice_processing/get_keyword.py
+sed -i 's/^from voice_processing\.stt import STT/from ppv_voice_processing.stt import STT/' ppv_voice_processing/get_keyword.py
+```
+
+#### A2-3. setup.py 교정
+
+`find_packages` 목록과 `entry_points` 모듈 경로를 `ppv_*` 로 갱신한다.
+
+```bash
+cd ~/cobot_ws/src/cobot2/pick_and_place_voice
+sed -i "s/'robot_control', /'ppv_robot_control', /;s/'voice_processing', /'ppv_voice_processing', /;s/'object_detection'/'ppv_object_detection'/" setup.py
+sed -i "s#robot_control\.robot_control:main#ppv_robot_control.robot_control:main#;s#object_detection\.detection:main#ppv_object_detection.detection:main#;s#voice_processing\.get_keyword:main#ppv_voice_processing.get_keyword:main#" setup.py
+```
+
+#### A2-4. 검증
+
+```bash
+cd ~/cobot_ws/src/cobot2/pick_and_place_voice
+# dangling import 0
+grep -rnE "^from (robot_control|object_detection|voice_processing)\." . && echo "FAIL" || echo "imports OK"
+# 노드명 문자열 보존
+grep -q '"robot_control_node"' ppv_robot_control/robot_control.py && \
+  grep -q "'object_detection_node'" ppv_object_detection/detection.py && echo "node-name strings OK"
+# 파싱 무결성
+python3 -c "import ast,glob; [ast.parse(open(f).read()) for f in glob.glob('ppv_*/**/*.py',recursive=True)+['setup.py']]; print('ast OK')"
+# entry_points 확인
+grep -E "ppv_(robot_control|object_detection|voice_processing)\.(robot_control|detection|get_keyword):main" setup.py
+```
+
+기대 출력: `imports OK` / `node-name strings OK` / `ast OK` / entry_point 3줄.
 ### A3. venv 생성
 ### A4. 의존성 설치 (pip)
 ### A4b. voice 에셋 스테이징
