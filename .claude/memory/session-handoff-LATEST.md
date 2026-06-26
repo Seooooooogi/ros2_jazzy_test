@@ -6,6 +6,13 @@
 
 ## 다음 세션 — 무엇보다 먼저
 
+**(2026-06-26 [실측] 세션 반영) — wakeword 미응답 = 해결·end-to-end 검증 완료.**
+근본원인: 컨테이너 마이크 캡처가 ALSA 기본값(plug)→노이즈 큰 **hw:1,6**(48kHz DMIC, 정적에서도 풀스케일 클리핑) 으로 가 confidence 가 0 부근 고정. 해결: 캡처 코드가 ALSA 기본값에 의존하지 않고 **깨끗한 16kHz 네이티브 DMIC(hw:1,7)** 를 직접 연다 — 신규 `voice_processing/audio_device.py::resolve_input_device()`(`VOICE_MIC_DEVICE` env → 16kHz 자동선택 → None), `wakeup_word.py`/`stt.py` 적용. 레포 `asound.conf` default→hw:1,7.
+- **e2e 실측 PASS**: get_keyword 노드 + `ros2 service call /get_keyword` → "Hello Rokey"(confidence **0.92**) → STT "해머를 포즈1에 가져다놔" → gpt-4o `hammer / pos1`. 풀 파이프라인 동작.
+- **커밋(이 머신, origin push 완료)**: `asound.conf`(hw:1,7 변경), `README.md`(voice/yolo 컨테이너 docker run 직접 기동 추가). + 사용자 `docs/superpowers/specs/2026-06-26-venv-pickplace-demo-design.md`.
+- **cobot2 canonical**: `~/Downloads/cobot2.zip` **재생성**(코드+모델, `__pycache__` 제거, fix 3파일 반영; `cobot2.zip.bak`=직전 원본). ⚠ **cobot2 원본 저장소는 이 머신에 없음 → 원본 보유처([문서]/git)에서 3파일(`audio_device.py` 신규·`wakeup_word.py`·`stt.py`) 반영 또는 새 zip 으로 교체 필요(미완)**.
+- **컨테이너 상태**: 디버깅용 `voice-processing` 제거. `yolo-detection` 은 가동 중(사용자).
+
 **(2026-06-25 [문서] 세션 반영) — 교육생 실습 runbook 작성 ⇒ 내일 [실측] 실기**: `docs/TRAINEE_PRACTICE_PATH.md` 신규(실행형 — host venv → docker 4단계 실습 경로). **다음 [실측] 세션은 이 문서를 먼저 열고 단계별 환경설정**. 요지:
 - **4단계**: ① Calibration(host, 하드웨어) → `T_gripper2camera.npy` ② YOLO 학습(host venv, GPU) → `best.pt` ③ 모델→yolo 컨테이너 객체인식 ④ voice 컨테이너에 corecode 스크립트 주입(mic_test/wakeup_word/STT/keyword_extraction).
 - **확정 결정**: Step 2 = host 학습 dev venv(A안), Python **3.12 는 `uv venv --python 3.12`** 로 공급(system python 무변경). 운영 추론만 컨테이너.
@@ -16,7 +23,7 @@
 **(2026-06-23 [실측] 세션 반영)** — `feat/application-containers`(`47adcaa`)·`main`(`6d38a1a`) 둘 다 origin 동기. 이번 세션 **main 승격 완료**(`scripts/merge-to-main.sh` → main `6d38a1a`, push): ① **CycloneDDS 경로 단일화**(config.sh — stale `~/.bashrc` URI 가 compose 마운트와 갈라져 host↔container discovery 가 조용히 깨지던 버그 → `CYCLONEDDS_XML` 단일 소스 + URI 강제 파생), ② **virtual 안전 게이트**(bringup_all — `mode:=virtual` 이 host 인자(실기 IP)를 드라이버에 그대로 넘겨 켜져있는 실 로봇에 붙던 버그 → `real 일 때만 실기 IP` 화이트리스트 + `choices=[virtual,real]`), ③ **voice `.env` 빌드 footgun 제거**(setup.py `glob('resource/.env')`), ④ **real/virtual README 분리** + dsr_bringup 디버깅. **머신 상태(세션 끝)**: voice/yolo **dev** 컨테이너 + realsense(host launch PID 18298) 가동, cyclonedds 신경로(`~/.config/cyclonedds/cyclonedds.xml`) 렌더·`~/.bashrc` 갱신 완료, host↔container discovery 정상(`/get_keyword`·`/get_3d_position` introspect OK).
 
 **즉시 OPEN (다음 [실측]):**
-- **wakeword 미응답** — 마이크 캡처는 정상(sounddevice RMS≈2183 실측)이나 "Hello Rokey" **감지 자체 미확인**. `get_keyword` 를 `docker exec -d` 말고 **attach/로그 캡처로 기동**해 `voice_processing/wakeup_word.py:is_wakeup()` 의 `confidence` print(>0.3 임계)를 발화 중 확인. detached 라 confidence 가 안 보였음 — 임계/모델/오디오포맷 가능.
+- ✅ **wakeword 미응답 = 해결**(2026-06-26, 위 최신 노트 참조) — 원인은 임계/모델/포맷이 아니라 **노이즈 마이크 장치(hw:1,6) 캡처**였음. hw:1,7 직접 캡처로 e2e PASS. 재조사 불필요.
 - **virtual 로봇 pick&place e2e 미완** — 카메라+컨테이너+discovery 라이브까지 됐으나 발화로 끝까지 미실행. 그리퍼(192.168.1.1)·로봇(192.168.1.100) 둘 다 도달가능. virtual 기동: `ros2 launch cobot2_bringup bringup_all.launch.py mode:=virtual camera:=false containers:=false`(카메라/컨테이너 이미 가동중) + `ros2 run robot_control robot_control` + 발화.
 - **docker `--reset` 재설치 에러 = 폐기**(로그상 원인 특정 불가, docker-install.sh 정적 멱등 확인). 재발 시 정확한 실패 명령/에러줄 캡처 필요.
 - **robot_control `--test` 모드 = 폐기(전량 원복)** — real/virtual 은 bringup `mode:=` 로만. **재추가 금지**.
