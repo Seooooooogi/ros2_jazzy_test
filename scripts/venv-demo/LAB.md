@@ -113,6 +113,8 @@ grep -E "ppv_(robot_control|object_detection|voice_processing)\.(robot_control|d
 
 ### A2-5. 마이크 입력 장치 고정 (16kHz 네이티브 DMIC)
 
+> A2-5-2 (pyaudio probe) 와 A2-5-5 (device sanity) 는 venv 가 필요하므로 A3/A4 완료 후 실행한다 — 정적 수정(A2-5-1/3/4) 먼저 진행 후 런타임 확인.
+
 **배경**: 이 워크스테이션 SOF DMIC 는 두 가지 캡처 장치로 노출된다.
 - `hw:1,6` (48kHz 계열): 정적에서도 클리핑 노이즈 → wakeword confidence ≈ 0.001
 - `hw:1,7` (16kHz 네이티브): 깨끗한 DMIC → confidence 0.7+
@@ -156,8 +158,8 @@ rate 48kHz → 16kHz, `input_device_index` 주석 해제, device_index 실측 �
 cd ~/cobot_ws/src/cobot2/pick_and_place_voice/ppv_voice_processing
 sed -i 's/^    rate: int = 48000/    rate: int = 16000/' MicController.py
 sed -i 's/^            # input_device_index=self.config.device_index/            input_device_index=self.config.device_index,/' MicController.py
-# N 을 Step probe 에서 확인한 인덱스 정수로 교체 (이 머신 = 9)
-sed -i 's/^    device_index: int = 10/    device_index: int = 9/' MicController.py
+N=9   # A2-5-2 probe 에서 확인한 인덱스로 교체 (이 머신 = 9)
+sed -i "s/^    device_index: int = 10/    device_index: int = $N/" MicController.py
 grep -n "rate: int\|device_index: int\|input_device_index" MicController.py
 ```
 
@@ -189,8 +191,8 @@ Device sanity (venv python 필요, A3/A4 완료 후):
 
 ```bash
 ~/.cobot2_venv_demo/venv/bin/python -c "
-import sys
-sys.path.insert(0, '/home/rokey/cobot_ws/src/cobot2/pick_and_place_voice')
+import os, sys
+sys.path.insert(0, os.path.expanduser('~/cobot_ws/src/cobot2/pick_and_place_voice'))
 from ppv_voice_processing.audio_device import resolve_input_device
 import pyaudio
 idx = resolve_input_device()
@@ -389,6 +391,7 @@ ros2 run pick_and_place_text robot_move
 ```
 
 기대 출력: DSR 노드 초기화 (`_robot_id=dsr01`, `_robot_model=m0609`) → MoveJ 서비스 대기 로그.  
+OnRobot 그리퍼는 노드 import 시 생성되어 `192.168.1.1:502` Modbus TCP 연결을 시도한다 — 그리퍼 하드웨어 없이는 노드가 초기화되지만 해당 연결/그리퍼 동작 지점에서 멈추는 것이 예상 동작 [HW].  
 에뮬레이터 없이 실행 시 `MoveJ Service is not available, waiting...` 가 반복되는 것은 정상 [HW/emulator].
 
 > **전체 파이프라인** (bringup virtual + RealSense 카메라 + 실제 pick&place 모션) 검증은 에뮬레이터 + 그리퍼 하드웨어가 필요한 별도 단계 — [HW/emulator] 에서 수행.
@@ -453,7 +456,8 @@ export PYTHONPATH="$(ls -d ~/.cobot2_venv_demo/venv/lib/python*/site-packages):$
 ros2 run pick_and_place_voice robot_control
 ```
 
-기대 출력: DSR 노드 초기화 (`_robot_id=dsr01`) → `MoveJ Service is not available, waiting...` (에뮬레이터 없을 때 정상 [HW/emulator]).
+기대 출력: DSR 노드 초기화 (`_robot_id=dsr01`) → `MoveJ Service is not available, waiting...` (에뮬레이터 없을 때 정상 [HW/emulator]).  
+OnRobot 그리퍼는 노드 import 시 생성되어 `192.168.1.1:502` Modbus TCP 연결을 시도한다 — 그리퍼 하드웨어 없이는 노드가 초기화되지만 해당 연결/그리퍼 동작 지점에서 멈추는 것이 예상 동작 [HW].
 
 #### 전체 파이프라인 검증 [HW]
 
@@ -470,8 +474,21 @@ ros2 run pick_and_place_voice robot_control
 - 정리(원복):
   ```bash
   rm -rf ~/.cobot2_venv_demo
-  # (선택) cobot2 원본 되돌리기: rename 역수행 + COLCON_IGNORE 재생성. 비추적이라 git 무관.
   ```
+  (선택) cobot2 원본 되돌리기:
+  ```bash
+  # cobot2 가 git 저장소인 경우 — 한 줄로 원복:
+  # cd ~/cobot_ws/src/cobot2 && git checkout -- pick_and_place_voice pick_and_place_text
+
+  # git 이 아닌 경우 — rename 역수행 + COLCON_IGNORE 재생성:
+  cd ~/cobot_ws/src/cobot2/pick_and_place_voice
+  mv ppv_robot_control    robot_control
+  mv ppv_object_detection object_detection
+  mv ppv_voice_processing voice_processing
+  touch ~/cobot_ws/src/cobot2/pick_and_place_text/COLCON_IGNORE
+  touch ~/cobot_ws/src/cobot2/pick_and_place_voice/COLCON_IGNORE
+  ```
+  import 6줄 · langchain 패치 · MicController/stt 수정은 git checkout 또는 원본 파일 직접 복원으로 되돌린다.
 
 | 관점 | 컨테이너 | venv(이 문서) |
 |------|---------|--------------|
