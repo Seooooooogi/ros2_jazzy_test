@@ -59,7 +59,7 @@ mv object_detection ppv_object_detection
 mv voice_processing ppv_voice_processing
 ```
 
-#### A2-2. import 교정 (line-anchored, 7줄)
+#### A2-2. import 교정 (line-anchored, 6줄)
 
 > `^from ...` 앵커를 써서 노드명 문자열(`"robot_control_node"`, `'object_detection_node'`)은 건드리지 않는다.
 
@@ -71,8 +71,17 @@ sed -i 's/^from object_detection\.yolo import YoloModel/from ppv_object_detectio
 sed -i 's/^from voice_processing\.MicController import/from ppv_voice_processing.MicController import/' ppv_voice_processing/get_keyword.py
 sed -i 's/^from voice_processing\.wakeup_word import WakeupWord/from ppv_voice_processing.wakeup_word import WakeupWord/' ppv_voice_processing/get_keyword.py
 sed -i 's/^from voice_processing\.stt import STT/from ppv_voice_processing.stt import STT/' ppv_voice_processing/get_keyword.py
-# langchain>=1.0 은 langchain.prompts 를 제거함 → langchain_core.prompts 로 교정
-sed -i 's/^from langchain\.prompts import PromptTemplate/from langchain_core.prompts import PromptTemplate/' ppv_voice_processing/get_keyword.py
+```
+
+#### A2-2b. langchain 1.x 호환 (`langchain.prompts` 제거 대응)
+
+`langchain` 1.0 부터 `langchain.prompts` 서브모듈이 제거되고 `PromptTemplate` 은 `langchain_core.prompts` 로 이동했다.
+이 fix 없이는 get_keyword 가 import 단계에서 `ModuleNotFoundError: No module named 'langchain.prompts'` 로 즉시 죽는다 (컨테이너 working 버전도 동일 fix 적용).
+
+```bash
+cd ~/cobot_ws/src/cobot2/pick_and_place_voice
+sed -i 's|^from langchain\.prompts import PromptTemplate|from langchain_core.prompts import PromptTemplate|' ppv_voice_processing/get_keyword.py
+grep -n "^from langchain" ppv_voice_processing/get_keyword.py   # 예상: from langchain_core.prompts import PromptTemplate
 ```
 
 #### A2-3. setup.py 교정
