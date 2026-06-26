@@ -105,7 +105,8 @@ grep -E "ppv_(robot_control|object_detection|voice_processing)\.(robot_control|d
 
 ```bash
 # pyaudio 컴파일용 헤더 + libsndfile (컨테이너 미러)
-sudo apt install -y portaudio19-dev libsndfile1
+# python3.12-venv 없으면 다음 줄 python3 -m venv 가 ensurepip 에러로 실패한다.
+sudo apt install -y portaudio19-dev libsndfile1 python3.12-venv
 
 # system-site-packages: rclpy / cv_bridge 등 ROS Python 바인딩 공유
 python3 -m venv --system-site-packages ~/.cobot2_venv_demo/venv
