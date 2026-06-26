@@ -59,7 +59,7 @@ mv object_detection ppv_object_detection
 mv voice_processing ppv_voice_processing
 ```
 
-#### A2-2. import 교정 (line-anchored, 6줄)
+#### A2-2. import 교정 (line-anchored, 7줄)
 
 > `^from ...` 앵커를 써서 노드명 문자열(`"robot_control_node"`, `'object_detection_node'`)은 건드리지 않는다.
 
@@ -71,6 +71,8 @@ sed -i 's/^from object_detection\.yolo import YoloModel/from ppv_object_detectio
 sed -i 's/^from voice_processing\.MicController import/from ppv_voice_processing.MicController import/' ppv_voice_processing/get_keyword.py
 sed -i 's/^from voice_processing\.wakeup_word import WakeupWord/from ppv_voice_processing.wakeup_word import WakeupWord/' ppv_voice_processing/get_keyword.py
 sed -i 's/^from voice_processing\.stt import STT/from ppv_voice_processing.stt import STT/' ppv_voice_processing/get_keyword.py
+# langchain>=1.0 은 langchain.prompts 를 제거함 → langchain_core.prompts 로 교정
+sed -i 's/^from langchain\.prompts import PromptTemplate/from langchain_core.prompts import PromptTemplate/' ppv_voice_processing/get_keyword.py
 ```
 
 #### A2-3. setup.py 교정
@@ -383,5 +385,70 @@ ros2 run pick_and_place_text robot_move
 > **전체 파이프라인** (bringup virtual + RealSense 카메라 + 실제 pick&place 모션) 검증은 에뮬레이터 + 그리퍼 하드웨어가 필요한 별도 단계 — [HW/emulator] 에서 수행.
 
 ### voice 데모 (터미널 4개)
+
+> **전제**: Part A 전 단계 완료 (`~/.cobot2_venv_demo/` 존재, colcon overlay 빌드 완료).
+
+#### 터미널 1 — 드라이버 + 카메라 (bringup, text 와 동일)
+
+```bash
+set -a; source ~/ros2_jazzy_test/resources/config.sh; set +a
+source /opt/ros/jazzy/setup.bash
+source ~/cobot_ws/install/setup.bash
+ros2 launch cobot2_bringup bringup_all.launch.py mode:=virtual
+# 실로봇: ros2 launch cobot2_bringup bringup_all.launch.py mode:=real host:=192.168.1.100
+```
+
+기대 출력: DSR 에뮬레이터 + RealSense 드라이버 노드 기동 (터미널 1 은 이 상태로 유지).
+
+#### 터미널 2 — YOLO depth 서비스 노드 (object_detection, venv)
+
+```bash
+set -a; source ~/ros2_jazzy_test/resources/config.sh; set +a
+source /opt/ros/jazzy/setup.bash
+source ~/cobot_ws/install/setup.bash
+source ~/.cobot2_venv_demo/ws/install/setup.bash
+export PYTHONPATH="$(ls -d ~/.cobot2_venv_demo/venv/lib/python*/site-packages):$PYTHONPATH"
+ros2 run pick_and_place_voice object_detection
+```
+
+기대 출력: YOLO 모델 로드 → `[img_node]: Waiting for client's call...` (카메라 토픽 대기).  
+에뮬레이터 없이 실행 시 카메라 topic 수신 대기 상태로 머무는 것은 정상 — `ModuleNotFoundError` / `FileNotFoundError` 없으면 OK.
+
+#### 터미널 3 — 음성 명령 처리 (get_keyword, venv) — OpenAI 키 여기에만
+
+```bash
+set -a; source ~/ros2_jazzy_test/resources/config.sh; set +a
+source /opt/ros/jazzy/setup.bash
+source ~/cobot_ws/install/setup.bash
+source ~/.cobot2_venv_demo/ws/install/setup.bash
+export PYTHONPATH="$(ls -d ~/.cobot2_venv_demo/venv/lib/python*/site-packages):$PYTHONPATH"
+export OPENAI_API_KEY=sk-...   # ← 실제 key 입력 (이 터미널에서만 — robot_control 은 불요)
+ros2 run pick_and_place_voice get_keyword
+```
+
+> **OpenAI 소비처는 이 노드(get_keyword)** 뿐이다. `ChatOpenAI` (LLM 명령 파싱) + `STT` (Whisper) 가 여기서 호출된다. `robot_control` 은 `/get_keyword` ROS2 서비스를 호출할 뿐 — key 불요.
+
+> **`.env` 대안**: `load_dotenv` 는 설치된 `share/pick_and_place_voice/resource/.env` 를 읽는다.  
+> 소스에 `.env` 를 두면 `colcon build` 재실행 후에야 install 경로에 반영 → 셸 `export` 권장.
+
+기대 출력: `MicRecorderNode initialized.` → `wait for client's request...` (wakeword "Hello Rokey" 대기 상태).
+
+#### 터미널 4 — 로봇 동작 (robot_control, venv)
+
+```bash
+set -a; source ~/ros2_jazzy_test/resources/config.sh; set +a
+source /opt/ros/jazzy/setup.bash
+source ~/cobot_ws/install/setup.bash
+source ~/.cobot2_venv_demo/ws/install/setup.bash
+export PYTHONPATH="$(ls -d ~/.cobot2_venv_demo/venv/lib/python*/site-packages):$PYTHONPATH"
+ros2 run pick_and_place_voice robot_control
+```
+
+기대 출력: DSR 노드 초기화 (`_robot_id=dsr01`) → `MoveJ Service is not available, waiting...` (에뮬레이터 없을 때 정상 [HW/emulator]).
+
+#### 전체 파이프라인 검증 [HW]
+
+"Hello Rokey" 발화 → get_keyword 가 confidence > 0.3 탐지 → STT 5 초 → LLM 파싱 → robot_control 이 pick & place 모션 실행.  
+마이크 연결 + 실제 `OPENAI_API_KEY` + 에뮬레이터(또는 실로봇) 환경 필요 — 별도 [HW] 단계에서 수행.
 
 ## Part C — 정리 & 대비
