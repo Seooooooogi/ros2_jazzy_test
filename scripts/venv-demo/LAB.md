@@ -100,8 +100,107 @@ grep -E "ppv_(robot_control|object_detection|voice_processing)\.(robot_control|d
 
 기대 출력: `imports OK` / `node-name strings OK` / `ast OK` / entry_point 3줄.
 ### A3. venv 생성
+
+시스템 apt 패키지(pyaudio 컴파일, 오디오 파일 처리)를 먼저 확보한 뒤 venv 를 만든다.
+
+```bash
+# pyaudio 컴파일용 헤더 + libsndfile (컨테이너 미러)
+sudo apt install -y portaudio19-dev libsndfile1
+
+# system-site-packages: rclpy / cv_bridge 등 ROS Python 바인딩 공유
+python3 -m venv --system-site-packages ~/.cobot2_venv_demo/venv
+source ~/.cobot2_venv_demo/venv/bin/activate
+pip install --upgrade pip
+```
+
+확인:
+
+```bash
+python3 -c "import sys; print(sys.prefix)"  # 예상: /home/<user>/.cobot2_venv_demo/venv
+pip --version                                # 예상: pip 26.x from .../venv/...
+```
+
 ### A4. 의존성 설치 (pip)
+
+순서가 고정돼 있다. **numpy<2 재핀은 반드시 마지막**에 온다.
+
+```bash
+# (2) torch 최우선 — cu128 인덱스, 수 GB
+pip install --index-url https://download.pytorch.org/whl/cu128 torch torchvision
+
+# YOLO + OpenCV 핀
+pip install "ultralytics<9"
+pip install "opencv-python<4.10"
+
+# (3) LLM / 음성 스택
+pip install "langchain<2" "langchain-openai<2" "openai<3" pyaudio sounddevice "scipy<1.18" python-dotenv
+
+# (4) 그리퍼 Modbus
+pip install pymodbus
+
+# (5) openwakeword — Python 3.12 에서 tflite-runtime 미지원 → no-deps 로 설치 후 의존성 직접 지정
+pip install --no-deps "openwakeword==0.6.0"
+pip install "onnxruntime<2,>=1.10.0" "tqdm<5,>=4.0" "scikit-learn<2,>=1" "requests<3,>=2.0" "ai-edge-litert>=2.0.2,<3"
+
+# tflite_runtime 호환 shim: ai_edge_litert 를 tflite_runtime.interpreter 이름으로 노출
+python3 -c "
+import os, ai_edge_litert as a
+d = os.path.join(os.path.dirname(os.path.dirname(a.__file__)), 'tflite_runtime')
+os.makedirs(d, exist_ok=True)
+open(os.path.join(d, '__init__.py'), 'w').close()
+open(os.path.join(d, 'interpreter.py'), 'w').write('from ai_edge_litert.interpreter import Interpreter  # noqa: F401\n')
+"
+
+# openwakeword feature 모델 복사 (컨테이너 oww_models/ → 설치 경로)
+OWW_DIR="$(python3 -c 'import os,openwakeword;print(os.path.join(os.path.dirname(openwakeword.__file__),"resources","models"))')"
+mkdir -p "$OWW_DIR" && cp ~/ros2_jazzy_test/containers/voice-processing/oww_models/* "$OWW_DIR"/
+
+# TFL3 매직바이트 검증
+python3 -c "
+import os
+d = '$OWW_DIR'
+[(open(os.path.join(d,f),'rb').read(8)[4:8]==b'TFL3') or (_ for _ in ()).throw(SystemExit('corrupt tflite: '+f)) for f in os.listdir(d) if f.endswith('.tflite')]
+print('feature models TFL3 OK')
+"
+
+# (6) numpy<2 마지막 재핀 — ultralytics 가 numpy>=2 를 끌어오므로 반드시 최후에
+pip install --force-reinstall "numpy<2"
+```
+
+검증:
+
+```bash
+python3 -c "
+import numpy,torch,ultralytics,cv2,langchain,langchain_openai,openai
+import pyaudio,sounddevice,scipy,openwakeword,ai_edge_litert
+import tflite_runtime.interpreter,pymodbus
+assert numpy.__version__.startswith('1.'), numpy.__version__
+print('deps OK', numpy.__version__)
+"
+```
+
+기대 출력: `deps OK 1.26.x`
+
 ### A4b. voice 에셋 스테이징
+
+`pick_and_place_voice` 노드는 `.pt` 모델과 카메라 캘리브레이션 행렬 `.npy` 를 자체 `resource/` 에서 읽는다. `pick_and_place_text` 에 있는 파일을 복사해 준다.
+
+```bash
+cp ~/cobot_ws/src/cobot2/pick_and_place_text/resource/yolov8n_tools_0122.pt \
+   ~/cobot_ws/src/cobot2/pick_and_place_voice/resource/
+
+cp ~/cobot_ws/src/cobot2/pick_and_place_text/resource/T_gripper2camera.npy \
+   ~/cobot_ws/src/cobot2/pick_and_place_voice/resource/
+```
+
+확인:
+
+```bash
+ls ~/cobot_ws/src/cobot2/pick_and_place_voice/resource/yolov8n_tools_0122.pt \
+   ~/cobot_ws/src/cobot2/pick_and_place_voice/resource/T_gripper2camera.npy
+# 두 경로가 출력되면 OK
+```
+
 ### A5. colcon 빌드 (격리 overlay)
 
 ## Part B — 실행
