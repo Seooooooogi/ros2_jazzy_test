@@ -1,0 +1,20 @@
+# venv-demo 의존 핀 — containers/{yolo-detection,voice-processing}/Dockerfile 미러 + 모놀리식 추가분.
+# 설치 순서/방법은 LAB.md Part A4 참조(numpy<2 는 반드시 마지막). 본 파일은 핀 대조용 reference.
+# torch/torchvision 은 별도 index(cu128)라 여기 버전 미기재 — LAB.md 의 --index-url 명령 사용.
+ultralytics<9
+opencv-python<4.10
+langchain<2
+langchain-openai<2
+openai<3
+pyaudio
+sounddevice
+scipy<1.18
+python-dotenv
+pymodbus
+openwakeword==0.6.0
+onnxruntime<2,>=1.10.0
+tqdm<5,>=4.0
+scikit-learn<2,>=1
+requests<3,>=2.0
+ai-edge-litert>=2.0.2,<3
+numpy<2
