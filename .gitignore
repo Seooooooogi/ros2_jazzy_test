@@ -81,3 +81,6 @@ skills-lock.json
 
 # 로컬 참조용 wiki 덤프 — 설치 스크립트/배포와 무관(humble 보존 스크립트는 backup/ 안에서 계속 추적).
 backup/llm_wiki/
+
+# subagent-driven-development 진행 ledger (scratch — 추적 안 함)
+.superpowers/
