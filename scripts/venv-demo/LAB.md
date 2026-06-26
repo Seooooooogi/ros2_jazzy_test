@@ -18,7 +18,7 @@
 
 ```bash
 # ROS2 jazzy 존재
-ros2 --version                                   # 예상: ros2 ... (명령 인식)
+command -v ros2                                  # 예상: /opt/ros/jazzy/bin/ros2 경로 출력 (없으면 ROS 미설치/미source)
 # host colcon 빌드본에 DSR + od_msg (overlay 의존)
 ls ~/cobot_ws/install/dsr_common2/lib/python3.12/site-packages/DSR_ROBOT2.py   # 예상: 경로 출력
 ls ~/cobot_ws/install/od_msg                     # 예상: include lib share
