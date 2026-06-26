@@ -88,16 +88,76 @@ ros2 launch realsense2_camera rs_align_depth_launch.py \
 
 **yolo 컨테이너**
 
+기동(이미지 ENTRYPOINT 가 노드 자동 실행) + 로그:
+
 ```bash
 docker compose -f ~/ros2_jazzy_test/containers/docker-compose.yml up -d yolo-detection
+docker logs -f yolo-detection            # Ctrl+C 는 로그만 종료(컨테이너 유지)
+```
+
+직접 들어가서 노드 실행 (dev override — 소스 수정 → 재실행 반복):
+
+```bash
+DEV="-f $HOME/ros2_jazzy_test/containers/docker-compose.yml -f $HOME/ros2_jazzy_test/containers/docker-compose.dev.yml"
+docker compose $DEV up -d yolo-detection      # 기동 시 1회 colcon build 후 idle (노드 auto-run 끔)
+docker exec -it yolo-detection bash           # /ws 진입, ROS overlay·venv PYTHONPATH 자동 source
+ros2 run object_detection object_detection    # Ctrl+C 로 멈추고 host 에서 소스 수정 후 재실행 반복
 ```
 
 **voice 컨테이너**
 
+기동(이미지 ENTRYPOINT 가 노드 자동 실행) + 로그:
+
 ```bash
 docker compose -f ~/ros2_jazzy_test/containers/docker-compose.yml up -d voice-processing
-docker logs -f voice-processing   # 로그 보기 (Ctrl+C 로 빠져나와도 컨테이너는 계속 실행)
+docker logs -f voice-processing          # Ctrl+C 는 로그만 종료(컨테이너 유지)
 ```
+
+직접 들어가서 노드 실행 (dev override):
+
+```bash
+DEV="-f $HOME/ros2_jazzy_test/containers/docker-compose.yml -f $HOME/ros2_jazzy_test/containers/docker-compose.dev.yml"
+docker compose $DEV up -d voice-processing    # 기동 시 1회 colcon build 후 idle (노드 auto-run 끔)
+docker exec -it voice-processing bash         # /ws 진입, ROS overlay·venv PYTHONPATH 자동 source
+ros2 run voice_processing get_keyword         # Ctrl+C 로 멈추고 host 에서 소스 수정 후 재실행 반복
+```
+
+compose 없이 (docker run 으로 풀어 쓰기) — compose 가 자동으로 깔아주던 host network·마이크 패스스루(`/dev/snd` + `audio` 그룹)·cyclonedds/asound mount 를 직접 명시한다. 위 compose 두 블록과 동작 동일:
+
+```bash
+# 프로덕션 (이미지 ENTRYPOINT 가 노드 자동 실행) — docker-compose.yml 의 voice-processing 등가
+docker run -d --name voice-processing \
+  --network host --restart unless-stopped \
+  --env-file ~/ros2_jazzy_test/.env \
+  -e ROS_DOMAIN_ID=42 -e RMW_IMPLEMENTATION=rmw_cyclonedds_cpp \
+  -e CYCLONEDDS_URI=file:///cyclonedds.xml -e PYTHONUNBUFFERED=1 \
+  -v ~/.config/cyclonedds/cyclonedds.xml:/cyclonedds.xml:ro \
+  -v ~/ros2_jazzy_test/containers/voice-processing/asound.conf:/etc/asound.conf:ro \
+  --device /dev/snd:/dev/snd --group-add audio \
+  local/ros2-jazzy-voice:dev
+docker logs -f voice-processing            # Ctrl+C 는 로그만 종료(컨테이너 유지)
+```
+
+```bash
+# dev (소스 mount + 기동 시 1회 colcon build 후 idle, exec 로 수동 실행) — +docker-compose.dev.yml 등가
+docker run -d --name voice-processing \
+  --network host -w /ws \
+  --env-file ~/ros2_jazzy_test/.env \
+  -e ROS_DOMAIN_ID=42 -e RMW_IMPLEMENTATION=rmw_cyclonedds_cpp \
+  -e CYCLONEDDS_URI=file:///cyclonedds.xml -e PYTHONUNBUFFERED=1 \
+  -v ~/.config/cyclonedds/cyclonedds.xml:/cyclonedds.xml:ro \
+  -v ~/ros2_jazzy_test/containers/voice-processing/asound.conf:/etc/asound.conf:ro \
+  -v ~/cobot_ws/src/cobot2/voice_container:/ws/src \
+  -v voice_build:/ws/build -v voice_install:/ws/install \
+  -v ~/ros2_jazzy_test/containers/dev/bashrc:/root/.bashrc:ro \
+  --device /dev/snd:/dev/snd --group-add audio \
+  local/ros2-jazzy-voice:dev-builder \
+  bash -c 'set +u; source /opt/ros/$ROS_DISTRO/setup.bash; colcon build --symlink-install --merge-install || true; sleep infinity'
+docker exec -it voice-processing bash      # /ws 진입, ROS overlay·venv PYTHONPATH 자동 source
+ros2 run voice_processing get_keyword      # Ctrl+C 로 멈추고 host 에서 소스 수정 후 재실행 반복
+```
+
+> 핵심 플래그: `--network host`(DDS discovery — host 노드와 토픽 공유) · `--device /dev/snd:/dev/snd` + `--group-add audio`(마이크 패스스루) · `asound.conf` mount(ALSA 기본 캡처를 hw:1,7 로 고정) · `--env-file`(OPENAI_API_KEY 주입). 정지·삭제는 `docker rm -f voice-processing` (dev 빌드 볼륨까지 초기화하려면 `docker volume rm voice_build voice_install`).
 
 **robot_control**
 
