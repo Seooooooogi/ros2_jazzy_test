@@ -172,3 +172,10 @@ ros2 run robot_control robot_control   # real / virtual(에뮬레이터) 모두 
 bash ~/ros2_jazzy_test/containers/bringup.sh mode:=real
 ros2 run robot_control robot_control   # real / virtual(에뮬레이터) 모두 동작 — RealSense 연결 필요 (virtual 은 실물 로봇 불필요)
 ```
+
+### 컨테이너 없이 실행해 보기 (교육용 대비)
+
+컨테이너 사용 효과를 비교하려면 모놀리식 노드를 host venv 로 직접 실행하는 실습 가이드를 따른다:
+[`scripts/venv-demo/LAB.md`](scripts/venv-demo/LAB.md). 의존성 설치·네임스페이스·멀티터미널 기동을
+한 줄씩 직접 수행하며, 컨테이너(`bringup.sh` + `docker compose`)가 대신 처리하던 작업량을 체감한다.
+정식 설치 경로가 아니라 비교 학습용이다.

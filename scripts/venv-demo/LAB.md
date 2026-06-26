@@ -461,3 +461,22 @@ ros2 run pick_and_place_voice robot_control
 마이크 연결 + 실제 `OPENAI_API_KEY` + 에뮬레이터(또는 실로봇) 환경 필요 — 별도 [HW] 단계에서 수행.
 
 ## Part C — 정리 & 대비
+- 방금 친 명령 수를 세어 본다. **컨테이너 방식이었다면**:
+  ```bash
+  bash ~/ros2_jazzy_test/containers/bringup.sh mode:=virtual   # 드라이버+카메라
+  docker compose -f ~/ros2_jazzy_test/containers/docker-compose.yml up -d   # yolo+voice
+  ```
+  두 줄. 이미지가 의존성·핀·shim·네임스페이스·빌드를 전부 선처리.
+- 정리(원복):
+  ```bash
+  rm -rf ~/.cobot2_venv_demo
+  # (선택) cobot2 원본 되돌리기: rename 역수행 + COLCON_IGNORE 재생성. 비추적이라 git 무관.
+  ```
+
+| 관점 | 컨테이너 | venv(이 문서) |
+|------|---------|--------------|
+| 의존성 설치 | 이미지에 선반영 | 수동 pip(torch 수 GB, numpy<2 순서, openwakeword shim) |
+| 네임스페이스 충돌 | FS 격리로 무관 | `robot_control` 등 rename 필요 |
+| 마이크/장치 | 이미지+asound.conf | 장치 인덱스 수동 probe |
+| 기동 | 2줄 | 7개 터미널·다수 명령 |
+| 정리 | `compose down` | `rm -rf` + 원본 원복 |
