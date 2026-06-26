@@ -337,6 +337,51 @@ python3 -c "from ament_index_python.packages import get_package_share_directory 
 
 ## Part B — 실행
 ### text 데모 (터미널 3개)
+
+> **전제**: Part A 전 단계 완료 (`~/.cobot2_venv_demo/` 존재, colcon overlay 빌드 완료).
+
+#### 터미널 1 — 드라이버 + 카메라 (bringup, 가상 에뮬레이터)
+
+```bash
+set -a; source ~/ros2_jazzy_test/resources/config.sh; set +a
+source /opt/ros/jazzy/setup.bash
+source ~/cobot_ws/install/setup.bash
+ros2 launch cobot2_bringup bringup_all.launch.py mode:=virtual
+# 실로봇: ros2 launch cobot2_bringup bringup_all.launch.py mode:=real host:=192.168.1.100
+```
+
+기대 출력: DSR 에뮬레이터 + RealSense 드라이버 노드 기동 (터미널 1 은 이 상태로 유지).
+
+#### 터미널 2 — YOLO depth 서비스 노드 (detection, venv)
+
+```bash
+set -a; source ~/ros2_jazzy_test/resources/config.sh; set +a
+source /opt/ros/jazzy/setup.bash
+source ~/cobot_ws/install/setup.bash
+source ~/.cobot2_venv_demo/ws/install/setup.bash
+export PYTHONPATH="$(ls -d ~/.cobot2_venv_demo/venv/lib/python*/site-packages):$PYTHONPATH"
+ros2 run pick_and_place_text detection
+```
+
+기대 출력: YOLO 모델 로드 로그 → `Waiting for client's call...` (카메라 토픽 대기).  
+에뮬레이터 없이 실행 시 카메라 topic 수신 대기 상태로 머무는 것은 정상 — `ModuleNotFoundError` / `FileNotFoundError` 없으면 OK.
+
+#### 터미널 3 — 오케스트레이터 (robot_move, venv)
+
+```bash
+set -a; source ~/ros2_jazzy_test/resources/config.sh; set +a
+source /opt/ros/jazzy/setup.bash
+source ~/cobot_ws/install/setup.bash
+source ~/.cobot2_venv_demo/ws/install/setup.bash
+export PYTHONPATH="$(ls -d ~/.cobot2_venv_demo/venv/lib/python*/site-packages):$PYTHONPATH"
+ros2 run pick_and_place_text robot_move
+```
+
+기대 출력: DSR 노드 초기화 (`_robot_id=dsr01`, `_robot_model=m0609`) → MoveJ 서비스 대기 로그.  
+에뮬레이터 없이 실행 시 `MoveJ Service is not available, waiting...` 가 반복되는 것은 정상 [HW/emulator].
+
+> **전체 파이프라인** (bringup virtual + RealSense 카메라 + 실제 pick&place 모션) 검증은 에뮬레이터 + 그리퍼 하드웨어가 필요한 별도 단계 — [HW/emulator] 에서 수행.
+
 ### voice 데모 (터미널 4개)
 
 ## Part C — 정리 & 대비
