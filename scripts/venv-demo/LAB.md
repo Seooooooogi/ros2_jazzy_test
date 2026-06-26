@@ -303,6 +303,38 @@ ls ~/cobot_ws/src/cobot2/pick_and_place_voice/resource/yolov8n_tools_0122.pt \
 
 ### A5. colcon 빌드 (격리 overlay)
 
+`~/cobot_ws/install` 을 오염시키지 않도록 별도 overlay 워크스페이스에 두 패키지를 빌드한다.  
+`~/cobot_ws/install` 이 underlay — DSR + od_msg 는 여기서 온다.
+
+```bash
+deactivate 2>/dev/null || true
+set -a; source ~/ros2_jazzy_test/resources/config.sh; set +a
+source /opt/ros/jazzy/setup.bash
+source ~/cobot_ws/install/setup.bash
+mkdir -p ~/.cobot2_venv_demo/ws/src
+ln -sfn ~/cobot_ws/src/cobot2/pick_and_place_text  ~/.cobot2_venv_demo/ws/src/pick_and_place_text
+ln -sfn ~/cobot_ws/src/cobot2/pick_and_place_voice ~/.cobot2_venv_demo/ws/src/pick_and_place_voice
+cd ~/.cobot2_venv_demo/ws && colcon build
+```
+
+기대 출력: `Summary: 2 packages finished` (경고는 무시 가능).
+
+검증 (새 터미널 또는 동일 세션에서):
+
+```bash
+source /opt/ros/jazzy/setup.bash
+source ~/cobot_ws/install/setup.bash
+source ~/.cobot2_venv_demo/ws/install/setup.bash
+ros2 pkg list | grep -E "pick_and_place_(text|voice)"
+ls ~/.cobot2_venv_demo/ws/install/pick_and_place_voice/share/pick_and_place_voice/resource/yolov8n_tools_0122.pt
+python3 -c "from ament_index_python.packages import get_package_share_directory as g; print(g('pick_and_place_text')); print(g('pick_and_place_voice'))"
+```
+
+기대 출력:
+- `pick_and_place_text` / `pick_and_place_voice` 두 줄
+- `.pt` 경로 출력
+- overlay 내 두 share 경로 출력 (에러 없음)
+
 ## Part B — 실행
 ### text 데모 (터미널 3개)
 ### voice 데모 (터미널 4개)
