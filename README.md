@@ -126,6 +126,7 @@ compose 없이 (docker run 으로 풀어 쓰기) — compose 가 자동으로 �
 
 ```bash
 # 프로덕션 (이미지 ENTRYPOINT 가 노드 자동 실행) — docker-compose.yml 의 voice-processing 등가
+docker rm -f voice-processing 2>/dev/null || true   # 같은 이름의 기존 컨테이너(compose/직접 실행 잔재) 선제거 — 없으면 무시
 docker run -d --name voice-processing \
   --network host --restart unless-stopped \
   --env-file ~/ros2_jazzy_test/.env \
@@ -140,6 +141,7 @@ docker logs -f voice-processing            # Ctrl+C 는 로그만 종료(컨테�
 
 ```bash
 # dev (소스 mount + 기동 시 1회 colcon build 후 idle, exec 로 수동 실행) — +docker-compose.dev.yml 등가
+docker rm -f voice-processing 2>/dev/null || true   # 같은 이름의 기존 컨테이너(compose/직접 실행 잔재) 선제거 — 없으면 무시
 docker run -d --name voice-processing \
   --network host -w /ws \
   --env-file ~/ros2_jazzy_test/.env \
@@ -158,6 +160,8 @@ ros2 run voice_processing get_keyword      # Ctrl+C 로 멈추고 host 에서 �
 ```
 
 > 핵심 플래그: `--network host`(DDS discovery — host 노드와 토픽 공유) · `--device /dev/snd:/dev/snd` + `--group-add audio`(마이크 패스스루) · `asound.conf` mount(ALSA 기본 캡처를 hw:1,7 로 고정) · `--env-file`(OPENAI_API_KEY 주입). 정지·삭제는 `docker rm -f voice-processing` (dev 빌드 볼륨까지 초기화하려면 `docker volume rm voice_build voice_install`).
+>
+> ⚠ compose(`up -d voice-processing`)와 직접 `docker run` 은 **같은 고정 이름** `voice-processing` 을 쓴다. 한 방식으로 띄운 컨테이너가 (정지 상태로라도) 남아 있으면 다른 방식 기동이 `name is already in use` 로 실패한다 — 그래서 각 `docker run` 앞에 `docker rm -f` 를 둔다(compose 끼리 prod↔dev 전환도 동일).
 
 **robot_control**
 
