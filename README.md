@@ -95,6 +95,14 @@ docker compose -f ~/ros2_jazzy_test/containers/docker-compose.yml up -d yolo-det
 docker logs -f yolo-detection            # Ctrl+C 는 로그만 종료(컨테이너 유지)
 ```
 
+> ℹ️ **dev 모드(아래 yolo·voice 공통)는 `:dev-builder` 이미지가 필요한데, `setup-app.sh` 의 fetch 엔 없다.** fetch(기본 셋업)는 프로덕션 `:dev` 만 받는다 — 노드 자동 실행 전용으로 소스가 이미지에 구워져 있어(`/ws/install` 만 포함, 빌드 도구 없음) **host 코드 수정이 반영되지 않는다**. 소스를 수정·디버깅하려면 `:dev-builder`(builder 스테이지)를 **로컬에서 1회 빌드**해야 한다. 한 번 만들면 이후엔 `.py` 수정 → 노드 재실행만으로 즉시 반영된다(`--symlink-install` — 매번 빌드가 아니다):
+>
+> ```bash
+> DEV="-f ~/ros2_jazzy_test/containers/docker-compose.yml -f ~/ros2_jazzy_test/containers/docker-compose.dev.yml"
+> docker compose $DEV build yolo-detection      # 또는 voice-processing — 각각 :dev-builder 태그 생성 (1회)
+> ```
+> (compose 없이 풀어 쓰면 `docker build --target builder -t local/ros2-jazzy-<yolo|voice>:dev-builder .` — 빌드 컨텍스트는 레포 루트. 정식 빌드 경로는 `containers/build-all.sh`.)
+
 직접 들어가서 노드 실행 (dev override — 소스 수정 → 재실행 반복):
 
 ```bash
@@ -129,7 +137,7 @@ docker compose -f ~/ros2_jazzy_test/containers/docker-compose.yml up -d voice-pr
 docker logs -f voice-processing          # Ctrl+C 는 로그만 종료(컨테이너 유지)
 ```
 
-직접 들어가서 노드 실행 (dev override):
+직접 들어가서 노드 실행 (dev override) — `:dev-builder` 가 먼저 있어야 한다(fetch 엔 없음, 위 yolo dev 의 ℹ️ 참고 → `docker compose $DEV build voice-processing` 로 1회 빌드):
 
 ```bash
 DEV="-f $HOME/ros2_jazzy_test/containers/docker-compose.yml -f $HOME/ros2_jazzy_test/containers/docker-compose.dev.yml"
