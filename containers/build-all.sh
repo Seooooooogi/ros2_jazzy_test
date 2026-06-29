@@ -53,6 +53,22 @@ smoke() {
     docker run --rm "${image}" python3 -c "${pyexpr}"
 }
 
+# cobot2 is externalized — its source lives at ${DSR_WORKSPACE}/src/cobot2, not in the repo. The Dockerfiles COPY
+# cobot_ws/src/cobot2/{yolo_container,voice_container}/... relative to the build context (REPO_ROOT), so mirror the
+# verified source into the context (the /cobot_ws/src/ path is gitignored). This uses the SAME source that
+# setup-app's obtain_cobot2 checked (${DSR_WORKSPACE}/src/cobot2) and overwrites any stale partial copy in the repo.
+COBOT2_SRC="${DSR_WORKSPACE}/src/cobot2"
+COBOT2_CTX="${REPO_ROOT}/cobot_ws/src/cobot2"
+if [[ ! -d "${COBOT2_SRC}/yolo_container" || ! -d "${COBOT2_SRC}/voice_container" ]]; then
+    echo "build-all: cobot2 source incomplete at ${COBOT2_SRC} (need yolo_container + voice_container)." >&2
+    echo "           Place the cobot2 source there (setup-app obtain_cobot2) before --build." >&2
+    exit 1
+fi
+printf 'INFO: staging cobot2 source %s → %s (build context)\n' "${COBOT2_SRC}" "${COBOT2_CTX}"
+rm -rf "${COBOT2_CTX}"
+mkdir -p "$(dirname "${COBOT2_CTX}")"
+cp -a "${COBOT2_SRC}" "${COBOT2_CTX}"
+
 step 1 "build yolo-detection (torch cu${CUDA_VERSION//./} + ultralytics + numpy<2)"
 docker build --pull \
     -f "${REPO_ROOT}/containers/yolo-detection/Dockerfile" \
