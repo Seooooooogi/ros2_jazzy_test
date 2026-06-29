@@ -203,6 +203,17 @@ ros2 run voice_processing get_keyword      # Ctrl+C 로 멈추고 host 에서 �
 >
 > ⚠ compose(`up -d voice-processing`)와 직접 `docker run` 은 **같은 고정 이름** `voice-processing` 을 쓴다. 한 방식으로 띄운 컨테이너가 (정지 상태로라도) 남아 있으면 다른 방식 기동이 `name is already in use` 로 실패한다 — 그래서 각 `docker run` 앞에 `docker rm -f` 를 둔다(compose 끼리 prod↔dev 전환도 동일).
 
+STT 트리거(서비스 호출) — 컨테이너가 `get_keyword` 노드를 자동 실행하므로, 호출은 host 의 별도 터미널에서 한다. `ros2 service call` 1회가 (wakeword 대기 →) 5초 녹음 → Whisper STT → 키워드 추출까지 1회 수행하고 결과를 응답으로 돌려준다:
+
+```bash
+source /opt/ros/jazzy/setup.bash
+export ROS_DOMAIN_ID=42                                  # 컨테이너와 같은 도메인(필수)
+ros2 service call /get_keyword std_srvs/srv/Trigger "{}"
+# 응답 예: success=true, message='hammer / pos1' (도구 / 목적지)
+```
+
+> STT(Whisper)·키워드 추출은 voice 컨테이너에 OPENAI_API_KEY 가 주입돼 있어야(`.env`) 동작하고, 인터넷(api.openai.com) 연결이 필요하다. 진행 로그는 `docker logs -f voice-processing` 로 확인.
+
 **robot_control**
 
 ```bash
