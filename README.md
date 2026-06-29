@@ -99,6 +99,14 @@ docker logs -f yolo-detection            # Ctrl+C 는 로그만 종료(컨테이
 >
 > ```bash
 > cd ~/ros2_jazzy_test                          # ★ 빌드 컨텍스트 = 레포 루트 (Dockerfile 폴더 아님)
+>
+> # 0) cobot2 소스를 빌드 컨텍스트로 staging — cobot2 는 외부화돼 레포에 없다(~/cobot_ws 에 있음).
+> #    Dockerfile 이 COPY cobot_ws/src/cobot2/... 를 컨텍스트 기준으로 참조하므로 먼저 복사한다.
+> #    (이 단계를 빠뜨리면 COPY 가 'not found → failed to compute cache key' 로 깨진다.
+> #     build-all.sh 는 이 복사를 자동으로 한다.)
+> rm -rf cobot_ws/src/cobot2 && mkdir -p cobot_ws/src
+> cp -aT ~/cobot_ws/src/cobot2 cobot_ws/src/cobot2   # -T: cobot2 로 그대로 복사(중첩 방지). cobot_ws 는 gitignore.
+>
 > # yolo — builder 스테이지(--target). yolo 는 PyTorch CUDA wheel 결정용 CUDA_VERSION 추가.
 > docker build -f containers/yolo-detection/Dockerfile --target builder \
 >   --build-arg ROS_DISTRO=jazzy --build-arg CUDA_VERSION=12.8 \
@@ -108,7 +116,7 @@ docker logs -f yolo-detection            # Ctrl+C 는 로그만 종료(컨테이
 >   --build-arg ROS_DISTRO=jazzy \
 >   -t local/ros2-jazzy-voice:dev-builder .
 > ```
-> 함정 2개: ① 끝의 `.`(빌드 컨텍스트)는 **레포 루트** — Dockerfile 이 `COPY cobot_ws/...`·`COPY containers/...` 를 레포 루트 기준으로 참조하므로 `containers/<svc>/` 안에서 빌드하면 `failed to compute cache key` 로 깨진다. ② `--target builder` 생략 시 마지막(runtime) 스테이지가 빌드돼 프로덕션 `:dev` 가 나온다 — dev 모드가 mount 할 idle 이미지가 안 됨. (compose 로 묶어 쓰려면 `docker compose -f containers/docker-compose.yml -f containers/docker-compose.dev.yml build <svc>`. 정식 빌드 경로는 `containers/build-all.sh`.)
+> 함정 3개: ① **cobot2 staging**(위 0단계) — cobot2 가 외부화돼 레포 컨텍스트에 없으므로 먼저 복사하지 않으면 `COPY cobot_ws/src/cobot2/...` 가 `not found → failed to compute cache key` 로 깨진다. ② 끝의 `.`(빌드 컨텍스트)는 **레포 루트** — `containers/<svc>/` 안에서 빌드하면 같은 식으로 깨진다. ③ `--target builder` 생략 시 마지막(runtime) 스테이지가 빌드돼 프로덕션 `:dev` 가 나온다 — dev 모드가 mount 할 idle 이미지가 안 됨. (compose 로 묶어 쓰려면 `docker compose -f containers/docker-compose.yml -f containers/docker-compose.dev.yml build <svc>` — 단 이 경우에도 0단계 staging 은 필요. 정식 빌드 경로는 staging+빌드를 자동화한 `containers/build-all.sh`.)
 
 직접 들어가서 노드 실행 (dev override — 소스 수정 → 재실행 반복):
 
