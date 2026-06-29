@@ -95,13 +95,20 @@ docker compose -f ~/ros2_jazzy_test/containers/docker-compose.yml up -d yolo-det
 docker logs -f yolo-detection            # Ctrl+C 는 로그만 종료(컨테이너 유지)
 ```
 
-> ℹ️ **dev 모드(아래 yolo·voice 공통)는 `:dev-builder` 이미지가 필요한데, `setup-app.sh` 의 fetch 엔 없다.** fetch(기본 셋업)는 프로덕션 `:dev` 만 받는다 — 노드 자동 실행 전용으로 소스가 이미지에 구워져 있어(`/ws/install` 만 포함, 빌드 도구 없음) **host 코드 수정이 반영되지 않는다**. 소스를 수정·디버깅하려면 `:dev-builder`(builder 스테이지)를 **로컬에서 1회 빌드**해야 한다. 한 번 만들면 이후엔 `.py` 수정 → 노드 재실행만으로 즉시 반영된다(`--symlink-install` — 매번 빌드가 아니다):
+> ℹ️ **dev 모드(아래 yolo·voice 공통)는 `:dev-builder` 이미지가 필요한데, `setup-app.sh` 의 fetch 엔 없다.** fetch(기본 셋업)는 프로덕션 `:dev` 만 받는다 — 노드 자동 실행 전용으로 소스가 이미지에 구워져 있어(`/ws/install` 만 포함, 빌드 도구 없음) **host 코드 수정이 반영되지 않는다**. 소스를 수정·디버깅하려면 `:dev-builder`(builder 스테이지)를 **로컬에서 1회 빌드**해야 한다. 한 번 만들면 이후엔 `.py` 수정 → 노드 재실행만으로 즉시 반영된다(`--symlink-install` — 매번 빌드가 아니다). compose 없이 `docker build` 로 풀어 쓰면:
 >
 > ```bash
-> DEV="-f ~/ros2_jazzy_test/containers/docker-compose.yml -f ~/ros2_jazzy_test/containers/docker-compose.dev.yml"
-> docker compose $DEV build yolo-detection      # 또는 voice-processing — 각각 :dev-builder 태그 생성 (1회)
+> cd ~/ros2_jazzy_test                          # ★ 빌드 컨텍스트 = 레포 루트 (Dockerfile 폴더 아님)
+> # yolo — builder 스테이지(--target). yolo 는 PyTorch CUDA wheel 결정용 CUDA_VERSION 추가.
+> docker build -f containers/yolo-detection/Dockerfile --target builder \
+>   --build-arg ROS_DISTRO=jazzy --build-arg CUDA_VERSION=12.8 \
+>   -t local/ros2-jazzy-yolo:dev-builder .
+> # voice — builder 스테이지.
+> docker build -f containers/voice-processing/Dockerfile --target builder \
+>   --build-arg ROS_DISTRO=jazzy \
+>   -t local/ros2-jazzy-voice:dev-builder .
 > ```
-> (compose 없이 풀어 쓰면 `docker build --target builder -t local/ros2-jazzy-<yolo|voice>:dev-builder .` — 빌드 컨텍스트는 레포 루트. 정식 빌드 경로는 `containers/build-all.sh`.)
+> 함정 2개: ① 끝의 `.`(빌드 컨텍스트)는 **레포 루트** — Dockerfile 이 `COPY cobot_ws/...`·`COPY containers/...` 를 레포 루트 기준으로 참조하므로 `containers/<svc>/` 안에서 빌드하면 `failed to compute cache key` 로 깨진다. ② `--target builder` 생략 시 마지막(runtime) 스테이지가 빌드돼 프로덕션 `:dev` 가 나온다 — dev 모드가 mount 할 idle 이미지가 안 됨. (compose 로 묶어 쓰려면 `docker compose -f containers/docker-compose.yml -f containers/docker-compose.dev.yml build <svc>`. 정식 빌드 경로는 `containers/build-all.sh`.)
 
 직접 들어가서 노드 실행 (dev override — 소스 수정 → 재실행 반복):
 
@@ -137,7 +144,7 @@ docker compose -f ~/ros2_jazzy_test/containers/docker-compose.yml up -d voice-pr
 docker logs -f voice-processing          # Ctrl+C 는 로그만 종료(컨테이너 유지)
 ```
 
-직접 들어가서 노드 실행 (dev override) — `:dev-builder` 가 먼저 있어야 한다(fetch 엔 없음, 위 yolo dev 의 ℹ️ 참고 → `docker compose $DEV build voice-processing` 로 1회 빌드):
+직접 들어가서 노드 실행 (dev override) — `:dev-builder` 가 먼저 있어야 한다(fetch 엔 없음 → 위 yolo dev 의 ℹ️ 의 `docker build --target builder ... local/ros2-jazzy-voice:dev-builder .` 로 1회 빌드):
 
 ```bash
 DEV="-f $HOME/ros2_jazzy_test/containers/docker-compose.yml -f $HOME/ros2_jazzy_test/containers/docker-compose.dev.yml"
