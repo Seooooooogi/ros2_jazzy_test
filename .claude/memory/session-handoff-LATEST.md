@@ -6,6 +6,12 @@
 
 ## 다음 세션 — 무엇보다 먼저
 
+**(2026-06-29 [실측] 세션 반영) — venv 실습 가이드 push 완료 + voice docker run 이름 충돌 가드.**
+- **push 완료**: `feat/application-containers` 15커밋 origin 동기(0/0, HEAD `1ec6166`). 14커밋 = 직전 [문서] 세션이 남겼던 venv pick&place 교육 실습 가이드(`scripts/venv-demo/LAB.md` 499줄 + `docs/plans/2026-06-26-venv-pickplace-demo.md` + `requirements.txt` + README 진입점 + apt `python3.12-venv` + ros2 명령 Jazzy 호환). +1커밋 = 아래 README 가드. secret 스캔 clean(LAB.md `sk-...` = 플레이스홀더), `.env` 미추적.
+- **voice docker run "빌드 안 됨" 진단·해결**: `docker run` 은 빌드 단계 무관 — compose dev(`docker-compose.dev.yml`, `container_name: voice-processing`)가 만든 `:dev-builder` 컨테이너가 **정지 상태로 고정 이름 점유** → 직접 `docker run --name voice-processing` 이 `name is already in use` 로 즉시 실패. README 두 `docker run` 블록 앞에 `docker rm -f voice-processing 2>/dev/null || true` 멱등 가드 + 각주에 충돌 원인/prod↔dev 전환 주의 명시(커밋 `1ec6166`).
+- **검증**: 잔재 컨테이너 제거 후 사용자 명령 그대로 PASS — `MicRecorderNode initialized` / `wait for client's request...`(`/get_keyword` 대기).
+- **머신 상태(세션 끝)**: voice-processing **프로덕션 컨테이너 가동 중**(`:dev` 이미지 = runtime 스테이지, `--restart unless-stopped`, 마이크 점유). 중지는 `docker rm -f voice-processing`. ⚠ 태그 명명 주의 — `:dev`=프로덕션 runtime(ENTRYPOINT 노드 자동실행, build-all.sh 산출), `:dev-builder`=디버그(compose dev, sleep 후 수동 exec).
+
 **(2026-06-26 [실측] 세션 반영) — wakeword 미응답 = 해결·end-to-end 검증 완료.**
 근본원인: 컨테이너 마이크 캡처가 ALSA 기본값(plug)→노이즈 큰 **hw:1,6**(48kHz DMIC, 정적에서도 풀스케일 클리핑) 으로 가 confidence 가 0 부근 고정. 해결: 캡처 코드가 ALSA 기본값에 의존하지 않고 **깨끗한 16kHz 네이티브 DMIC(hw:1,7)** 를 직접 연다 — 신규 `voice_processing/audio_device.py::resolve_input_device()`(`VOICE_MIC_DEVICE` env → 16kHz 자동선택 → None), `wakeup_word.py`/`stt.py` 적용. 레포 `asound.conf` default→hw:1,7.
 - **e2e 실측 PASS**: get_keyword 노드 + `ros2 service call /get_keyword` → "Hello Rokey"(confidence **0.92**) → STT "해머를 포즈1에 가져다놔" → gpt-4o `hammer / pos1`. 풀 파이프라인 동작.
@@ -58,6 +64,11 @@
 **신규(2026-06-15 후속5) [실측] 검증 대기**: ① Calibration `onrobot.py` 가 pymodbus 3.x 로 바뀜 → **RG gripper open/close/move 하드웨어 재검증 전 실로봇 운용 금지**(register write 의미는 import smoke 로 검증 불가, ADR-014). ② 컨테이너 dev 모드 — 이제 install.sh step16(`container_dev_ws`)이 `~/yolo_ws`·`~/voice_ws` 를 클린설치 시 자동 생성(후속6, 기설치 머신은 `bash containers/dev-ws-setup.sh`). **[실측] 검증: voice PASS(2026-06-16) — 단 그 과정에 dev-mode 결함 2건(dev `colcon build` `--merge-install` 누락 → baked 코드 silent fallback / builder 이미지 cyclonedds RMW 누락 → 노드 기동 불가) 발견·수정·push(`1f59df9`/`be74716`). yolo 도 2026-06-16 재빌드·검증 완료(RealSense D435i 연결·`/get_3d_position` round-trip·viz 화면).** **(2026-06-17 경로 변경: `~/yolo_ws`·`~/voice_ws` 별도 ws + `dev-ws-setup.sh` + install.sh dev-ws step **폐기** — dev bind-mount 는 이제 통합 `~/cobot_ws/src/cobot2_ws/{yolo_ws,voice_ws}` 서브디렉토리. 위 dev-mode 검증 결과 자체는 유효, 경로만 바뀜.)**
 
 ## Last updated
+2026-06-29 ([실측]) — **[실측]** venv 실습 가이드 push + voice docker run 이름 충돌 가드. `feat/application-containers` 15커밋 origin 동기(HEAD `1ec6166`).
+① **실습 가이드 push** — 직전 [문서] 세션이 남긴 미푸시 14커밋(venv pick&place 교육 — `scripts/venv-demo/LAB.md`+계획문서+`requirements.txt`+README 진입점+`python3.12-venv` apt 의존성+ros2 명령 Jazzy 호환+ledger scratch gitignore)을 origin 반영. push 전 secret 스캔 clean(LAB.md `sk-...` 2건 = 플레이스홀더), `.env` 미추적 확인.
+② **voice docker run 이름 충돌**(`1ec6166`) — 사용자 보고 "compose 없이 직접 docker run 했더니 안 됨"의 정체 = compose dev 가 만든 `voice-processing`(`:dev-builder`, Exited 255) 정지 컨테이너가 고정 이름을 점유 → 직접 `docker run --name voice-processing` 이 `Conflict. The container name "/voice-processing" is already in use` 로 즉시 실패(빌드 단계와 무관). README 의 prod/dev 두 `docker run` 블록 앞에 `docker rm -f voice-processing 2>/dev/null || true` 선제거 가드 추가 + 각주에 충돌 원인 명시. README 는 같은 고정 이름을 4가지 기동 방식 전부에서 써서 방식 전환 시 항상 충돌하던 구조적 footgun.
+**검증**: 잔재 제거 후 사용자 명령 그대로 재실행 PASS(`MicRecorderNode initialized`·`/get_keyword` 대기). voice 프로덕션 컨테이너(`:dev`=runtime 이미지) 가동 상태로 종료. 태그 명명 — `:dev`=프로덕션 runtime / `:dev-builder`=디버그 builder 확인. `refactor/installer-shell` 은 ahead 1(핸드오프 갱신 커밋만, stale).
+
 2026-06-23 ([실측]) — **[실측]** voice→yolo 통신 진단 + DDS/안전 버그 수정 + main 승격. `feat`(`47adcaa`)·`main`(`6d38a1a`) origin 동기.
 ① **진단** — voice(`get_keyword`)·yolo(`object_detection`)는 서로 직접 통신 안 함: 둘 다 수동 service 서버, host `robot_control` 이 client 로 orchestrate. "voice 결과가 yolo 로 안 감" = robot_control 미기동 + DDS discovery 깨짐(아래 ②).
 ② **CycloneDDS 경로 단일화**(config.sh) — `CYCLONEDDS_XML` 단일 소스 export + `CYCLONEDDS_URI=file://$XML` 강제 파생. 기존 `:-` 가 stale `~/.bashrc` URI(구 `~/.ros2_jazzy_test/` 경로)를 유지 → compose 는 `~/.config/cyclonedds/` 마운트 → host/container 가 **다른 파일** → discovery silent fail. **머신 remediation**: bogus dir 제거(root 소유 — 사용자 `! sudo rm`) + `dds-tuning.sh` 재실행(신경로 렌더+`~/.bashrc` 갱신) + 컨테이너 재기동 → discovery 복구 확인.
