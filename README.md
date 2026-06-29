@@ -104,6 +104,22 @@ docker exec -it yolo-detection bash           # /ws 진입, ROS overlay·venv PY
 ros2 run object_detection object_detection    # Ctrl+C 로 멈추고 host 에서 소스 수정 후 재실행 반복
 ```
 
+compose 없이 (docker run 으로 풀어 쓰기) — compose 가 깔아주던 host network·GPU 패스스루(`--gpus all`)·cyclonedds mount 를 직접 명시한다. 위 compose 블록과 동작 동일(host 카메라 토픽이 먼저 떠 있어야 함):
+
+```bash
+# 프로덕션 (이미지 ENTRYPOINT 가 노드 자동 실행) — docker-compose.yml 의 yolo-detection 등가
+docker rm -f yolo-detection 2>/dev/null || true   # 같은 이름의 기존 컨테이너(compose/직접 실행 잔재) 선제거 — 없으면 무시
+docker run -d --name yolo-detection \
+  --network host --restart unless-stopped --gpus all \
+  -e ROS_DOMAIN_ID=42 -e RMW_IMPLEMENTATION=rmw_cyclonedds_cpp \
+  -e CYCLONEDDS_URI=file:///cyclonedds.xml -e PYTHONUNBUFFERED=1 \
+  -v ~/.config/cyclonedds/cyclonedds.xml:/cyclonedds.xml:ro \
+  local/ros2-jazzy-yolo:dev
+docker logs -f yolo-detection            # Ctrl+C 는 로그만 종료(컨테이너 유지)
+```
+
+> voice 와 차이: `--gpus all`(GPU 패스스루 — nvidia-container-toolkit 필요) · `/dev/snd`·`--env-file` 불요. 정지·삭제는 `docker rm -f yolo-detection`.
+
 **voice 컨테이너**
 
 기동(이미지 ENTRYPOINT 가 노드 자동 실행) + 로그:
