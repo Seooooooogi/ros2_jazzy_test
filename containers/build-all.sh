@@ -59,15 +59,33 @@ smoke() {
 # setup-app's obtain_cobot2 checked (${DSR_WORKSPACE}/src/cobot2) and overwrites any stale partial copy in the repo.
 COBOT2_SRC="${DSR_WORKSPACE}/src/cobot2"
 COBOT2_CTX="${REPO_ROOT}/cobot_ws/src/cobot2"
-if [[ ! -d "${COBOT2_SRC}/yolo_container" || ! -d "${COBOT2_SRC}/voice_container" ]]; then
-    echo "build-all: cobot2 source incomplete at ${COBOT2_SRC} (need yolo_container + voice_container)." >&2
-    echo "           Place the cobot2 source there (setup-app obtain_cobot2) before --build." >&2
+# The EXACT package dirs the Dockerfiles COPY (context-relative). Check these leaf paths — not just the
+# yolo_container/voice_container parents — so a partial source (e.g. od_msg present but object_detection
+# missing) fails loud here, instead of as a cryptic '<path>: not found' from BuildKit after the (multi-minute)
+# torch layer has already downloaded. These must stay in sync with the COPY lines in the two Dockerfiles.
+COBOT2_REQUIRED=(
+    yolo_container/od_msg
+    yolo_container/object_detection
+    voice_container/voice_processing
+)
+missing=()
+for rel in "${COBOT2_REQUIRED[@]}"; do
+    [[ -d "${COBOT2_SRC}/${rel}" ]] || missing+=("${rel}")
+done
+if (( ${#missing[@]} )); then
+    echo "build-all: cobot2 source incomplete at ${COBOT2_SRC} — missing: ${missing[*]}" >&2
+    echo "           Place the full cobot2 source there (setup-app obtain_cobot2) before --build." >&2
     exit 1
 fi
 printf 'INFO: staging cobot2 source %s → %s (build context)\n' "${COBOT2_SRC}" "${COBOT2_CTX}"
 rm -rf "${COBOT2_CTX}"
 mkdir -p "$(dirname "${COBOT2_CTX}")"
-cp -a "${COBOT2_SRC}" "${COBOT2_CTX}"
+cp -aT "${COBOT2_SRC}" "${COBOT2_CTX}"   # -T: copy AS cobot2, never nest INTO a leftover cobot2/ dir
+# Verify the staged context now holds those leaf paths — catches a partial cp or a wrong DSR_WORKSPACE
+# before the build wastes the torch download on a context BuildKit would reject.
+for rel in "${COBOT2_REQUIRED[@]}"; do
+    [[ -d "${COBOT2_CTX}/${rel}" ]] || { echo "build-all: staging incomplete — ${COBOT2_CTX}/${rel} absent after copy." >&2; exit 1; }
+done
 
 step 1 "build yolo-detection (torch cu${CUDA_VERSION//./} + ultralytics + numpy<2)"
 docker build --pull \
