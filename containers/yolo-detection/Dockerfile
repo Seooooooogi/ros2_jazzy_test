@@ -43,7 +43,7 @@ RUN /opt/venv/bin/pip install --no-cache-dir --upgrade pip
 # torch/torchvision (cu128) — 가장 무거운 레이어(CUDA 런타임 번들)라 단독 RUN 으로 캐시 분리.
 RUN /opt/venv/bin/pip install --no-cache-dir \
       --index-url "https://download.pytorch.org/whl/cu${CUDA_VERSION//./}" \
-      torch torchvision
+      torch==2.11.0 torchvision==0.26.0
 # ultralytics → opencv-python 을 numpy<2 호환 마지막 버전(<4.10 = 4.9.0.80, numpy>=1.21.2)으로
 # 다운그레이드해 numpy>=2 메타 충돌 제거 → numpy<2 마지막 재핀. 재핀 직후 import 검증.
 # ultralytics 는 메이저 상한 핀 (실측 8.4.56). 메이저 변경 시 API 깨질 수 있어 silent drift 차단.

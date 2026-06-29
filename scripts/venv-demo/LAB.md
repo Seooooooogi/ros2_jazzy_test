@@ -239,7 +239,7 @@ pip --version                                # 예상: pip 26.x from .../venv/..
 
 ```bash
 # (2) torch 최우선 — cu128 인덱스, 수 GB
-pip install --index-url https://download.pytorch.org/whl/cu128 torch torchvision
+pip install --index-url https://download.pytorch.org/whl/cu128 torch==2.11.0 torchvision==0.26.0
 
 # YOLO + OpenCV 핀
 pip install "ultralytics<9"
@@ -249,7 +249,7 @@ pip install "opencv-python<4.10"
 pip install "langchain<2" "langchain-openai<2" "openai<3" pyaudio sounddevice "scipy<1.18" python-dotenv
 
 # (4) 그리퍼 Modbus
-pip install pymodbus
+pip install "pymodbus<4"
 
 # (5) openwakeword — Python 3.12 에서 tflite-runtime 미지원 → no-deps 로 설치 후 의존성 직접 지정
 pip install --no-deps "openwakeword==0.6.0"
