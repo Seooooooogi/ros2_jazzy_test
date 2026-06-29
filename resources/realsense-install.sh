@@ -74,6 +74,23 @@ realsense_sdk() {
 #   - rosdep init/update + colcon build moved to a02 colcon-build.sh (dedup).
 realsense_ros() {
     sudo apt-get update
+
+    # ROS2 binary packages form a synchronized snapshot with loose inter-package deps and no SONAME bumps,
+    # so mixing snapshots breaks ABI at dlopen. realsense2_camera then dies with an undefined symbol
+    # (diagnostic_updater::Updater::Updater(NodeBaseInterface, ... , double, uint8)) when the installed
+    # diagnostic_updater predates the realsense2_camera snapshot: the dependency is loose, so apt does not
+    # auto-upgrade the already-installed older diagnostic_updater. Re-sync the installed ROS packages to the
+    # current snapshot first so realsense's ABI deps match what the wrapper was built against.
+    # Scoped to the ros-${ROS_DISTRO}-* namespace on purpose: a blanket `apt upgrade` is avoided here (it drifts
+    # the held docker/nvidia pins), and those packages are outside this glob and held anyway, so this stays pin-safe.
+    local ros_installed
+    ros_installed="$(dpkg-query -W -f='${db:Status-Status} ${Package}\n' "ros-${ROS_DISTRO}-*" 2>/dev/null \
+        | awk '$1 == "installed" { print $2 }' || true)"
+    if [[ -n "${ros_installed}" ]]; then
+        # shellcheck disable=SC2086  # intentional word-splitting: ros_installed is a newline-separated package list
+        sudo apt-get install -y --only-upgrade ${ros_installed}
+    fi
+
     sudo apt-get install -y \
         "ros-${ROS_DISTRO}-realsense2-camera" \
         "ros-${ROS_DISTRO}-realsense2-description"
