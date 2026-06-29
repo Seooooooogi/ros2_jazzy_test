@@ -133,28 +133,9 @@ if [[ "$host_codename" != "$UBUNTU_CODENAME" ]]; then
     echo "install: this installer targets Ubuntu '$UBUNTU_CODENAME' (current: '${host_codename:-unknown}')." >&2
     exit 1
 fi
-if ! sudo -v; then
-    echo "install: cannot verify sudo privileges. Run as a sudo-capable regular user." >&2
-    exit 1
-fi
-
-# sudo keepalive — refresh the sudo cache every 60s during long steps (driver/colcon) to avoid re-entry.
-# Keeps the auto-resume flow (one sudo password after return) from re-prompting until the end. Cleaned up on exit.
-# set +e inside the subshell — so the keepalive does not die silently on a transient sudo -n failure or sleep interrupt.
-# It must stay in this script's session so `sudo -n` refreshes the SAME tty timestamp (tty_tickets) the foreground
-# script uses — a detached (setsid) session would warm a different ticket and not actually keep it alive.
-# The subshell traps its own teardown and kills the in-flight `sleep`: otherwise the EXIT trap below kills only the
-# subshell, orphaning the `sleep` child into this script's process group. In the GUI auto-resume terminal that orphan
-# would sit in the terminal's foreground process group and block input after the launcher hands off to `exec bash`.
-( set +e
-  trap 'kill "${_ka_sleep:-0}" 2>/dev/null; exit 0' TERM EXIT
-  while kill -0 "$$" 2>/dev/null; do
-      sudo -n true 2>/dev/null
-      sleep 60 & _ka_sleep=$!
-      wait "${_ka_sleep}"
-  done ) &
-_SUDO_KA_PID=$!
-trap 'kill "${_SUDO_KA_PID}" 2>/dev/null || true' EXIT
+# Collect the sudo password once upfront + start the keepalive (refreshes the cache every 60s so long steps
+# and the auto-resume flow do not re-prompt). Shared with setup-app.sh via resources/interaction.sh.
+sudo_prime install
 
 # Reinforces reporting of an unexpected failure location inside a child body (orthogonal to run_step's step_end_fail).
 # One-line console notice + log path only — the failure detail itself is in the log (console stays clean).

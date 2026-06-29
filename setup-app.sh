@@ -29,6 +29,8 @@ RESOURCE_DIR="${SCRIPT_DIR}/resources"
 
 # shellcheck source=resources/config.sh
 source "${RESOURCE_DIR}/config.sh"
+# shellcheck source=resources/interaction.sh
+source "${RESOURCE_DIR}/interaction.sh"   # sudo_prime
 config_assert_set
 
 # Per-step detail is routed here (same install_log as install.sh); console stays clean unless --verbose.
@@ -198,6 +200,12 @@ do_containers() {
 echo "[setup-app] workspace=${DSR_WORKSPACE} | workspace:$([[ ${DO_WORKSPACE} -eq 1 ]] && echo on || echo off) containers:$([[ ${DO_CONTAINERS} -eq 1 ]] && echo on || echo off)$([[ ${RESET} -eq 1 ]] && echo ' | reset')$([[ ${BUILD} -eq 1 ]] && echo ' | build')"
 
 [[ ${RESET} -eq 1 ]] && do_reset
+
+# Every step below runs sudo (apt / docker). Collect the password ONCE here, before any step banner +
+# heartbeat — otherwise the first routed step's sudo prompt is hidden behind the heartbeat and the run
+# looks like it proceeds before the password is fully typed. Keepalive keeps it warm through colcon build.
+sudo_prime setup-app
+
 [[ ${DO_WORKSPACE} -eq 1 ]] && do_workspace
 [[ ${DO_CONTAINERS} -eq 1 ]] && do_containers
 

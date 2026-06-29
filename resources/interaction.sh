@@ -211,3 +211,40 @@ remove_resume_autostart() {
     fi
     return 0
 }
+
+# ============================================================================
+# 4) sudo-prime — collect the sudo password ONCE upfront, then keep the cache warm
+# ============================================================================
+# Usage: sudo_prime [prefix]   # prefix labels the error line, e.g. sudo_prime install / sudo_prime setup-app
+#
+# Why upfront: steps route their detailed output (including the first `sudo` prompt) to the log and draw a
+# liveness heartbeat on the console. If the password were collected lazily inside the first routed step its
+# prompt would be hidden behind the heartbeat, so the run looks like it proceeds before the password is fully
+# typed. Calling this BEFORE any step makes the prompt the first thing on the console — the password is
+# entered before the steps begin.
+#
+# Keepalive: refreshes the sudo timestamp every 60s so long steps (driver / colcon build) do not re-prompt
+# mid-run. It must stay in the CALLER's shell session so `sudo -n` refreshes the SAME tty timestamp
+# (tty_tickets) the foreground commands use — a detached (setsid) session would warm a different ticket and
+# not actually keep it alive. `$$` inside the `( ) &` subshell is the caller script's PID (bash), so the
+# keepalive self-terminates when the script exits.
+sudo_prime() {
+    local prefix="${1:-setup}"
+    if ! sudo -v; then
+        echo "${prefix}: cannot verify sudo privileges. Run as a sudo-capable regular user." >&2
+        exit 1
+    fi
+    # set +e inside the subshell — so the keepalive does not die silently on a transient sudo -n failure or
+    # sleep interrupt. The subshell traps its own teardown and kills the in-flight `sleep`: otherwise the EXIT
+    # trap below kills only the subshell, orphaning the `sleep` child into the caller's process group (which in
+    # a handed-off terminal would sit in the foreground process group and block input).
+    ( set +e
+      trap 'kill "${_ka_sleep:-0}" 2>/dev/null; exit 0' TERM EXIT
+      while kill -0 "$$" 2>/dev/null; do
+          sudo -n true 2>/dev/null
+          sleep 60 & _ka_sleep=$!
+          wait "${_ka_sleep}"
+      done ) &
+    SUDO_KEEPALIVE_PID=$!
+    trap 'kill "${SUDO_KEEPALIVE_PID}" 2>/dev/null || true' EXIT
+}
