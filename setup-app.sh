@@ -10,8 +10,8 @@
 # DDS tuning + static IP + corecode). This script sets up the cobot2 APPLICATION on top:
 #
 #   workspace : doosan-robot2 driver clone + DSR deps + emulator → verify cobot2 source → RealSense → colcon build.
-#   containers: nvidia-container-toolkit → application container images (fetch prebuilt, or --build from source)
-#               → OPENAI_API_KEY into .env (the voice container needs it).
+#   containers: nvidia-container-toolkit → application container images (built from source by default — students
+#               develop on the cobot2 template; --fetch pulls prebuilt instead) → OPENAI_API_KEY into .env.
 #
 # The cobot2 application source is NOT shipped by this repo. The user places it at ${DSR_WORKSPACE}/src/cobot2
 # (see obtain_cobot2 below — isolated so it can later be swapped for a git clone / tarball fetch). Without it,
@@ -41,20 +41,20 @@ VERBOSE="${VERBOSE:-0}"
 DO_WORKSPACE=1
 DO_CONTAINERS=1
 RESET=0
-BUILD=0
+BUILD=1   # default: build container images from source (the course has students modify the cobot2 template). --fetch selects prebuilt.
 ASSUME_YES=0
 
 usage() {
     cat <<EOF
 setup-app.sh — set up the cobot2 application (workspace + containers) on top of the base install.sh.
 
-  bash setup-app.sh                 workspace (driver + cobot2 + RealSense + colcon) + containers (toolkit + images + OPENAI key)
+  bash setup-app.sh                 workspace (driver + cobot2 + RealSense + colcon) + containers (toolkit + build images from source + OPENAI key)
   bash setup-app.sh --workspace-only   only the colcon workspace
   bash setup-app.sh --containers-only  only the container layer (toolkit + images + OPENAI key)
   bash setup-app.sh --reset         wipe the doosan-robot2 clone + build/install/log first, then rebuild
                                     (cobot2 source is NOT touched). Asks to confirm unless --yes.
-  bash setup-app.sh --build         build the container images from source instead of fetching prebuilt
-                                    (requires cobot2 source at ${DSR_WORKSPACE}/src/cobot2 — Docker build context).
+  bash setup-app.sh --fetch         containers: pull prebuilt images instead of building from source
+                                    (default builds from source — students develop on the cobot2 template).
   bash setup-app.sh --verbose       also stream each step's detailed output to the console (default: only install_log).
   bash setup-app.sh -y, --yes       skip the --reset confirmation (non-interactive).
   bash setup-app.sh -h, --help      this help.
@@ -79,7 +79,8 @@ while [[ $# -gt 0 ]]; do
         --workspace-only)  DO_CONTAINERS=0 ;;
         --containers-only) DO_WORKSPACE=0 ;;
         --reset)           RESET=1 ;;
-        --build)           BUILD=1 ;;
+        --fetch)           BUILD=0 ;;   # pull prebuilt images instead of the default source build
+        --build)           BUILD=1 ;;   # accepted for back-compat; building from source is now the default
         -y|--yes)          ASSUME_YES=1 ;;
         -h|--help)         usage; exit 0 ;;
         *) echo "[setup-app] unknown argument: $1" >&2; usage >&2; exit 2 ;;
@@ -197,7 +198,7 @@ do_containers() {
     step "OPENAI_API_KEY (.env for the voice container)"; bash "${RESOURCE_DIR}/openai-key-setup.sh"
 }
 
-echo "[setup-app] workspace=${DSR_WORKSPACE} | workspace:$([[ ${DO_WORKSPACE} -eq 1 ]] && echo on || echo off) containers:$([[ ${DO_CONTAINERS} -eq 1 ]] && echo on || echo off)$([[ ${RESET} -eq 1 ]] && echo ' | reset')$([[ ${BUILD} -eq 1 ]] && echo ' | build')"
+echo "[setup-app] workspace=${DSR_WORKSPACE} | workspace:$([[ ${DO_WORKSPACE} -eq 1 ]] && echo on || echo off) containers:$([[ ${DO_CONTAINERS} -eq 1 ]] && echo on || echo off)$([[ ${RESET} -eq 1 ]] && echo ' | reset')$([[ ${DO_CONTAINERS} -eq 1 ]] && { [[ ${BUILD} -eq 1 ]] && echo ' | images:build(source)' || echo ' | images:fetch(prebuilt)'; })"
 
 [[ ${RESET} -eq 1 ]] && do_reset
 

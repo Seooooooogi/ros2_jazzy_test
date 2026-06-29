@@ -74,7 +74,7 @@ for rel in "${COBOT2_REQUIRED[@]}"; do
 done
 if (( ${#missing[@]} )); then
     echo "build-all: cobot2 source incomplete at ${COBOT2_SRC} — missing: ${missing[*]}" >&2
-    echo "           Place the full cobot2 source there (setup-app obtain_cobot2) before --build." >&2
+    echo "           Place the full cobot2 source there (setup-app obtain_cobot2) before building." >&2
     exit 1
 fi
 printf 'INFO: staging cobot2 source %s → %s (build context)\n' "${COBOT2_SRC}" "${COBOT2_CTX}"

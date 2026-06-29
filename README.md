@@ -46,10 +46,11 @@ bash install.sh --help      # 도움말
 애플리케이션 (`setup-app.sh`):
 
 ```bash
+bash setup-app.sh                    # 기본: 컨테이너 이미지를 소스에서 빌드 (cobot2 템플릿을 수정해 개발하는 수업 흐름)
 bash setup-app.sh --workspace-only   # 워크스페이스만 (DSR 드라이버 + RealSense + colcon)
-bash setup-app.sh --containers-only  # 컨테이너만 (toolkit + 이미지 fetch + OPENAI key)
+bash setup-app.sh --containers-only  # 컨테이너만 (toolkit + 이미지 빌드 + OPENAI key)
 bash setup-app.sh --reset            # doosan-robot2 재클론 + build/install/log 삭제 후 풀 빌드 (cobot2 보존)
-bash setup-app.sh --build            # 컨테이너를 fetch 대신 소스에서 빌드 (cobot2 를 repo cobot_ws/src/cobot2 에 둬야 함)
+bash setup-app.sh --fetch            # 컨테이너를 소스 빌드 대신 prebuilt 이미지로 fetch
 bash setup-app.sh --help
 ```
 
