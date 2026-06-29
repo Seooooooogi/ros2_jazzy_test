@@ -6,8 +6,9 @@
 #
 # Phase 4 application image fetch — instead of building, download a tar from public Google Drive and docker load.
 #
-# This is the default path of a clean install (install.sh step14). To build/verify the images directly (image-producing
-# machine), use containers/build-all.sh. This script only reproduces that artifact (docker save tar).
+# This is the default path of setup-app.sh's container step (the fetch branch of do_containers — i.e. without --build).
+# To build/verify the images directly (image-producing machine), use containers/build-all.sh (or setup-app.sh --build).
+# This script only reproduces that artifact (docker save tar).
 #
 # Behavior:
 #   1) skip if the target image is already local (idempotent — re-run/resume safe).
