@@ -58,13 +58,24 @@ bash setup-app.sh --help
 
 ## 실행
 
-환경 source (새 터미널마다):
+환경 source. 매 터미널마다 아래를 실행:
 
 ```bash
 source /opt/ros/jazzy/setup.bash
 source ~/cobot_ws/install/setup.bash
 set -a; source ~/ros2_jazzy_test/resources/config.sh; set +a
 ```
+
+> 💡 **매번 치기 싫으면 `~/.bashrc` 에 1회 등록** — 아래 블록을 `~/.bashrc` 끝에 추가하면 새 터미널마다 자동 적용된다. (`/opt/ros/jazzy/setup.bash` 는 설치 시 이미 `~/.bashrc` 에 등록돼 있어 생략.)
+> ```bash
+> # >>> ros2_jazzy_test runtime env >>>
+> [ -f ~/cobot_ws/install/setup.bash ] && source ~/cobot_ws/install/setup.bash
+> set -a; source ~/ros2_jazzy_test/resources/config.sh; set +a
+> # <<< ros2_jazzy_test runtime env <<<
+> ```
+> - `config.sh` 가 단일 진실 소스라 `ROS_DOMAIN_ID=42` · `RMW` · `CYCLONEDDS` 를 한꺼번에 세팅한다. 이걸 빠뜨린 셸은 도메인 0 으로 떨어져 컨테이너(도메인 42) 토픽/서비스를 **조용히 미발견**한다.
+> - `config.sh` 는 `DEBIAN_FRONTEND=noninteractive` 도 export 하므로, 등록 후엔 수동 `apt` 도 비대화형(프롬프트 없이 기본값)으로 동작한다.
+> - CI / cron / 일회성 스크립트 등 `~/.bashrc` 가 안 읽히는 셸에선 위 수동 3줄(또는 `resources/activate.sh` source)을 그대로 쓴다.
 
 ### 1) 하나씩 개별 기동
 
