@@ -104,7 +104,7 @@ docker logs -f yolo-detection            # Ctrl+C 는 로그만 종료(컨테이
 **voice 컨테이너**
 
 ```bash
-docker rm -f voice-processing 2>/dev/null || true   # 같은 이름의 기존 컨테이너(compose/직접 실행 잔재) 선제거 — 없으면 무시
+docker rm -f voice-processing 2>/dev/null || true
 docker run -d --name voice-processing \
   --network host -w /ws \
   --env-file ~/ros2_jazzy_test/.env \
@@ -118,8 +118,8 @@ docker run -d --name voice-processing \
   --device /dev/snd:/dev/snd --group-add audio \
   local/ros2-jazzy-voice:dev-builder \
   bash -c 'set +u; source /opt/ros/$ROS_DISTRO/setup.bash; colcon build --symlink-install --merge-install || true; sleep infinity'
-docker exec -it voice-processing bash      # /ws 진입, ROS overlay·venv PYTHONPATH 자동 source
-ros2 run voice_processing get_keyword      # Ctrl+C 로 멈추고 host 에서 소스 수정 후 재실행 반복
+docker exec -it voice-processing bash
+ros2 run voice_processing get_keyword      # docker 진입 후 실행
 ```
 
 ```bash
@@ -138,7 +138,7 @@ ros2 run robot_control robot_control   # real / virtual(에뮬레이터) 모두 
 ### 2) 통합 기동
 
 ```bash
-# 로봇 드라이버 + 카메라 + 컨테이너 (Ctrl+C 로 일괄 정리). 실기=mode:=real / 에뮬레이터=mode:=virtual
+# 로봇 드라이버 + 카메라 + 컨테이너 (Ctrl+C 로 일괄 정리).
 bash ~/ros2_jazzy_test/containers/bringup.sh mode:=real
-ros2 run robot_control robot_control   # real / virtual(에뮬레이터) 모두 동작 — RealSense 연결 필요 (virtual 은 실물 로봇 불필요)
+ros2 run robot_control robot_control
 ```
