@@ -119,9 +119,10 @@ fi
     echo "# CycloneDDS standard + large-topic buffer/interface tuning (managed by dds-tuning.sh, do not edit manually)"
     echo "export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp"
     echo "export CYCLONEDDS_URI=\"file://${CYCLONEDDS_XML}\""
+    echo "export ROS_DOMAIN_ID=${ROS_DOMAIN_ID}"
     echo "${END_MARK}"
 } >> "${bashrc}"
-echo "[dds] updated the ~/.bashrc managed block (CYCLONEDDS_URI / RMW_IMPLEMENTATION)"
+echo "[dds] updated the ~/.bashrc managed block (CYCLONEDDS_URI / RMW_IMPLEMENTATION / ROS_DOMAIN_ID)"
 
 echo "[dds] done. cyclonedds applies after a new terminal or 'source ~/.bashrc'."
 echo "[dds] note: same-host communication (host↔container) always works via loopback."
