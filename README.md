@@ -93,7 +93,7 @@ ros2 launch realsense2_camera rs_align_depth_launch.py \
 docker rm -f yolo-detection 2>/dev/null || true
 docker run -d --name yolo-detection \
   --network host --restart unless-stopped --gpus all \
-  -e ROS_DOMAIN_ID=42 -e RMW_IMPLEMENTATION=rmw_cyclonedds_cpp \
+  -e ROS_DOMAIN_ID=42 -e RMW_IMPLEMENTATION=rmw_cyclonedds_cpp \  # ROS_DOMAIN_ID=42 는 설치 시 고른 값(기본값). host 와 동일해야 discovery 성립
   -e CYCLONEDDS_URI=file:///cyclonedds.xml -e PYTHONUNBUFFERED=1 \
   -v ~/.config/cyclonedds/cyclonedds.xml:/cyclonedds.xml:ro \
   local/ros2-jazzy-yolo:dev
@@ -108,7 +108,7 @@ docker rm -f voice-processing 2>/dev/null || true
 docker run -d --name voice-processing \
   --network host -w /ws \
   --env-file ~/ros2_jazzy_test/.env \
-  -e ROS_DOMAIN_ID=42 -e RMW_IMPLEMENTATION=rmw_cyclonedds_cpp \
+  -e ROS_DOMAIN_ID=42 -e RMW_IMPLEMENTATION=rmw_cyclonedds_cpp \  # ROS_DOMAIN_ID=42 는 설치 시 고른 값(기본값). host 와 동일해야 discovery 성립
   -e CYCLONEDDS_URI=file:///cyclonedds.xml -e PYTHONUNBUFFERED=1 \
   -v ~/.config/cyclonedds/cyclonedds.xml:/cyclonedds.xml:ro \
   -v ~/ros2_jazzy_test/containers/voice-processing/asound.conf:/etc/asound.conf:ro \
@@ -124,7 +124,7 @@ ros2 run voice_processing get_keyword      # docker 진입 후 실행
 
 ```bash
 source /opt/ros/jazzy/setup.bash
-export ROS_DOMAIN_ID=42                                  # 컨테이너와 같은 도메인(필수)
+export ROS_DOMAIN_ID=42                                  # 설치 시 고른 값(기본 42). 컨테이너와 동일해야 함
 ros2 service call /get_keyword std_srvs/srv/Trigger "{}"
 # 응답 예: success=true, message='hammer / pos1' (도구 / 목적지)
 ```
