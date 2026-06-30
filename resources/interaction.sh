@@ -273,7 +273,7 @@ prompt_domain_id() {
     while true; do
         read -r -p "ROS_DOMAIN_ID (DDS 도메인, 0-232) [기본 ${current}]: " input
         [[ -z "$input" ]] && input="$current"
-        if [[ "$input" =~ ^[0-9]+$ ]] && (( input >= 0 && input <= 232 )); then
+        if [[ "$input" =~ ^(0|[1-9][0-9]*)$ ]] && (( input >= 0 && input <= 232 )); then
             break
         fi
         echo "  → 0-232 사이 정수만 입력하세요." >&2
