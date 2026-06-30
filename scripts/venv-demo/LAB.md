@@ -245,6 +245,12 @@ pip install --index-url https://download.pytorch.org/whl/cu128 torch==2.11.0 tor
 pip install "ultralytics<9"
 pip install "opencv-python<4.10"
 
+# roboflow (YOLO 데이터셋 다운로드, OD_Tutorial/data_download.ipynb)
+# 기본 설치는 opencv-python-headless 를 끌어와 위 opencv-python 과 cv2/ 가 충돌 → 본체만 --no-deps.
+# typer/filetype/pi-heif/pillow-avif-plugin 은 opencv 를 안 끌어오므로 의존성 포함 일반 설치(typer 는 roboflow 전용 의존).
+pip install typer filetype pi-heif pillow-avif-plugin
+pip install --no-deps roboflow
+
 # (3) LLM / 음성 스택
 pip install "langchain<2" "langchain-openai<2" "openai<3" pyaudio sounddevice "scipy<1.18" python-dotenv
 
@@ -286,7 +292,7 @@ pip install --force-reinstall "numpy<2"
 python3 -c "
 import numpy,torch,ultralytics,cv2,langchain,langchain_openai,openai
 import pyaudio,sounddevice,scipy,openwakeword,ai_edge_litert
-import tflite_runtime.interpreter,pymodbus
+import tflite_runtime.interpreter,pymodbus,roboflow
 assert numpy.__version__.startswith('1.'), numpy.__version__
 print('deps OK', numpy.__version__)
 "

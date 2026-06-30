@@ -17,4 +17,8 @@ tqdm<5,>=4.0
 scikit-learn<2,>=1
 requests<3,>=2.0
 ai-edge-litert>=2.0.2,<3
+# roboflow: YOLO 데이터셋 다운로드용(OD_Tutorial/data_download.ipynb). 컨테이너엔 없는 모놀리식 추가분.
+# 기본 설치 시 opencv-python-headless 를 끌어와 위 opencv-python<4.10 과 cv2/ 가 충돌 → 본체는 --no-deps,
+# typer 등은 별도 설치. 설치 절차는 LAB.md Part A4 참조.
+roboflow<2
 numpy<2
