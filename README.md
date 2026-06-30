@@ -87,13 +87,15 @@ ros2 launch realsense2_camera rs_align_depth_launch.py \
   align_depth.enable:=true enable_rgbd:=true pointcloud.enable:=true initial_reset:=true
 ```
 
+> 아래 두 컨테이너의 `ROS_DOMAIN_ID=42` 는 설치 시 고른 값(기본 42) — host·컨테이너가 동일해야 DDS discovery 성립.
+
 **yolo 컨테이너**
 
 ```bash
 docker rm -f yolo-detection 2>/dev/null || true
 docker run -d --name yolo-detection \
   --network host --restart unless-stopped --gpus all \
-  -e ROS_DOMAIN_ID=42 -e RMW_IMPLEMENTATION=rmw_cyclonedds_cpp \  # ROS_DOMAIN_ID=42 는 설치 시 고른 값(기본값). host 와 동일해야 discovery 성립
+  -e ROS_DOMAIN_ID=42 -e RMW_IMPLEMENTATION=rmw_cyclonedds_cpp \
   -e CYCLONEDDS_URI=file:///cyclonedds.xml -e PYTHONUNBUFFERED=1 \
   -v ~/.config/cyclonedds/cyclonedds.xml:/cyclonedds.xml:ro \
   local/ros2-jazzy-yolo:dev
@@ -108,7 +110,7 @@ docker rm -f voice-processing 2>/dev/null || true
 docker run -d --name voice-processing \
   --network host -w /ws \
   --env-file ~/ros2_jazzy_test/.env \
-  -e ROS_DOMAIN_ID=42 -e RMW_IMPLEMENTATION=rmw_cyclonedds_cpp \  # ROS_DOMAIN_ID=42 는 설치 시 고른 값(기본값). host 와 동일해야 discovery 성립
+  -e ROS_DOMAIN_ID=42 -e RMW_IMPLEMENTATION=rmw_cyclonedds_cpp \
   -e CYCLONEDDS_URI=file:///cyclonedds.xml -e PYTHONUNBUFFERED=1 \
   -v ~/.config/cyclonedds/cyclonedds.xml:/cyclonedds.xml:ro \
   -v ~/ros2_jazzy_test/containers/voice-processing/asound.conf:/etc/asound.conf:ro \
