@@ -87,7 +87,7 @@ ros2 launch realsense2_camera rs_align_depth_launch.py \
   align_depth.enable:=true enable_rgbd:=true pointcloud.enable:=true initial_reset:=true
 ```
 
-> 아래 두 컨테이너의 `ROS_DOMAIN_ID=42` 는 설치 시 고른 값(기본 42) — host·컨테이너가 동일해야 DDS discovery 성립.
+> 아래 두 컨테이너의 `ROS_DOMAIN_ID=42` 는 setup-app 에서 고른 값(기본 42) — host·컨테이너가 동일해야 DDS discovery 성립.
 
 **컨테이너 dev 이미지 빌드 (1회)** — `:dev-builder`(builder 스테이지)는 fetch 에 없으니 직접 빌드한다. cobot2 는 레포 외부라 빌드 컨텍스트로 staging 먼저:
 
@@ -163,7 +163,7 @@ STT 트리거 — `get_keyword` 노드가 떠 있는 상태에서 host 의 다�
 
 ```bash
 source /opt/ros/jazzy/setup.bash
-export ROS_DOMAIN_ID=42                                  # 설치 시 고른 값(기본 42). 컨테이너와 동일해야 함
+export ROS_DOMAIN_ID=42                                  # setup-app 에서 고른 값(기본 42). 컨테이너와 동일해야 함
 ros2 service call /get_keyword std_srvs/srv/Trigger "{}"
 # 응답 예: success=true, message='hammer / pos1' (도구 / 목적지)
 ```

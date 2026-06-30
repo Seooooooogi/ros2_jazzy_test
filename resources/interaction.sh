@@ -252,34 +252,36 @@ sudo_prime() {
 # ============================================================================
 # 5) domain-id — choose ROS_DOMAIN_ID interactively, persist under the XDG config dir
 # ============================================================================
-# Usage: prompt_domain_id   # call once at the start of install.sh, before the steps begin.
+# Usage: prompt_domain_id   # called from setup-app.sh's container stage (next to the OPENAI_API_KEY step).
 #
-# host (activate.sh / interactive shell) and the two containers (compose) must all see the SAME
-# ROS_DOMAIN_ID or DDS discovery silently fails. config.sh reads the persisted file as its default,
-# so this is the single place a human chooses the value. config.sh must be sourced first so
-# ROS_DOMAIN_ID / ROS2_JAZZY_TEST_CONFIG_DIR are already resolved when this runs.
+# host (~/.bashrc managed block) and the two containers (compose) must all see the SAME ROS_DOMAIN_ID or
+# DDS discovery silently fails. The persisted file is the single source: config.sh reads it as the default,
+# the ~/.bashrc managed block reads it at shell start, and compose receives it via config.sh's export. The
+# domain matters only once containers exist (host↔container traffic), so it is collected during setup-app —
+# the base install (install.sh) does not ask. config.sh must be sourced first so ROS_DOMAIN_ID /
+# ROS2_JAZZY_TEST_CONFIG_DIR are resolved when this runs.
 #
-# Idempotent: the current value (env > file > 42, already resolved by config.sh) is shown as the
-# default and Enter keeps it. On a non-interactive shell there is no way to prompt — keep the current
-# value and warn. Valid range: 0-232 (ROS2 domain id limit).
+# Idempotent: the current value (env > file > 42, already resolved by config.sh) is shown as the default
+# and Enter keeps it. On a non-interactive shell there is no way to prompt — keep the current value and warn.
+# Valid range: 0-232 (ROS2 domain id limit).
 prompt_domain_id() {
     local file="${ROS2_JAZZY_TEST_CONFIG_DIR}/ros_domain_id"
     local current="${ROS_DOMAIN_ID:-42}"
     if [[ ! -t 0 ]]; then
-        echo "[install] non-interactive shell — keeping ROS_DOMAIN_ID=${current} (edit ${file} to change)." >&2
+        echo "[setup-app] non-interactive shell — keeping ROS_DOMAIN_ID=${current} (edit ${file} to change)." >&2
         return 0
     fi
     local input=""
     while true; do
-        read -r -p "ROS_DOMAIN_ID (DDS 도메인, 0-232) [기본 ${current}]: " input
+        read -r -p "Enter ROS_DOMAIN_ID for DDS discovery (0-232) [default ${current}]: " input
         [[ -z "$input" ]] && input="$current"
         if [[ "$input" =~ ^(0|[1-9][0-9]*)$ ]] && (( input >= 0 && input <= 232 )); then
             break
         fi
-        echo "  → 0-232 사이 정수만 입력하세요." >&2
+        echo "  -> please enter an integer between 0 and 232." >&2
     done
     mkdir -p "${ROS2_JAZZY_TEST_CONFIG_DIR}"
     printf '%s\n' "$input" > "${file}"
     export ROS_DOMAIN_ID="$input"
-    echo "[install] ROS_DOMAIN_ID=${input} (저장: ${file})"
+    echo "[setup-app] ROS_DOMAIN_ID=${input} (saved to ${file})"
 }

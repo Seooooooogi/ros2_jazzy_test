@@ -147,20 +147,14 @@ trap 'echo "[install] failed: line $LINENO — see ${LOG_FILE}" >&2' ERR
 # Resume (after reboot): remove the autostart entry immediately (one-shot — prevents re-firing on every login). sudo is entered once
 #   in this terminal via the sudo -v above.
 if step_should_skip a01_reboot; then
-    # Resume after the step-6 reboot — the domain was already chosen on the first run.
     remove_resume_autostart
+elif [[ -t 0 ]]; then
+    confirm_or_abort "The install reboots once midway and auto-continues on return (login) (terminal auto-opens, one sudo password). Continue?"
+    register_resume_autostart "${SCRIPT_DIR}"
 else
-    # First run — collect the ROS_DOMAIN_ID choice up front (idempotent; non-interactive shells keep
-    # the current value inside prompt_domain_id), then the reboot consent.
-    prompt_domain_id
-    if [[ -t 0 ]]; then
-        confirm_or_abort "The install reboots once midway and auto-continues on return (login) (terminal auto-opens, one sudo password). Continue?"
-        register_resume_autostart "${SCRIPT_DIR}"
-    else
-        # Advisory warning → log only (console stays clean). Surfaces in install_log for diagnosis.
-        { echo "[install] warning: non-interactive shell — cannot register auto-resume."
-          echo "          Run it in a GUI session, or re-run 'bash install.sh' manually after reboot."; } >>"$LOG_FILE"
-    fi
+    # Advisory warning → log only (console stays clean). Surfaces in install_log for diagnosis.
+    { echo "[install] warning: non-interactive shell — cannot register auto-resume."
+      echo "          Run it in a GUI session, or re-run 'bash install.sh' manually after reboot."; } >>"$LOG_FILE"
 fi
 
 # --- steps 1~5: prerequisites (a01: kernel baseline / NVIDIA / Docker / ROS2 jazzy / extras) ---

@@ -163,7 +163,7 @@ export CYCLONEDDS_URI="file://${CYCLONEDDS_XML}"
 
 # ROS_DOMAIN_ID single source of truth. The host (activate.sh / interactive shell) and the two compose services
 # must see the same value or DDS discovery silently fails. Resolution order: explicit env override > the
-# install-time choice persisted on disk > 42. The persisted file (written by install.sh's prompt_domain_id)
+# setup-time choice persisted on disk > 42. The persisted file (written by setup-app's prompt_domain_id)
 # lives under the XDG config dir, NOT STATE_DIR, so wiping the installer state (--reset) does not silently
 # reset the live domain — matching CYCLONEDDS_XML's "runtime config in XDG" policy above.
 : "${ROS2_JAZZY_TEST_CONFIG_DIR:=${XDG_CONFIG_HOME:-${HOME}/.config}/ros2_jazzy_test}"
