@@ -66,7 +66,7 @@ set -a; source ~/ros2_jazzy_test/resources/config.sh; set +a
 > # <<< ros2_jazzy_test runtime env <<<
 > ```
 
-### 1) 하나씩 개별 기동
+### 기동
 
 **DSR 드라이버**
 
@@ -89,21 +89,54 @@ ros2 launch realsense2_camera rs_align_depth_launch.py \
 
 > 아래 두 컨테이너의 `ROS_DOMAIN_ID=42` 는 설치 시 고른 값(기본 42) — host·컨테이너가 동일해야 DDS discovery 성립.
 
+**컨테이너 dev 이미지 빌드 (1회)** — `:dev-builder`(builder 스테이지)는 fetch 에 없으니 직접 빌드한다. cobot2 는 레포 외부라 빌드 컨텍스트로 staging 먼저:
+
+```bash
+DEV="-f $HOME/ros2_jazzy_test/containers/docker-compose.yml -f $HOME/ros2_jazzy_test/containers/docker-compose.dev.yml"
+cd ~/ros2_jazzy_test
+rm -rf cobot_ws/src/cobot2 && mkdir -p cobot_ws/src && cp -aT ~/cobot_ws/src/cobot2 cobot_ws/src/cobot2
+docker compose $DEV build
+```
+
 **yolo 컨테이너**
+
+소스 mount + 수동 기동 (`.py` 수정 → 노드 재실행이면 반영):
+
+```bash
+docker compose $DEV up -d yolo-detection      # 기동 시 clean colcon build 후 idle
+docker exec -it yolo-detection bash
+ros2 run object_detection object_detection    # Ctrl+C → host 에서 .py 수정 → 재실행
+```
+
+compose 없이 docker run 으로:
 
 ```bash
 docker rm -f yolo-detection 2>/dev/null || true
 docker run -d --name yolo-detection \
-  --network host --restart unless-stopped --gpus all \
+  --network host -w /ws --gpus all \
   -e ROS_DOMAIN_ID=42 -e RMW_IMPLEMENTATION=rmw_cyclonedds_cpp \
   -e CYCLONEDDS_URI=file:///cyclonedds.xml -e PYTHONUNBUFFERED=1 \
   -v ~/.config/cyclonedds/cyclonedds.xml:/cyclonedds.xml:ro \
-  local/ros2-jazzy-yolo:dev
-docker logs -f yolo-detection            # Ctrl+C 는 로그만 종료(컨테이너 유지)
+  -v ~/cobot_ws/src/cobot2/yolo_container:/ws/src \
+  -v yolo_build:/ws/build -v yolo_install:/ws/install \
+  -v ~/ros2_jazzy_test/containers/dev/bashrc:/root/.bashrc:ro \
+  local/ros2-jazzy-yolo:dev-builder \
+  bash -c 'set +u; source /opt/ros/$ROS_DISTRO/setup.bash; find /ws/build /ws/install -mindepth 1 -delete 2>/dev/null || true; colcon build --symlink-install --merge-install; sleep infinity'
+docker exec -it yolo-detection bash
+ros2 run object_detection object_detection
 ```
 
-
 **voice 컨테이너**
+
+소스 mount + 수동 기동:
+
+```bash
+docker compose $DEV up -d voice-processing    # 기동 시 clean colcon build 후 idle
+docker exec -it voice-processing bash
+ros2 run voice_processing get_keyword         # Ctrl+C → host 에서 .py 수정 → 재실행
+```
+
+compose 없이 docker run 으로:
 
 ```bash
 docker rm -f voice-processing 2>/dev/null || true
@@ -119,10 +152,14 @@ docker run -d --name voice-processing \
   -v ~/ros2_jazzy_test/containers/dev/bashrc:/root/.bashrc:ro \
   --device /dev/snd:/dev/snd --group-add audio \
   local/ros2-jazzy-voice:dev-builder \
-  bash -c 'set +u; source /opt/ros/$ROS_DISTRO/setup.bash; colcon build --symlink-install --merge-install || true; sleep infinity'
+  bash -c 'set +u; source /opt/ros/$ROS_DISTRO/setup.bash; find /ws/build /ws/install -mindepth 1 -delete 2>/dev/null || true; colcon build --symlink-install --merge-install; sleep infinity'
 docker exec -it voice-processing bash
-ros2 run voice_processing get_keyword      # docker 진입 후 실행
+ros2 run voice_processing get_keyword
 ```
+
+> 정지·삭제: `docker rm -f <name>` (dev 빌드 볼륨까지 비우려면 `docker volume rm yolo_build yolo_install voice_build voice_install`).
+
+STT 트리거 — `get_keyword` 노드가 떠 있는 상태에서 host 의 다른 터미널에서 호출한다. 1회 호출이 (wakeword 대기 →) 5초 녹음 → Whisper STT → 키워드 추출까지 수행해 응답을 돌려준다(OPENAI_API_KEY·인터넷 필요):
 
 ```bash
 source /opt/ros/jazzy/setup.bash
@@ -137,10 +174,9 @@ ros2 service call /get_keyword std_srvs/srv/Trigger "{}"
 ros2 run robot_control robot_control   # real / virtual(에뮬레이터) 모두 동작 — RealSense 연결 필요 (virtual 은 실물 로봇 불필요)
 ```
 
-### 2) 통합 기동
+### 컨테이너 없이 실행해 보기 (교육용 대비)
 
-```bash
-# 로봇 드라이버 + 카메라 + 컨테이너 (Ctrl+C 로 일괄 정리).
-bash ~/ros2_jazzy_test/containers/bringup.sh mode:=real
-ros2 run robot_control robot_control
-```
+컨테이너 사용 효과를 비교하려면 모놀리식 노드를 host venv 로 직접 실행하는 실습 가이드를 따른다:
+[`scripts/venv-demo/LAB.md`](scripts/venv-demo/LAB.md). 의존성 설치·네임스페이스·멀티터미널 기동을
+한 줄씩 직접 수행하며, 컨테이너(`bringup.sh` + `docker compose`)가 대신 처리하던 작업량을 체감한다.
+정식 설치 경로가 아니라 비교 학습용이다.
