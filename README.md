@@ -98,17 +98,17 @@ rm -rf cobot_ws/src/cobot2 && mkdir -p cobot_ws/src && cp -aT ~/cobot_ws/src/cob
 docker compose $DEV build
 ```
 
-**yolo 컨테이너**
+> **블록을 위에서부터 하나씩** 실행한다(한 번에 붙여넣지 않는다). 특히 기동 직후엔 컨테이너 안 colcon build 가 끝날 때까지 `docker logs -f` 로 기다린 뒤 `docker exec` 한다 — 빌드 중 진입하면 overlay 가 덜 써진 상태라 `not found: "/ws/install/local_setup.bash"` 경고가 뜬다(무해하지만 노드는 패키지를 못 찾는다).
 
-소스 mount + 수동 기동 (`.py` 수정 → 노드 재실행이면 반영):
+**yolo 컨테이너** — 소스 mount + 수동 기동 (`.py` 수정 → 노드 재실행이면 반영).
+
+기동 (compose):
 
 ```bash
 docker compose $DEV up -d yolo-detection      # 기동 시 clean colcon build 후 idle
-docker exec -it yolo-detection bash
-ros2 run object_detection object_detection    # Ctrl+C → host 에서 .py 수정 → 재실행
 ```
 
-compose 없이 docker run 으로:
+또는 compose 없이 docker run:
 
 ```bash
 docker rm -f yolo-detection 2>/dev/null || true
@@ -122,21 +122,30 @@ docker run -d --name yolo-detection \
   -v ~/ros2_jazzy_test/containers/dev/bashrc:/root/.bashrc:ro \
   local/ros2-jazzy-yolo:dev-builder \
   bash -c 'set +u; source /opt/ros/$ROS_DISTRO/setup.bash; find /ws/build /ws/install -mindepth 1 -delete 2>/dev/null || true; colcon build --symlink-install --merge-install; sleep infinity'
-docker exec -it yolo-detection bash
-ros2 run object_detection object_detection
 ```
 
-**voice 컨테이너**
+빌드 완료까지 대기 → 진입:
 
-소스 mount + 수동 기동:
+```bash
+docker logs -f yolo-detection                 # "Summary: N package finished" 뜨면 Ctrl+C
+docker exec -it yolo-detection bash
+```
+
+컨테이너 안에서 노드 실행:
+
+```bash
+ros2 run object_detection object_detection    # Ctrl+C → host 에서 .py 수정 → 재실행
+```
+
+**voice 컨테이너** — 소스 mount + 수동 기동. yolo 와 동일하게 한 블록씩, 기동 후 빌드 대기 → 진입.
+
+기동 (compose):
 
 ```bash
 docker compose $DEV up -d voice-processing    # 기동 시 clean colcon build 후 idle
-docker exec -it voice-processing bash
-ros2 run voice_processing get_keyword         # Ctrl+C → host 에서 .py 수정 → 재실행
 ```
 
-compose 없이 docker run 으로:
+또는 compose 없이 docker run:
 
 ```bash
 docker rm -f voice-processing 2>/dev/null || true
@@ -153,8 +162,19 @@ docker run -d --name voice-processing \
   --device /dev/snd:/dev/snd --group-add audio \
   local/ros2-jazzy-voice:dev-builder \
   bash -c 'set +u; source /opt/ros/$ROS_DISTRO/setup.bash; find /ws/build /ws/install -mindepth 1 -delete 2>/dev/null || true; colcon build --symlink-install --merge-install; sleep infinity'
+```
+
+빌드 완료까지 대기 → 진입:
+
+```bash
+docker logs -f voice-processing               # "Summary: N package finished" 뜨면 Ctrl+C
 docker exec -it voice-processing bash
-ros2 run voice_processing get_keyword
+```
+
+컨테이너 안에서 노드 실행:
+
+```bash
+ros2 run voice_processing get_keyword         # Ctrl+C → host 에서 .py 수정 → 재실행
 ```
 
 > 정지·삭제: `docker rm -f <name>` (dev 빌드 볼륨까지 비우려면 `docker volume rm yolo_build yolo_install voice_build voice_install`).
