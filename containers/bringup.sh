@@ -70,7 +70,15 @@ wait_build() {
         # SIGPIPE to docker logs → under pipefail the pipeline reports THAT failure, flipping the if false
         # even on a real match. Substituting reads the whole log first, so no pipe to break.
         logs="$(docker logs "${svc}" 2>&1)" || true
-        if grep -q 'packages finished' <<<"${logs}"; then
+        # colcon's end-of-build line is `Summary: N package[s] finished` — SINGULAR when N=1 (voice_container
+        # has exactly one package), so match plural-agnostically. A FAILED build also prints a Summary line
+        # ("Summary: 0 packages finished") plus "M package[s] failed/aborted", so once the Summary appears,
+        # treat any failed/aborted marker as build failure. ("had stderr output" is a warning, not a failure.)
+        if grep -qE 'Summary: [0-9]+ package' <<<"${logs}"; then
+            if grep -qE 'package(s)? (failed|aborted)' <<<"${logs}"; then
+                echo "[bringup] ${svc} colcon build FAILED — see: docker logs ${svc}" >&2
+                return 1
+            fi
             echo "[bringup] ${svc} build ready."
             return 0
         fi
@@ -81,6 +89,11 @@ wait_build() {
 }
 
 echo "[bringup] starting application containers (docker compose up -d)…"
+# Clean slate first: a prior run's container may have leaked Up (SIGKILL / host crash → the trap never fired).
+# container_name is fixed, so `up -d` would REUSE that container and the `docker exec -d` below would stack a
+# second `ros2 run` on top of the old node (duplicate service servers). `down` first → `up` always recreates a
+# fresh single-node container. (Named build/install volumes persist; the dev command wipes+rebuilds anyway.)
+docker compose "${COMPOSE_ARGS[@]}" down --timeout 5 || true
 docker compose "${COMPOSE_ARGS[@]}" up -d
 
 wait_build yolo-detection
