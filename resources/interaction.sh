@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # =============================================================
-#  ros2_jazzy_test — ROS2 Jazzy workstation installer
+#  Cobot2 Jazzy Installer
 #  Copyright (c) 2026 ROKEY bootcamp. All rights reserved.
 # =============================================================
 #
@@ -10,10 +10,10 @@
 #
 # Bundles three concerns in one file — all on one axis: "interaction with people/credentials":
 #   1) env-load   — safely load/record .env credentials without hardcoding them in scripts (manual parsing, no `source`).
+#                   Used by openai-key-setup.sh (run by setup-app.sh during container setup) — _set_env_key/_relocate_example_secret.
 #   2) confirm    — explicit consent before irreversible operations (reboot / purge / driver swap).
-#   3) resume     — pre-collect credentials at start + auto-resume the install after the step-6 reboot via GUI autostart.
+#   3) resume     — register/remove a one-shot GUI autostart entry so install.sh auto-resumes after the step-6 reboot.
 #
-# The resume section uses the env-load functions below (_load_env/_set_env_key/_relocate_example_secret).
 # Functions resolve at call time, so only definition order matters, independent of the caller's source order.
 
 # ============================================================================
@@ -164,10 +164,10 @@ confirm_or_abort_assumable() {
 }
 
 # ============================================================================
-# 3) resume — pre-collect credentials + auto-resume the install across the reboot
+# 3) resume — auto-resume the install across the step-6 reboot
 # ============================================================================
-# Pre-collect credentials (OPENAI_API_KEY) at start + auto-resume install.sh after reboot via GUI autostart.
-# Uses the env-load section above (_load_env/_require_env/_set_env_key/_relocate_example_secret).
+# Register/remove a one-shot GUI autostart entry so install.sh continues automatically after its reboot.
+# (OPENAI_API_KEY is no longer pre-collected here — it is install.sh's final step, openai-key-setup.sh.)
 #
 # Mechanism: GNOME autostart (.desktop) opens a terminal on login to run install-resume-launcher.sh
 # → relaunches install.sh. When install.sh re-enters on resume, it immediately removes
@@ -175,40 +175,6 @@ confirm_or_abort_assumable() {
 
 RESUME_AUTOSTART_DIR="${HOME}/.config/autostart"
 RESUME_AUTOSTART_FILE="${RESUME_AUTOSTART_DIR}/ros2-jazzy-install-resume.desktop"
-
-# Pre-collect OPENAI_API_KEY and write it to .env → after reboot, step12 (voice) passes non-interactively.
-# The value is not printed to screen/log (read -s). Passes through if already set.
-install_collect_secrets() {
-    local repo="$1"
-    local env_file="${repo}/.env" env_example="${repo}/.env.example"
-    if [[ ! -f "${env_file}" ]]; then
-        if [[ -f "${env_example}" ]]; then
-            cp "${env_example}" "${env_file}"; chmod 600 "${env_file}"
-            echo "[install] created .env (copied from .env.example)." >&2
-        else
-            echo "[install] neither .env nor .env.example exists — a credential template is required." >&2
-            return 1
-        fi
-    fi
-    # If the tracked file (.env.example) holds a real key, move it to .env and restore the example (secret prevention).
-    _relocate_example_secret "${env_file}" "${env_example}" OPENAI_API_KEY
-    # Key presence is judged from the .env file content (not the shell env) — containers read only .env.
-    if grep -qE '^[[:space:]]*OPENAI_API_KEY=.+' "${env_file}"; then
-        echo "[install] OPENAI_API_KEY confirmed (.env) — voice step passes non-interactively." >&2
-        return 0
-    fi
-    echo "[install] enter OPENAI_API_KEY (not shown; empty + Enter = skip):" >&2
-    printf '  OPENAI_API_KEY: ' >&2
-    local key=""
-    read -rs key; echo >&2
-    if [[ -n "${key}" ]]; then
-        _set_env_key "${env_file}" OPENAI_API_KEY "${key}"
-        echo "[install] saved to .env." >&2
-    else
-        echo "[install] skipped — will ask again at the voice step after reboot (auto-resume pauses there)." >&2
-    fi
-    return 0
-}
 
 # Register auto-resume after reboot: launch install-resume-launcher.sh from a terminal on login.
 register_resume_autostart() {
@@ -244,4 +210,78 @@ remove_resume_autostart() {
         echo "[install] removed auto-resume entry: ${RESUME_AUTOSTART_FILE}" >&2
     fi
     return 0
+}
+
+# ============================================================================
+# 4) sudo-prime — collect the sudo password ONCE upfront, then keep the cache warm
+# ============================================================================
+# Usage: sudo_prime [prefix]   # prefix labels the error line, e.g. sudo_prime install / sudo_prime setup-app
+#
+# Why upfront: steps route their detailed output (including the first `sudo` prompt) to the log and draw a
+# liveness heartbeat on the console. If the password were collected lazily inside the first routed step its
+# prompt would be hidden behind the heartbeat, so the run looks like it proceeds before the password is fully
+# typed. Calling this BEFORE any step makes the prompt the first thing on the console — the password is
+# entered before the steps begin.
+#
+# Keepalive: refreshes the sudo timestamp every 60s so long steps (driver / colcon build) do not re-prompt
+# mid-run. It must stay in the CALLER's shell session so `sudo -n` refreshes the SAME tty timestamp
+# (tty_tickets) the foreground commands use — a detached (setsid) session would warm a different ticket and
+# not actually keep it alive. `$$` inside the `( ) &` subshell is the caller script's PID (bash), so the
+# keepalive self-terminates when the script exits.
+sudo_prime() {
+    local prefix="${1:-setup}"
+    if ! sudo -v; then
+        echo "${prefix}: cannot verify sudo privileges. Run as a sudo-capable regular user." >&2
+        exit 1
+    fi
+    # set +e inside the subshell — so the keepalive does not die silently on a transient sudo -n failure or
+    # sleep interrupt. The subshell traps its own teardown and kills the in-flight `sleep`: otherwise the EXIT
+    # trap below kills only the subshell, orphaning the `sleep` child into the caller's process group (which in
+    # a handed-off terminal would sit in the foreground process group and block input).
+    ( set +e
+      trap 'kill "${_ka_sleep:-0}" 2>/dev/null; exit 0' TERM EXIT
+      while kill -0 "$$" 2>/dev/null; do
+          sudo -n true 2>/dev/null
+          sleep 60 & _ka_sleep=$!
+          wait "${_ka_sleep}"
+      done ) &
+    SUDO_KEEPALIVE_PID=$!
+    trap 'kill "${SUDO_KEEPALIVE_PID}" 2>/dev/null || true' EXIT
+}
+
+# ============================================================================
+# 5) domain-id — choose ROS_DOMAIN_ID interactively, persist under the XDG config dir
+# ============================================================================
+# Usage: prompt_domain_id   # called from setup-app.sh's container stage (next to the OPENAI_API_KEY step).
+#
+# host (~/.bashrc managed block) and the two containers (compose) must all see the SAME ROS_DOMAIN_ID or
+# DDS discovery silently fails. The persisted file is the single source: config.sh reads it as the default,
+# the ~/.bashrc managed block reads it at shell start, and compose receives it via config.sh's export. The
+# domain matters only once containers exist (host↔container traffic), so it is collected during setup-app —
+# the base install (install.sh) does not ask. config.sh must be sourced first so ROS_DOMAIN_ID /
+# ROS2_JAZZY_TEST_CONFIG_DIR are resolved when this runs.
+#
+# Idempotent: the current value (env > file > 42, already resolved by config.sh) is shown as the default
+# and Enter keeps it. On a non-interactive shell there is no way to prompt — keep the current value and warn.
+# Valid range: 0-232 (ROS2 domain id limit).
+prompt_domain_id() {
+    local file="${ROS2_JAZZY_TEST_CONFIG_DIR}/ros_domain_id"
+    local current="${ROS_DOMAIN_ID:-42}"
+    if [[ ! -t 0 ]]; then
+        echo "[setup-app] non-interactive shell — keeping ROS_DOMAIN_ID=${current} (edit ${file} to change)." >&2
+        return 0
+    fi
+    local input=""
+    while true; do
+        read -r -p "Enter ROS_DOMAIN_ID for DDS discovery (0-232) [default ${current}]: " input
+        [[ -z "$input" ]] && input="$current"
+        if [[ "$input" =~ ^(0|[1-9][0-9]*)$ ]] && (( input >= 0 && input <= 232 )); then
+            break
+        fi
+        echo "  -> please enter an integer between 0 and 232." >&2
+    done
+    mkdir -p "${ROS2_JAZZY_TEST_CONFIG_DIR}"
+    printf '%s\n' "$input" > "${file}"
+    export ROS_DOMAIN_ID="$input"
+    echo "[setup-app] ROS_DOMAIN_ID=${input} (saved to ${file})"
 }

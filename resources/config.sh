@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # =============================================================
-#  ros2_jazzy_test — ROS2 Jazzy workstation installer
+#  Cobot2 Jazzy Installer
 #  Copyright (c) 2026 ROKEY bootcamp. All rights reserved.
 # =============================================================
 #
@@ -90,18 +90,6 @@ export ROS2_JAZZY_TEST_REPO
 # User decision 2026-05-28. No code in the system-layer install reads this variable.
 : "${DOCKER_VERSION_STRING:=}"
 
-# --- Phase 4 image distribution (downloaded from public Google Drive, then docker load) ----------
-# A clean install (install.sh step14) does not build images; it downloads the tar via the public drive file IDs below
-# and loads it (fast reproduction). Direct build/verification (image-producing machine) is containers/build-all.sh.
-#
-# file ID = public-link identifier (not a secret) — fill in after upload. If empty, fetch fails clearly.
-# SHA256 = integrity hash of the `docker save` tar. Always pin it in the repo (here) and upload only the tar to the drive
-# — fetching the hash from the same source as the tar makes verification meaningless if both are tampered (trusted source = repo).
-: "${YOLO_IMAGE_GDRIVE_ID:=1pbWlfFb3d5L6E_S5XrN9_7s_OLsg_YvC}"
-: "${VOICE_IMAGE_GDRIVE_ID:=1iKKLyreAawlDVBcFKqXlyNCG0JNnogYp}"
-: "${YOLO_IMAGE_SHA256:=4b29263968bbd0b0247d8b71a11660b309ea596d6796bd899ef8d9bb6bf5d73b}"
-: "${VOICE_IMAGE_SHA256:=092b8138e14b7568d7dbaeb27c875867b2a16083f4ee6a0c9b2c1658bb9c2d0b}"
-
 # --- State file (resumable re-run, structured format 2026-05-27) ----
 : "${STATE_DIR:=${HOME}/.ros2_jazzy_test}"
 : "${STATE_FILE:=${STATE_DIR}/state}"
@@ -161,8 +149,17 @@ export CYCLONEDDS_URI="file://${CYCLONEDDS_XML}"
 : "${HOST_ETH_PREFIX:=24}"
 : "${HOST_ETH_NETIF:=}"
 
-# ROS_DOMAIN_ID single source of truth. The host (activate.sh) and the two compose services must see the same
-# value for discovery to work. Pinned explicitly so it is deterministic even in an unset shell.
+# ROS_DOMAIN_ID single source of truth. The host (activate.sh / interactive shell) and the two compose services
+# must see the same value or DDS discovery silently fails. Resolution order: explicit env override > the
+# setup-time choice persisted on disk > 42. The persisted file (written by setup-app's prompt_domain_id)
+# lives under the XDG config dir, NOT STATE_DIR, so wiping the installer state (--reset) does not silently
+# reset the live domain — matching CYCLONEDDS_XML's "runtime config in XDG" policy above.
+: "${ROS2_JAZZY_TEST_CONFIG_DIR:=${XDG_CONFIG_HOME:-${HOME}/.config}/ros2_jazzy_test}"
+_domain_file="${ROS2_JAZZY_TEST_CONFIG_DIR}/ros_domain_id"
+if [[ -z "${ROS_DOMAIN_ID:-}" && -r "${_domain_file}" ]]; then
+    ROS_DOMAIN_ID="$(cat "${_domain_file}" 2>/dev/null)"
+fi
+unset _domain_file
 export ROS_DOMAIN_ID="${ROS_DOMAIN_ID:-42}"
 
 # --- Progress display ([n/total] visualization) ---------------------
@@ -170,7 +167,7 @@ export ROS_DOMAIN_ID="${ROS_DOMAIN_ID:-42}"
 # **The authoritative source is orchestrate.sh** (STAGE_*_COUNT + install_steps_total) — install.sh computes the
 # denominator from orchestrate.sh, and this TOTAL_STEPS is used as a fallback only when orchestrate.sh is not sourced.
 # So when adding a step, update only the STAGE constants in orchestrate.sh, and just keep this value matched to their sum.
-: "${TOTAL_STEPS:=17}"
+: "${TOTAL_STEPS:=10}"
 
 # --- Self-check ----------------------------------------------------------
 # Called by child scripts right after entry to immediately catch missing required variables.

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # =============================================================
-#  ros2_jazzy_test — ROS2 Jazzy workstation installer
+#  Cobot2 Jazzy Installer
 #  Copyright (c) 2026 ROKEY bootcamp. All rights reserved.
 # =============================================================
 #
@@ -36,9 +36,18 @@ add_apt_repo --no-update \
     --list-file "${DOCKER_LIST}" \
     --list-line "deb [arch=${arch} signed-by=${DOCKER_KEY}] https://download.docker.com/linux/ubuntu ${UBUNTU_CODENAME} stable"
 
-# 4) engine install (latest stable, no pin).
+# 4) engine install (latest stable, no pin). Idempotent: skip when docker-ce is already installed.
+#    The hold in (5) blocks upgrade drift, so a re-run must not upgrade. Re-running `apt-get install` on the held
+#    engine packages when the repo has a newer candidate fails hard:
+#      "E: Held packages were changed and -y was used without --allow-change-held-packages".
+#    Policy = install the latest once, then hold — re-running install.sh (e.g. after --reset) keeps the held version.
+#    (--allow-change-held-packages would "fix" the error by upgrading docker every re-run — that defeats the hold pin.)
 sudo apt-get update
-sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+if dpkg-query -W -f='${Status}' docker-ce 2>/dev/null | grep -q 'ok installed'; then
+    echo "docker: docker-ce already installed — skipping the engine install (hold blocks drift)"
+else
+    sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+fi
 
 # 5) hold engine packages (skip if already held).
 for pkg in docker-ce docker-ce-cli containerd.io; do

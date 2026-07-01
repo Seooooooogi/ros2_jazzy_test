@@ -57,20 +57,20 @@ docs/
 CLAUDE.md
 
 # corecode: 개발/연구용 튜토리얼 — 소스만 추적. 아래 둘만 제외(__pycache__·*.pyc 는 위 Python 규칙으로 이미 제외).
-# tflite: cobot2/voice_container/voice_processing/resource 및 containers oww_models 와 중복. json: 대용량 재생성 가능 임베딩.
+# tflite: containers oww_models 와 중복. json: 대용량 재생성 가능 임베딩.
 corecode/VoiceProcessing/hello_rokey_8332_32.tflite
 corecode/VoiceProcessing/class_embeddings.json
 
-# jog 편의 복사본 — cobot_ws/src/cobot2/rokey_cobot2/rokey_cobot2/basic/jog_complete.py 와 byte-identical.
-# 실기 jog 검증을 최상위 경로로 실행하려고 둔 것이라 디스크엔 남기되 추적만 제외(중복 drift 방지).
-# 최상위만 anchor — cobot_ws 안의 원본은 그대로 추적.
+# jog 편의 복사본 — 실기 jog 검증을 최상위 경로로 실행하려고 둔 로컬 파일. 디스크엔 남기되 추적만 제외.
 /jog_complete.py
 
 # 코드 인덱스 — 소스에서 재생성 가능한 산출물이라 추적 제외.
 .codegraph/
 
-# colcon 빌드 산출물 — repo 안 cobot_ws/src 에서 빌드를 돌리면 생기는 재생성 가능 디렉토리.
-# (런타임 빌드는 ~/cobot_ws 에서 돌지만, 레이아웃 검증차 repo 안에서 colcon 을 돌리는 경우 대비.)
+# cobot2 애플리케이션 소스는 이 레포에서 제공하지 않는다 — 사용자가 ~/cobot_ws/src/cobot2 에 직접 배치(setup-app.sh 가 빌드).
+# repo 안 cobot_ws/src/ 에 소스를 두고 빌드(컨테이너 --build 등)하더라도 추적하지 않는다.
+/cobot_ws/src/
+# colcon 빌드 산출물 — repo 안에서 빌드를 돌리면 생기는 재생성 가능 디렉토리.
 /log/
 cobot_ws/build/
 cobot_ws/install/
@@ -89,3 +89,6 @@ skills-lock.json
 
 # 로컬 참조용 wiki 덤프 — 설치 스크립트/배포와 무관(humble 보존 스크립트는 backup/ 안에서 계속 추적).
 backup/llm_wiki/
+
+# subagent-driven-development 진행 ledger (scratch — 추적 안 함)
+.superpowers/

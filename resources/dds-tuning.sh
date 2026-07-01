@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # =============================================================
-#  ros2_jazzy_test — ROS2 Jazzy workstation installer
+#  Cobot2 Jazzy Installer
 #  Copyright (c) 2026 ROKEY bootcamp. All rights reserved.
 # =============================================================
 #
@@ -119,9 +119,15 @@ fi
     echo "# CycloneDDS standard + large-topic buffer/interface tuning (managed by dds-tuning.sh, do not edit manually)"
     echo "export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp"
     echo "export CYCLONEDDS_URI=\"file://${CYCLONEDDS_XML}\""
+    # ROS_DOMAIN_ID is read from the persisted file at shell start (not baked), so the value chosen later in
+    # setup-app takes effect in new terminals without re-running dds-tuning. Single-quoted so this line is
+    # written verbatim and the command substitution runs in the user's shell, not here.
+    # shellcheck disable=SC2016  # single quotes are intentional: the line stays literal in ~/.bashrc.
+    # Second assignment mirrors config.sh's `:-42` guard so a missing OR empty file both fall back to 42.
+    echo 'export ROS_DOMAIN_ID="$(cat "${XDG_CONFIG_HOME:-$HOME/.config}/ros2_jazzy_test/ros_domain_id" 2>/dev/null)"; export ROS_DOMAIN_ID="${ROS_DOMAIN_ID:-42}"'
     echo "${END_MARK}"
 } >> "${bashrc}"
-echo "[dds] updated the ~/.bashrc managed block (CYCLONEDDS_URI / RMW_IMPLEMENTATION)"
+echo "[dds] updated the ~/.bashrc managed block (CYCLONEDDS_URI / RMW_IMPLEMENTATION / ROS_DOMAIN_ID)"
 
 echo "[dds] done. cyclonedds applies after a new terminal or 'source ~/.bashrc'."
 echo "[dds] note: same-host communication (host↔container) always works via loopback."

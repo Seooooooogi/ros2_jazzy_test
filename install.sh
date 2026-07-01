@@ -1,15 +1,17 @@
 #!/usr/bin/env bash
 # =============================================================
-#  ros2_jazzy_test — ROS2 Jazzy workstation installer
+#  Cobot2 Jazzy Installer
 #  Copyright (c) 2026 ROKEY bootcamp. All rights reserved.
 # =============================================================
 #
 # shellcheck source-path=SCRIPTDIR
-# install.sh — single entry point for host workstation setup (full a01~a04 sequence).
+# install.sh — single entry point for the BASE host workstation environment.
 #
-# Runs prerequisites (kernel/NVIDIA/Docker/ROS2) + robot/camera + VS Code + voice check + DDS tuning +
-# NVIDIA Container Toolkit + container-image fetch + static network IP as a single continuous
-# sequence ([n/17]). Step definitions are run_stage_a0N in resources/orchestrate.sh.
+# Sets up only the base environment (kernel/NVIDIA/Docker/ROS2 + reboot + VS Code + DDS tuning + static
+# network IP + corecode relocation) as a single continuous sequence ([n/10]). The cobot2 APPLICATION layer
+# (DSR driver + RealSense + cobot2 colcon build + container toolkit/images + the OPENAI key the voice
+# container needs) is NOT here — it lives in setup-app.sh, run after this base install. This repo no longer
+# ships the cobot2 source.
 # Re-run safe: completed steps are auto-skipped per the state file, continuing from where it stopped.
 # To force a specific task to re-run, use --reset (full reset) or run resources/<step>.sh directly.
 #
@@ -47,7 +49,7 @@ STEPS_TOTAL="$(install_steps_total)"
 
 usage() {
     cat <<'EOF'
-install.sh — single entry point for host setup (a01~a04 + DDS tuning + NVIDIA Container Toolkit + container images + static network IP + corecode relocation, 17 steps total)
+install.sh — single entry point for the BASE host environment (kernel/NVIDIA/Docker/ROS2 + reboot + VS Code + DDS tuning + static network IP + corecode relocation, 10 steps total)
 
   bash install.sh             run the full sequence (skip already-completed steps)
   bash install.sh --verbose   also show each step's detailed output + warnings/errors on the console
@@ -55,10 +57,14 @@ install.sh — single entry point for host setup (a01~a04 + DDS tuning + NVIDIA 
   bash install.sh --reset     reset the state (after confirm — re-run all steps)
   bash install.sh --help      this help
 
-The run collects OPENAI_API_KEY + asks one confirm at the start, then proceeds automatically. It reboots
-once at step 6 and auto-resumes on return (login) via a one-shot GUI autostart entry — no manual re-run
-needed (GUI session required; one sudo password after return). If the autostart cannot register, re-run
-'bash install.sh' after reboot to continue. Completed steps are auto-skipped on any re-run.
+The run asks one confirm at the start, then proceeds automatically. It reboots once at step 6 and
+auto-resumes on return (login) via a one-shot GUI autostart entry — no manual re-run needed (GUI session
+required; one sudo password after return). If the autostart cannot register, re-run 'bash install.sh' after
+reboot to continue. Completed steps are auto-skipped on any re-run.
+
+The cobot2 application (DSR driver + RealSense + workspace build + containers + the OPENAI_API_KEY the voice
+container needs) is set up separately by setup-app.sh after this base install — this repo no longer ships
+the cobot2 source.
 
 By default the console shows only the [n/total] progress + per-step elapsed time; ALL detailed output and
 any warnings/errors go to install_log in the repo root (not the console). On a step failure a one-line
@@ -73,7 +79,7 @@ EOF
 print_copyright() {
     cat <<'EOF'
 ============================================================
- ros2_jazzy_test — ROS2 Jazzy workstation installer
+ Cobot2 Jazzy Installer
  Copyright (c) 2026 ROKEY bootcamp. All rights reserved.
 ============================================================
 EOF
@@ -127,42 +133,22 @@ if [[ "$host_codename" != "$UBUNTU_CODENAME" ]]; then
     echo "install: this installer targets Ubuntu '$UBUNTU_CODENAME' (current: '${host_codename:-unknown}')." >&2
     exit 1
 fi
-if ! sudo -v; then
-    echo "install: cannot verify sudo privileges. Run as a sudo-capable regular user." >&2
-    exit 1
-fi
-
-# sudo keepalive — refresh the sudo cache every 60s during long steps (driver/colcon) to avoid re-entry.
-# Keeps the auto-resume flow (one sudo password after return) from re-prompting until the end. Cleaned up on exit.
-# set +e inside the subshell — so the keepalive does not die silently on a transient sudo -n failure or sleep interrupt.
-# It must stay in this script's session so `sudo -n` refreshes the SAME tty timestamp (tty_tickets) the foreground
-# script uses — a detached (setsid) session would warm a different ticket and not actually keep it alive.
-# The subshell traps its own teardown and kills the in-flight `sleep`: otherwise the EXIT trap below kills only the
-# subshell, orphaning the `sleep` child into this script's process group. In the GUI auto-resume terminal that orphan
-# would sit in the terminal's foreground process group and block input after the launcher hands off to `exec bash`.
-( set +e
-  trap 'kill "${_ka_sleep:-0}" 2>/dev/null; exit 0' TERM EXIT
-  while kill -0 "$$" 2>/dev/null; do
-      sudo -n true 2>/dev/null
-      sleep 60 & _ka_sleep=$!
-      wait "${_ka_sleep}"
-  done ) &
-_SUDO_KA_PID=$!
-trap 'kill "${_SUDO_KA_PID}" 2>/dev/null || true' EXIT
+# Collect the sudo password once upfront + start the keepalive (refreshes the cache every 60s so long steps
+# and the auto-resume flow do not re-prompt). Shared with setup-app.sh via resources/interaction.sh.
+sudo_prime install
 
 # Reinforces reporting of an unexpected failure location inside a child body (orthogonal to run_step's step_end_fail).
 # One-line console notice + log path only — the failure detail itself is in the log (console stays clean).
 trap 'echo "[install] failed: line $LINENO — see ${LOG_FILE}" >&2' ERR
 
-# --- pre-collect credentials + register auto-resume across the step-6 reboot ----------------------------
-# First run (before reboot): pre-collect OPENAI_API_KEY + one proceed-confirm + register auto-resume on return.
-#   → after the step-6 reboot, step12 (voice) passes non-interactively since the key already exists, and reboot is not re-confirmed.
+# --- one proceed-confirm + register auto-resume across the step-6 reboot ----------------------------
+# First run (before reboot): one proceed-confirm + register auto-resume on return. OPENAI_API_KEY is NOT
+#   pre-collected here — it is the final step (11), after the reboot, so the confirm here is only reboot consent.
 # Resume (after reboot): remove the autostart entry immediately (one-shot — prevents re-firing on every login). sudo is entered once
 #   in this terminal via the sudo -v above.
 if step_should_skip a01_reboot; then
     remove_resume_autostart
 elif [[ -t 0 ]]; then
-    install_collect_secrets "${SCRIPT_DIR}" || true
     confirm_or_abort "The install reboots once midway and auto-continues on return (login) (terminal auto-opens, one sudo password). Continue?"
     register_resume_autostart "${SCRIPT_DIR}"
 else
@@ -202,54 +188,34 @@ if [[ ! -d "/lib/modules/${__running}/kernel/drivers/net/wireless" ]]; then
       echo "          Boot a kernel that has modules-extra from GRUB, or see the kernel-module section in docs/TROUBLESHOOTING.md."; } >>"$LOG_FILE"
 fi
 
-# --- steps 7~10: robot/camera (a02: DSR + RealSense + colcon build) ---
-run_stage_a02 6
+# NOTE: the application layer (DSR driver + RealSense + cobot2 colcon build + container toolkit/images) is no
+# longer part of install.sh — it moved to setup-app.sh, run after this base install completes.
 
-# --- step 11: development tools (a03: VS Code) ---
-run_stage_a03 10
+# --- step 7: development tools (a03: VS Code) ---
+run_stage_a03 6
 
-# --- step 12: voice pre-check (a04: .env credential check — no host install) ---
-run_stage_a04 11
+# --- step 8: DDS tuning (CycloneDDS buffers + automatic wired-NIC whitelist) ---
+# Deterministically configure the cyclonedds environment shared by host nodes and the application containers.
+# Not in a stage script — runs only from install.sh or standalone (bash resources/dds-tuning.sh).
+run_step 8 dds_tuning bash "${RESOURCE_DIR}/dds-tuning.sh"
 
-# --- step 13: DDS tuning (CycloneDDS buffers + automatic wired-NIC whitelist) ---
-# Deterministically configure the cyclonedds environment shared by host nodes and containers. It is not in the a0N stage scripts;
-# it runs only from install.sh or standalone (bash resources/dds-tuning.sh).
-run_step 13 dds_tuning bash "${RESOURCE_DIR}/dds-tuning.sh"
+# --- step 9: static ethernet IP (robot LAN: .1 gripper / .100 robot / .30 host) ---
+# Set the wired NIC to the robot-LAN static IP (nmcli). No gateway/DNS → wifi internet stays. Idempotent.
+# No confirm (reversible; the single consent at the start of the run covers it).
+run_step 9 network_static_ip bash "${RESOURCE_DIR}/network-static-ip.sh"
 
-# --- step 14: NVIDIA Container Toolkit (after reboot — GPU driver modules loaded) ---
-# Installing it before reboot (a01/docker-install) fails the toolkit work because the driver kernel module
-# is not yet loaded. So it is split after the step-6 reboot and installed once GPU operation is guaranteed.
-# Required for the container (yolo) to use the host GPU (compose nvidia device reservation / `--gpus`).
-# SKIP_IF_NO_GPU=1: a GPU-less host-only machine skips normally (driver absence is not treated as an error).
-# ASSUME_YES=1: auto-consent to the docker restart (non-interactive flow).
-run_step 14 nvidia_container_toolkit \
-    env ASSUME_YES=1 SKIP_IF_NO_GPU=1 bash "${SCRIPT_DIR}/resources/nvidia-container-toolkit-install.sh"
-
-# --- step 15: fetch application container images (yolo / voice) ---
-# fetch-images.sh downloads the build artifact (docker save tar) from public Google Drive, verifies SHA256, then
-# docker loads it (fast reproduction without building). If the image is already local, skip (idempotent). On failure the state
-# stays not-DONE so a re-run retries only this step.
-# A producing machine that builds/verifies the images directly uses `bash containers/build-all.sh` separately
-# (build both images + secret-hygiene scan + import/model-load smoke). Uploading that artifact to the drive lets
-# other machines reproduce it via this step. The file ID/SHA256 are pinned in resources/config.sh.
-run_step 15 container_fetch bash "${SCRIPT_DIR}/containers/fetch-images.sh"
-
-# --- step 16: static ethernet IP (robot LAN: .1 gripper / .100 robot / .30 host) ---
-# After all installs, set the wired NIC to the robot-LAN static IP (nmcli). No gateway/DNS → wifi
-# internet stays. Idempotent. No confirm (reversible; the single consent at the start of the run covers it).
-# (The unified host workspace — including the container dev bind-mount subdirs (cobot2/yolo_container, voice_container) —
-#  is created earlier by the DSR step's dsr-project-install.sh, so no separate dev-workspace step is needed.)
-run_step 16 network_static_ip bash "${RESOURCE_DIR}/network-static-ip.sh"
-
-# --- step 17: relocate the corecode tutorials into the user's home (~/corecode) ---
-# After all installs, move the repo's corecode/ tutorials to ${HOME}/corecode so they are usable
-# independently of the installer checkout location. Idempotent — skips if already relocated or the source
-# is gone (and re-run safe via the state file). Runs as the regular user → no sudo needed.
-run_step 17 corecode_relocate bash "${RESOURCE_DIR}/corecode-relocate.sh"
+# --- step 10: relocate the corecode tutorials into the user's home (~/corecode) ---
+# Move the repo's corecode/ tutorials to ${HOME}/corecode so they are usable independently of the checkout
+# location. Idempotent — skips if already relocated or the source is gone. Runs as the regular user (no sudo).
+run_step 10 corecode_relocate bash "${RESOURCE_DIR}/corecode-relocate.sh"
 
 # Clean up the resume autostart (no-op if already removed on resume entry — idempotent).
 remove_resume_autostart 2>/dev/null || true
 
 state_dump
-echo "install: all 17 steps complete — host setup + container images + static network IP + corecode relocation done."
-echo "         detailed log: ${LOG_FILE}"
+echo "install: all 10 steps complete — base host environment ready."
+echo "  next:"
+echo "    1) place the cobot2 source at ${DSR_WORKSPACE}/src/cobot2"
+echo "    2) run 'bash setup-app.sh' (workspace + containers)"
+echo "       OPENAI_API_KEY is prompted there for the voice container."
+echo "  detailed log: ${LOG_FILE}"
