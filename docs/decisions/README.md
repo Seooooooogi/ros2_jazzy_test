@@ -441,6 +441,12 @@
 - yolo 이미지에 nvidia/cuda base 가 실제로 필요한 상황(예: 특정 CUDA 라이브러리 OS 의존)이 드러나면 → base 재선택.
 - od_msg 인터페이스가 변경되면 → host/yolo 동시 재빌드 + hash 재정합 절차를 통합 단계 ADR 로 기록.
 
+**Amended (2026-07-01) — dev-builder 단일 모델**:
+- **빌드 게이트가 `runtime`(최종) 대신 `builder` 스테이지(`:dev-builder`)를 빌드/검증**. 수업은 학생이 cobot2 템플릿을 live-mount 로 편집 → runtime 이미지(baked 소스, 노드 auto-run)는 학습에 불필요. runtime 스테이지·`docker-compose.yml` base 는 수동/publish 용으로 보존(삭제 안 함).
+- **`build-all.sh` 태그 = `:dev-builder` 하드코딩**(`docker-compose.dev.yml` 과 일치). smoke 는 builder 에 entrypoint 가 없어 ROS + overlay + venv PYTHONPATH 를 명시 source 후 import.
+- **prebuilt fetch 경로 폐기** — `containers/fetch-images.sh` + `setup-app.sh --fetch`/`--build`/`BUILD` + `config.sh` 의 `*_IMAGE_GDRIVE_ID`/`*_IMAGE_SHA256` 제거. ADR-019 의 build-all→pull-first 전환 계획(발행 이미지 배포 후 fetch 로 전환)도 함께 철회 — 단일 소스 빌드로 확정.
+- **`bringup.sh` = base + dev override 머지**(`:dev-builder`). 컨테이너 안 colcon build 완료(로그 `packages finished`)를 기다린 뒤 `docker exec -d` 로 노드 자동 기동, 기존 trap teardown 유지. line 838 의 setup-app 설명 내 `containers/fetch-images.sh` 참조는 superseded.
+
 ---
 
 ### ADR-013: NVIDIA 드라이버 closed 핀 + HWE 커널 트랙 고정 + modules-extra 보장 (2026-06-01)

@@ -20,7 +20,7 @@ mkdir -p ~/cobot_ws/src
 cp -a ~/Downloads/cobot2 ~/cobot_ws/src/cobot2
 
 # 4) 애플리케이션 셋업 — 워크스페이스(DSR 드라이버 + RealSense + cobot2 colcon 빌드)
-#    + 컨테이너(toolkit + 이미지 fetch + OPENAI_API_KEY 입력)
+#    + 컨테이너(toolkit + :dev-builder 이미지 빌드 + OPENAI_API_KEY 입력)
 bash setup-app.sh
 ```
 
@@ -38,11 +38,10 @@ bash install.sh --help      # 도움말
 애플리케이션 (`setup-app.sh`):
 
 ```bash
-bash setup-app.sh                    # 기본: 컨테이너 이미지를 소스에서 빌드 (cobot2 템플릿을 수정해 개발하는 수업 흐름)
+bash setup-app.sh                    # 기본: :dev-builder 컨테이너 이미지를 소스에서 빌드 (cobot2 템플릿을 수정해 개발하는 수업 흐름)
 bash setup-app.sh --workspace-only   # 워크스페이스만 (DSR 드라이버 + RealSense + colcon)
 bash setup-app.sh --containers-only  # 컨테이너만 (toolkit + 이미지 빌드 + OPENAI key)
 bash setup-app.sh --reset            # doosan-robot2 재클론 + build/install/log 삭제 후 풀 빌드 (cobot2 보존)
-bash setup-app.sh --fetch            # 컨테이너를 소스 빌드 대신 prebuilt 이미지로 fetch
 bash setup-app.sh --help
 ```
 
@@ -89,13 +88,19 @@ ros2 launch realsense2_camera rs_align_depth_launch.py \
 
 > 아래 두 컨테이너의 `ROS_DOMAIN_ID=42` 는 setup-app 에서 고른 값(기본 42) — host·컨테이너가 동일해야 DDS discovery 성립.
 
-**컨테이너 dev 이미지 빌드 (1회)** — `:dev-builder`(builder 스테이지)는 fetch 에 없으니 직접 빌드한다. cobot2 는 레포 외부라 빌드 컨텍스트로 staging 먼저:
+**통합 실행 (권장)** — `:dev-builder` 이미지는 `setup-app.sh` 가 이미 빌드했다. 로봇 + 카메라 + yolo/voice 를 한 번에 올리고 Ctrl+C 로 확실히 내리려면:
+
+```bash
+bash containers/bringup.sh                 # virtual(emulator) + camera + containers (노드까지 자동 기동)
+bash containers/bringup.sh mode:=real      # real robot
+```
+
+> bringup 은 컨테이너 안 colcon build 가 끝나길 기다렸다가 각 노드를 자동 기동한다. 개별 컨테이너를 직접 다뤄 보려면 아래 수동 절차를 따른다(디버깅/학습용). 이미지 수동 재빌드는 `bash containers/build-all.sh`(cobot2 staging + 빌드 + 검증).
+
+**컨테이너 개별 수동 실행** — 아래 블록에서 `$DEV` 로 base + dev override 를 머지한다:
 
 ```bash
 DEV="-f $HOME/ros2_jazzy_test/containers/docker-compose.yml -f $HOME/ros2_jazzy_test/containers/docker-compose.dev.yml"
-cd ~/ros2_jazzy_test
-rm -rf cobot_ws/src/cobot2 && mkdir -p cobot_ws/src && cp -aT ~/cobot_ws/src/cobot2 cobot_ws/src/cobot2
-docker compose $DEV build
 ```
 
 > **블록을 위에서부터 하나씩** 실행한다(한 번에 붙여넣지 않는다). 특히 기동 직후엔 컨테이너 안 colcon build 가 끝날 때까지 `docker logs -f` 로 기다린 뒤 `docker exec` 한다 — 빌드 중 진입하면 overlay 가 덜 써진 상태라 `not found: "/ws/install/local_setup.bash"` 경고가 뜬다(무해하지만 노드는 패키지를 못 찾는다).

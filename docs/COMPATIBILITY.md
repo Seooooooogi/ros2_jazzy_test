@@ -126,7 +126,7 @@
 ## Phase 4 컨테이너 Python 의존 (실측 빌드 2026-05-30, build gate)
 
 host 미설치 (ADR-008) — 아래는 두 컨테이너 이미지 **안에서** `pip` 가 해소한 실측 버전.
-빌드 검증 = `containers/build-all.sh` (이미지 빌드 + 컨테이너 내부 import smoke). 메이저 상한 핀은 각 Dockerfile 에 명시 (silent major drift 차단).
+빌드 검증 = `containers/build-all.sh` (builder 스테이지 = `:dev-builder` 이미지 빌드 + 컨테이너 내부 import smoke). builder 엔 runtime entrypoint 가 없어 smoke 는 ROS + overlay + venv PYTHONPATH 를 명시 source 후 import. 메이저 상한 핀은 각 Dockerfile 에 명시 (silent major drift 차단).
 
 ### yolo-detection (base `ros:jazzy-ros-base-noble`, Python 3.12)
 

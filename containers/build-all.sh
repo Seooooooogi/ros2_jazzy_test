@@ -6,13 +6,13 @@
 #
 # Phase 4 container build gate — independent of the host install (only the Docker engine is required).
 #
-# Builds the two application images (yolo / voice) and performs "isolated verification":
+# Builds the two application images (yolo / voice) as the `builder` stage (:dev-builder tag — the live-mount
+# dev image bringup/docker-compose.dev.yml run) and performs "isolated verification":
 #   (1) image build success  (2) secret hygiene (docker history)  (3) in-container import smoke.
 # This stage does not require GPU / microphone / camera / model weights (module import only).
 # torch.cuda.is_available() / service round-trip / od_msg hash consistency are post-host-e2e stages — not verified here.
 #
-# The last stage of the dev-branch install.sh calls this script to include build+verification in the install
-# sequence. main (install-only) does not call it, and it can also be run standalone on any branch (below).
+# setup-app.sh's container step calls this script (build + verification). It can also be run standalone (below).
 # Usage: bash containers/build-all.sh
 set -euo pipefail
 
@@ -21,12 +21,12 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 # shellcheck source=resources/config.sh
 source "${REPO_ROOT}/resources/config.sh"
 
-# Image coordinates — DOCKERHUB_USER / *_TAG override from .env or the environment. If unset, local dev tags.
+# Image coordinates — DOCKERHUB_USER overrides from .env or the environment. If unset, local tags.
 : "${DOCKERHUB_USER:=local}"
-: "${YOLO_TAG:=dev}"
-: "${VOICE_TAG:=dev}"
-YOLO_IMAGE="docker.io/${DOCKERHUB_USER}/ros2-jazzy-yolo:${YOLO_TAG}"
-VOICE_IMAGE="docker.io/${DOCKERHUB_USER}/ros2-jazzy-voice:${VOICE_TAG}"
+# dev-builder = the Dockerfile `builder` stage (no runtime ENTRYPOINT). The tag string MUST match
+# docker-compose.dev.yml — bringup merges that override and `up`s these exact images.
+YOLO_IMAGE="docker.io/${DOCKERHUB_USER}/ros2-jazzy-yolo:dev-builder"
+VOICE_IMAGE="docker.io/${DOCKERHUB_USER}/ros2-jazzy-voice:dev-builder"
 
 # Explicitly print the image coordinates actually used (avoid silent defaults — run-manifest tracking).
 printf 'INFO: build targets — YOLO=%s  VOICE=%s\n' "${YOLO_IMAGE}" "${VOICE_IMAGE}"
@@ -47,10 +47,20 @@ secret_scan() {
     echo "  ✓ no secret trace — ${image}"
 }
 
-# isolated import smoke — the default ENTRYPOINT (/entrypoint.sh) sources ROS2 + overlay setup.bash.
+# isolated import smoke — the builder stage has NO runtime ENTRYPOINT, so source ROS2 + overlay + venv
+# PYTHONPATH explicitly here (mirrors containers/entrypoint.sh + dev/bashrc) before running python.
+# `bash -c 'SCRIPT' "$pyexpr"` binds pyexpr to $0 inside → python3 -c "$0" (avoids nested-quote escaping).
 smoke() {
     local image="$1" pyexpr="$2"
-    docker run --rm "${image}" python3 -c "${pyexpr}"
+    docker run --rm "${image}" bash -c '
+        set +u
+        source "/opt/ros/${ROS_DISTRO}/setup.bash"
+        [ -f /ws/install/setup.bash ] && source /ws/install/setup.bash
+        for sp in /opt/venv/lib/python*/site-packages; do
+            [ -d "$sp" ] && export PYTHONPATH="$sp${PYTHONPATH:+:$PYTHONPATH}" && break
+        done
+        exec python3 -c "$0"
+    ' "${pyexpr}"
 }
 
 # cobot2 is externalized — its source lives at ${DSR_WORKSPACE}/src/cobot2, not in the repo. The Dockerfiles COPY
@@ -90,6 +100,7 @@ done
 step 1 "build yolo-detection (torch cu${CUDA_VERSION//./} + ultralytics + numpy<2)"
 docker build --pull \
     -f "${REPO_ROOT}/containers/yolo-detection/Dockerfile" \
+    --target builder \
     --build-arg ROS_DISTRO="${ROS_DISTRO}" \
     --build-arg CUDA_VERSION="${CUDA_VERSION}" \
     -t "${YOLO_IMAGE}" \
@@ -98,6 +109,7 @@ docker build --pull \
 step 2 "build voice-processing (langchain + openwakeword + numpy<2)"
 docker build --pull \
     -f "${REPO_ROOT}/containers/voice-processing/Dockerfile" \
+    --target builder \
     --build-arg ROS_DISTRO="${ROS_DISTRO}" \
     -t "${VOICE_IMAGE}" \
     "${REPO_ROOT}"

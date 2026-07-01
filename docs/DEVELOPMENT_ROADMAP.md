@@ -121,6 +121,8 @@ ROS2 Humble installer → ROS2 Jazzy installer 마이그레이션. 1–4주, sol
 
 **빌드 게이트 진행 상태 (2026-05-30, ADR-009)**: 컨테이너 "빌드 + 개별(isolated) 검증" 단계 **구현 완료** — yolo/voice multi-stage Dockerfile(base `ros:jazzy-ros-base-noble`), `containers/{entrypoint.sh, docker-compose.yml, build-all.sh}`, 루트 `.dockerignore`, `cobot2_ws` 빌드 버그 수정(object_detection/voice_processing — od_msg 는 원본 보존 + Dockerfile 우회), `config.sh` CUDA_VERSION=12.8, `.env.example` 컨테이너 변수. **acceptance = 빌드 게이트(이미지 빌드 + 컨테이너 내부 import smoke + secret 위생)까지만.** GPU 런타임 / 카메라·마이크 passthrough / service 왕복 / od_msg hash 정합 / Docker Hub publish 는 host e2e(Phase 3) 이후 단계 — 아래 4-1~4-7 의 **빌드 부분만 충족, 통합·런타임 부분은 미충족**(빌드 게이트 통과를 Phase 4 PASS 로 격상 금지, lessons L-004/L-007). 타깃 머신에 compose 플러그인 부재라 build-all.sh 는 `docker build` 직접 사용.
 
+> **갱신 (2026-07-01, dev-builder 단일 모델 — ADR-009 amendment 참조)**: 기본 빌드 = `builder` 스테이지(`:dev-builder`). `build-all.sh` 가 `--target builder` 로 빌드/검증(smoke 는 ROS+overlay+venv 명시 source). 통합 실행 = `bash containers/bringup.sh`(base + `docker-compose.dev.yml` 머지, 컨테이너 안 colcon build 후 노드 자동 기동). prebuilt `--fetch`/`fetch-images.sh` 경로 및 Docker Hub/Drive pull 전환 계획 철회. runtime 스테이지·base compose 는 수동/publish 용 보존.
+
 - [ ] 4-1. `containers/yolo-detection/Dockerfile` + 빌드 스크립트 (cobot2_ws `object_detection` — 카메라는 host 소유) — *빌드 게이트 부분 완료(2026-05-30): Dockerfile + multi-stage 빌드 + import smoke. 미충족: GPU passthrough, 모델 가중치 mount, service 왕복.*
   - Base: `ros:jazzy-ros-base-noble` 명시 핀 (Hard Rule #6)
   - **역할 = service server** `/get_3d_position` (`od_msg/SrvDepthPosition`). client 는 host 의 `robot_control` 노드. topic publish 아님 — request/response 구조.

@@ -16,7 +16,7 @@
 # teardown whenever the launch exits (verified by reproduction). The launch itself no longer
 # touches containers (run it directly for a robot/camera-only session without containers).
 #
-# Prereq: `bash setup-app.sh` first (builds cobot2_bringup + the overlay, fetches the images).
+# Prereq: `bash setup-app.sh` first (builds cobot2_bringup + the overlay, builds the dev-builder images).
 # Pass launch args straight through:
 #   bash containers/bringup.sh                       # virtual(emulator) + camera + containers
 #   bash containers/bringup.sh mode:=real            # real robot
@@ -25,7 +25,9 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
-COMPOSE="${SCRIPT_DIR}/docker-compose.yml"
+# base + dev override → dev-builder images (live-mount + in-container colcon build). up and down MUST use the
+# same -f set, so keep it in one array both the trap and the up call reuse.
+COMPOSE_ARGS=(-f "${SCRIPT_DIR}/docker-compose.yml" -f "${SCRIPT_DIR}/docker-compose.dev.yml")
 
 # config.sh fills the env the compose file interpolates (CYCLONEDDS_XML / ROS_DOMAIN_ID / RMW /
 # DOCKERHUB_USER / *_TAG) and the voice service's ../.env. Source once — the trap's down reuses it.
@@ -52,12 +54,43 @@ cleanup() {
     if [[ "${_cleaned}" -eq 1 ]]; then return 0; fi
     _cleaned=1
     echo "[bringup] stopping application containers (docker compose down)…"
-    docker compose -f "${COMPOSE}" down --timeout 5 || true
+    docker compose "${COMPOSE_ARGS[@]}" down --timeout 5 || true
 }
 trap cleanup INT TERM EXIT
 
+# The dev command (docker-compose.dev.yml) is `… ; colcon build ; sleep infinity` — nodes do NOT auto-run, and
+# (no set -e in that command) the container stays Up even if the build fails. So key off THIS run's colcon
+# completion log, not container state. A file/exe-existence marker would race: the named volume seeds the baked
+# /ws/install before the command wipes+rebuilds it. The log is per-container-run, so it has no such race.
+wait_build() {
+    local svc="$1" deadline=$(( SECONDS + 600 )) logs
+    echo "[bringup] waiting for ${svc} colcon build…"
+    while (( SECONDS < deadline )); do
+        # Command-substitution (not `docker logs | grep -q`): grep -q closes the pipe on first match →
+        # SIGPIPE to docker logs → under pipefail the pipeline reports THAT failure, flipping the if false
+        # even on a real match. Substituting reads the whole log first, so no pipe to break.
+        logs="$(docker logs "${svc}" 2>&1)" || true
+        if grep -q 'packages finished' <<<"${logs}"; then
+            echo "[bringup] ${svc} build ready."
+            return 0
+        fi
+        sleep 3
+    done
+    echo "[bringup] timeout: ${svc} build unfinished — see: docker logs ${svc}" >&2
+    return 1
+}
+
 echo "[bringup] starting application containers (docker compose up -d)…"
-docker compose -f "${COMPOSE}" up -d
+docker compose "${COMPOSE_ARGS[@]}" up -d
+
+wait_build yolo-detection
+wait_build voice-processing
+
+echo "[bringup] launching yolo/voice nodes inside the dev containers…"
+# docker exec is non-interactive → it does NOT auto-source ~/.bashrc, so source the dev bashrc (mounted by the
+# dev override at /root/.bashrc) — ROS + overlay + venv PYTHONPATH, the same env an interactive exec gets.
+docker exec -d yolo-detection  bash -c 'source /root/.bashrc; exec ros2 run object_detection object_detection'
+docker exec -d voice-processing bash -c 'source /root/.bashrc; exec ros2 run voice_processing get_keyword'
 
 echo "[bringup] launching robot driver + camera — Ctrl+C tears everything down."
 ros2 launch cobot2_bringup bringup_all.launch.py "$@"

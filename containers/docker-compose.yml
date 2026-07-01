@@ -1,7 +1,9 @@
-# Phase 4 application 컨테이너 (yolo / voice) — 런타임(up) 정의.
+# Phase 4 application 컨테이너 (yolo / voice) — 서비스 base 정의.
 #
-# 빌드 게이트(개별 검증)는 containers/build-all.sh 가 `docker build` 로 직접 수행한다.
-# 이 compose 파일은 host e2e 검증 이후의 런타임 단계용이다 (GPU / 마이크 passthrough).
+# 기본 통합 실행은 이 base + dev override 를 머지한 dev-builder 경로다:
+#   bash containers/bringup.sh   (= -f docker-compose.yml -f docker-compose.dev.yml, live-mount + 컨테이너 안 colcon build)
+# 이 base 를 단독으로 `up` 하면 runtime(최종) 이미지·노드 auto-run 경로가 되는데, 학습 기본 흐름은
+# 그걸 빌드하지 않는다(수동 runtime/publish 용으로만 보존). 빌드 게이트는 build-all.sh 가 builder 스테이지를 빌드/검증.
 # install.sh 는 이 파일을 자동 호출하지 않는다 — host(설치) / application(컨테이너) 책임 분리.
 #
 # 카메라는 host 소유다. yolo 컨테이너를 올리기 전에 host 에서 realsense2_camera 노드를
@@ -59,10 +61,11 @@ services:
     #   - ./models/yolov8n_tools_0122.pt:/ws/install/share/object_detection/resource/yolov8n_tools_0122.pt:ro
 
   yolo-viz:                     # 시각화 전용 — color 스트림 연속추론 → /yolo/detections (host viewer 가 구독).
-    # 기존 yolo 이미지를 그대로 재사용한다(신규/무태그 이미지 없음). 노드 본문은 build 된
-    # object_detection 서비스와 별개로, 마운트한 스크립트를 entrypoint 위에서 직접 실행한다
-    # → 이미지 재빌드/재배포 없이 viz 노드만 추가·수정 가능.
-    image: docker.io/${DOCKERHUB_USER:-local}/ros2-jazzy-yolo:${YOLO_TAG:-dev}
+    # dev-builder(yolo) 이미지를 재사용한다(신규/무태그 이미지 없음). 노드 본문은 build 된
+    # object_detection 서비스와 별개로, 마운트한 스크립트를 직접 실행한다
+    # → 이미지 재빌드/재배포 없이 viz 노드만 추가·수정 가능. viz 는 /ws bind-mount 없이
+    #   builder 가 baked 한 /ws/install overlay 를 그대로 쓴다(소스 편집 대상 아님).
+    image: docker.io/${DOCKERHUB_USER:-local}/ros2-jazzy-yolo:dev-builder
     profiles: [viz]             # opt-in — 프로덕션 up 에 자동 포함 안 됨. `--profile viz` 로만 기동.
     network_mode: host          # host net namespace 공유 → cyclonedds NIC whitelist·버퍼 상속(카메라 토픽 수신).
     restart: unless-stopped
@@ -76,6 +79,9 @@ services:
       # `../` 는 의도적 — compose 파일이 containers/ 에 있어 volume 상대경로는 파일 기준이다.
       # repo-root 의 viz/live_detection.py 를 가리키려면 한 단계 위로 올라간다.
       - ../viz/live_detection.py:/opt/viz/live_detection.py:ro
+      # builder 이미지엔 runtime entrypoint 가 없다 → dev/bashrc 를 /root/.bashrc 로 mount 해
+      # ROS overlay + venv PYTHONPATH 를 command 에서 source 한다(dev 서비스와 동일 recipe).
+      - ./dev/bashrc:/root/.bashrc:ro
     deploy:                     # GPU 예약 — yolo-detection 과 동일.
       resources:
         reservations:
@@ -83,8 +89,8 @@ services:
             - driver: nvidia
               count: 1
               capabilities: [gpu]
-    # entrypoint(ROS overlay + venv PYTHONPATH 주입) 위에서 스크립트를 직접 실행.
-    command: ["python3", "/opt/viz/live_detection.py"]
+    # builder 이미지엔 entrypoint 가 없어 mount 한 /root/.bashrc 로 ROS overlay + venv PYTHONPATH 주입 후 실행.
+    command: ["bash", "-c", "source /root/.bashrc; exec python3 /opt/viz/live_detection.py"]
 
   voice-processing:
     container_name: voice-processing   # 고정 이름 — dev override 도 상속(`docker exec -it voice-processing`). 미설정 시 <project>-<svc>-1.

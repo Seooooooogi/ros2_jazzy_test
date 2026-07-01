@@ -90,18 +90,6 @@ export ROS2_JAZZY_TEST_REPO
 # User decision 2026-05-28. No code in the system-layer install reads this variable.
 : "${DOCKER_VERSION_STRING:=}"
 
-# --- Phase 4 image distribution (downloaded from public Google Drive, then docker load) ----------
-# A clean install (install.sh step14) does not build images; it downloads the tar via the public drive file IDs below
-# and loads it (fast reproduction). Direct build/verification (image-producing machine) is containers/build-all.sh.
-#
-# file ID = public-link identifier (not a secret) — fill in after upload. If empty, fetch fails clearly.
-# SHA256 = integrity hash of the `docker save` tar. Always pin it in the repo (here) and upload only the tar to the drive
-# — fetching the hash from the same source as the tar makes verification meaningless if both are tampered (trusted source = repo).
-: "${YOLO_IMAGE_GDRIVE_ID:=1pbWlfFb3d5L6E_S5XrN9_7s_OLsg_YvC}"
-: "${VOICE_IMAGE_GDRIVE_ID:=1iKKLyreAawlDVBcFKqXlyNCG0JNnogYp}"
-: "${YOLO_IMAGE_SHA256:=4b29263968bbd0b0247d8b71a11660b309ea596d6796bd899ef8d9bb6bf5d73b}"
-: "${VOICE_IMAGE_SHA256:=092b8138e14b7568d7dbaeb27c875867b2a16083f4ee6a0c9b2c1658bb9c2d0b}"
-
 # --- State file (resumable re-run, structured format 2026-05-27) ----
 : "${STATE_DIR:=${HOME}/.ros2_jazzy_test}"
 : "${STATE_FILE:=${STATE_DIR}/state}"

@@ -1,7 +1,8 @@
 # containers — Phase 4 애플리케이션 컨테이너 (yolo / voice)
 
-- 프로덕션 정의: `docker-compose.yml` — 노드 자동 기동, 배포 이미지(fetch/build). 사용법은 최상위 `README.md` 참조.
-- 개발 모드: `docker-compose.dev.yml` — 코드 수정 live-mount + 노드 수동 기동(디버깅). 아래 설명.
+- base 서비스 정의: `docker-compose.yml` — network/GPU/audio/env. 단독 `up` 은 runtime(최종) 이미지·노드 자동 기동 경로(학습 기본 흐름은 이걸 빌드 안 함, 수동/publish 용 보존).
+- 기본 통합 실행: `bash containers/bringup.sh` = base + `docker-compose.dev.yml`(dev-builder) 머지 — live-mount + 컨테이너 안 colcon build 후 노드 자동 기동. 이미지 빌드/검증은 `containers/build-all.sh`(builder 스테이지 = `:dev-builder`). 최상위 `README.md` 참조.
+- 개발 모드(개별 수동): `docker-compose.dev.yml` — 코드 수정 live-mount + 노드 수동 기동(디버깅). 아래 설명.
 
 ## 개발 모드 (코드 수정 → 즉시 테스트)
 
