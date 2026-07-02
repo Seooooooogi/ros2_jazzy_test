@@ -254,8 +254,8 @@ pip install --no-deps roboflow
 # (3) LLM / 음성 스택
 pip install "langchain<2" "langchain-openai<2" "openai<3" pyaudio sounddevice "scipy<1.18" python-dotenv
 
-# (4) 그리퍼 Modbus
-pip install "pymodbus<4"
+# (4) 그리퍼 Modbus — 3.7 부터 ModbusTcpClient 가 serial kwargs(stopbits 등)를 거부해 onrobot.py 가 TypeError 로 죽음 → <3.7 고정
+pip install "pymodbus<3.7"
 
 # (5) openwakeword — Python 3.12 에서 tflite-runtime 미지원 → no-deps 로 설치 후 의존성 직접 지정
 pip install --no-deps "openwakeword==0.6.0"

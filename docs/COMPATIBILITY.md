@@ -176,7 +176,7 @@ host 미설치 (ADR-008) — 아래는 두 컨테이너 이미지 **안에서** 
 | ultralytics / opencv-python / supervision | `<9` / `<4.10` / — | yolo 컨테이너 미러링 |
 | langchain / langchain-openai / openai | `<2` / `<2` / `<3` | voice 컨테이너 미러링 |
 | openwakeword (+ ai-edge-litert, shim) | `==0.6.0 --no-deps` / `>=2.0.2,<3` | voice 컨테이너와 동일 레시피 (`tflite_runtime`→`ai_edge_litert`) |
-| pymodbus | `<4` (3.x) | onrobot.py 가 3.x API(`slave=`)로 이관됨 |
+| pymodbus | `<3.7` (3.x) | onrobot.py 가 3.x API(`slave=`)로 이관됨. 단 3.7 부터 client 잉여 kwargs 제거 → onrobot.py 의 `ModbusTcpClient(stopbits/bytesize/parity/baudrate)` 가 TypeError (3.13.1 실측) → `<3.7` 로 상한 고정 (3.6.9 실측 OK) |
 | scipy / pyaudio / sounddevice / python-dotenv | `<2` / — / — / — | ⚠ scipy 1.18+ 은 런타임 numpy>=2.0 요구(np.long) → numpy<2 재핀과 충돌. 컨테이너는 `<1.18` 로 고정함. 이 shell 변종도 동일 수정 요망(미검증 — host-python-deps.sh 부재) |
 | numpy | `<2` (마지막 `--force-reinstall`) | ultralytics 호환 (ADR-002) |
 

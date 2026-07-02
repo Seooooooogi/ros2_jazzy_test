@@ -10,7 +10,8 @@ pyaudio
 sounddevice
 scipy<1.18
 python-dotenv
-pymodbus<4
+# pymodbus 3.7 부터 client 의 잉여 kwargs 가 제거돼 onrobot.py 의 ModbusTcpClient(stopbits/bytesize/parity/baudrate) 가 TypeError → <3.7 필수.
+pymodbus<3.7
 openwakeword==0.6.0
 onnxruntime<2,>=1.10.0
 tqdm<5,>=4.0
