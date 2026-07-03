@@ -149,18 +149,12 @@ export CYCLONEDDS_URI="file://${CYCLONEDDS_XML}"
 : "${HOST_ETH_PREFIX:=24}"
 : "${HOST_ETH_NETIF:=}"
 
-# ROS_DOMAIN_ID single source of truth. The host (activate.sh / interactive shell) and the two compose services
-# must see the same value or DDS discovery silently fails. Resolution order: explicit env override > the
-# setup-time choice persisted on disk > 42. The persisted file (written by setup-app's prompt_domain_id)
-# lives under the XDG config dir, NOT STATE_DIR, so wiping the installer state (--reset) does not silently
-# reset the live domain — matching CYCLONEDDS_XML's "runtime config in XDG" policy above.
-: "${ROS2_JAZZY_TEST_CONFIG_DIR:=${XDG_CONFIG_HOME:-${HOME}/.config}/ros2_jazzy_test}"
-_domain_file="${ROS2_JAZZY_TEST_CONFIG_DIR}/ros_domain_id"
-if [[ -z "${ROS_DOMAIN_ID:-}" && -r "${_domain_file}" ]]; then
-    ROS_DOMAIN_ID="$(cat "${_domain_file}" 2>/dev/null)"
-fi
-unset _domain_file
-export ROS_DOMAIN_ID="${ROS_DOMAIN_ID:-42}"
+# ROS_DOMAIN_ID — students set this themselves in ~/.bashrc (learning exercise); the installer does NOT
+# prompt for it or inject it. Resolution is just: explicit env (the student's own `export ROS_DOMAIN_ID=`)
+# > 0 (the ROS2 default). config.sh only passes the shell's value through so the compose services (which
+# read it when bringup sources this file) see the SAME value the interactive shell exported. If left unset
+# everywhere, host and containers both default to 0 and still match on a single machine.
+export ROS_DOMAIN_ID="${ROS_DOMAIN_ID:-0}"
 
 # --- Progress display ([n/total] visualization) ---------------------
 # Last-resort fallback for the orchestrate.sh progress denominator (total).

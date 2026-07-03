@@ -41,7 +41,7 @@ services:
                                 # 컨테이너에도 적용된다(컨테이너 내 별도 sysctl 불필요).
     restart: unless-stopped
     environment:
-      - ROS_DOMAIN_ID=${ROS_DOMAIN_ID:-42}
+      - ROS_DOMAIN_ID=${ROS_DOMAIN_ID:-0}
       # host 와 동일 RMW 여야 같은 topic/service 가 보인다 (혼합 시 discovery 실패). 표준=cyclonedds.
       - RMW_IMPLEMENTATION=${RMW_IMPLEMENTATION:-rmw_cyclonedds_cpp}
       - CYCLONEDDS_URI=file:///cyclonedds.xml
@@ -70,7 +70,7 @@ services:
     network_mode: host          # host net namespace 공유 → cyclonedds NIC whitelist·버퍼 상속(카메라 토픽 수신).
     restart: unless-stopped
     environment:
-      - ROS_DOMAIN_ID=${ROS_DOMAIN_ID:-42}
+      - ROS_DOMAIN_ID=${ROS_DOMAIN_ID:-0}
       - RMW_IMPLEMENTATION=${RMW_IMPLEMENTATION:-rmw_cyclonedds_cpp}
       - CYCLONEDDS_URI=file:///cyclonedds.xml
       - PYTHONUNBUFFERED=1       # 모델 로드·추론 로그를 docker logs 에 실시간 노출.
@@ -105,7 +105,7 @@ services:
     restart: unless-stopped
     env_file: ../.env           # OPENAI_API_KEY 런타임 주입 (이미지에 박지 않음)
     environment:
-      - ROS_DOMAIN_ID=${ROS_DOMAIN_ID:-42}
+      - ROS_DOMAIN_ID=${ROS_DOMAIN_ID:-0}
       - RMW_IMPLEMENTATION=${RMW_IMPLEMENTATION:-rmw_cyclonedds_cpp}
       - CYCLONEDDS_URI=file:///cyclonedds.xml
       # 음성 파이프라인은 print() 로 wakeword confidence/STT 결과를 stdout 에 찍는다.
