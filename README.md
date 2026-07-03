@@ -86,8 +86,6 @@ ros2 launch realsense2_camera rs_align_depth_launch.py \
   align_depth.enable:=true enable_rgbd:=true pointcloud.enable:=true initial_reset:=true
 ```
 
-> `ROS_DOMAIN_ID` 는 설치가 자동 설정하지 않는다 — 학생이 직접 `~/.bashrc` 에 `export ROS_DOMAIN_ID=<n>` 을 넣는다(학습 과제). 미설정 시 host·컨테이너 모두 ROS2 기본값 0 으로 떨어져 서로 매칭. 값을 바꾸면 host bashrc 와 아래 두 컨테이너가 **동일 값**이어야 DDS discovery 성립(bringup 은 컨테이너에 셸의 값을 전달).
-
 **통합 실행**
 
 ```bash
