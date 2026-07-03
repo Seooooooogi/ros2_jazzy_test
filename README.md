@@ -86,7 +86,7 @@ ros2 launch realsense2_camera rs_align_depth_launch.py \
   align_depth.enable:=true enable_rgbd:=true pointcloud.enable:=true initial_reset:=true
 ```
 
-> 아래 두 컨테이너의 `ROS_DOMAIN_ID=42` 는 setup-app 에서 고른 값(기본 42) — host·컨테이너가 동일해야 DDS discovery 성립.
+> `ROS_DOMAIN_ID` 는 설치가 자동 설정하지 않는다 — 학생이 직접 `~/.bashrc` 에 `export ROS_DOMAIN_ID=<n>` 을 넣는다(학습 과제). 미설정 시 host·컨테이너 모두 ROS2 기본값 0 으로 떨어져 서로 매칭. 값을 바꾸면 host bashrc 와 아래 두 컨테이너가 **동일 값**이어야 DDS discovery 성립(bringup 은 컨테이너에 셸의 값을 전달).
 
 **통합 실행 (권장)** — `:dev-builder` 이미지는 `setup-app.sh` 가 이미 빌드했다. 로봇 + 카메라 + yolo/voice 를 한 번에 올리고 Ctrl+C 로 확실히 내리려면:
 
@@ -119,7 +119,7 @@ docker compose $DEV up -d yolo-detection      # 기동 시 clean colcon build �
 docker rm -f yolo-detection 2>/dev/null || true
 docker run -d --name yolo-detection \
   --network host -w /ws --gpus all \
-  -e ROS_DOMAIN_ID=42 -e RMW_IMPLEMENTATION=rmw_cyclonedds_cpp \
+  -e ROS_DOMAIN_ID=${ROS_DOMAIN_ID:-0} -e RMW_IMPLEMENTATION=rmw_cyclonedds_cpp \
   -e CYCLONEDDS_URI=file:///cyclonedds.xml -e PYTHONUNBUFFERED=1 \
   -v ~/.config/cyclonedds/cyclonedds.xml:/cyclonedds.xml:ro \
   -v ~/cobot_ws/src/cobot2/yolo_container:/ws/src \
@@ -157,7 +157,7 @@ docker rm -f voice-processing 2>/dev/null || true
 docker run -d --name voice-processing \
   --network host -w /ws \
   --env-file ~/ros2_jazzy_test/.env \
-  -e ROS_DOMAIN_ID=42 -e RMW_IMPLEMENTATION=rmw_cyclonedds_cpp \
+  -e ROS_DOMAIN_ID=${ROS_DOMAIN_ID:-0} -e RMW_IMPLEMENTATION=rmw_cyclonedds_cpp \
   -e CYCLONEDDS_URI=file:///cyclonedds.xml -e PYTHONUNBUFFERED=1 \
   -v ~/.config/cyclonedds/cyclonedds.xml:/cyclonedds.xml:ro \
   -v ~/ros2_jazzy_test/containers/voice-processing/asound.conf:/etc/asound.conf:ro \
@@ -188,7 +188,8 @@ STT 트리거 — `get_keyword` 노드가 떠 있는 상태에서 host 의 다�
 
 ```bash
 source /opt/ros/jazzy/setup.bash
-export ROS_DOMAIN_ID=42                                  # setup-app 에서 고른 값(기본 42). 컨테이너와 동일해야 함
+# ROS_DOMAIN_ID 는 bashrc 에 직접 넣은 값이 이미 셸에 있음(미설정 시 0). 여기서 다시 export 하지 않는다 —
+# 컨테이너·host 가 같은 값이면 자동 매칭. 값을 확인만: echo $ROS_DOMAIN_ID
 ros2 service call /get_keyword std_srvs/srv/Trigger "{}"
 # 응답 예: success=true, message='hammer / pos1' (도구 / 목적지)
 ```

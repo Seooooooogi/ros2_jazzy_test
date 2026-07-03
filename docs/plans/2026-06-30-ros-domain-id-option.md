@@ -1,5 +1,7 @@
 # ROS_DOMAIN_ID 사용자 입력 옵션화 Implementation Plan
 
+> ⚠️ **SUPERSEDED (2026-07-01)** — 이 플랜의 산출물(prompt + XDG 파일 영속 + 기본 42)은 철회됨. 현재: 기본 `0`, 설치는 도메인 안 건드림, 학생이 `~/.bashrc` 에 직접 삽입. 아래 체크박스는 역사 기록용(재실행 금지).
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** 설치 시 대화형 prompt 로 `ROS_DOMAIN_ID` 를 받아 XDG config dir 에 영속화하고, host·두 컨테이너가 같은 값을 보게 한다.

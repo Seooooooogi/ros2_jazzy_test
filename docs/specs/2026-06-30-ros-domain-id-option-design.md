@@ -1,7 +1,9 @@
 # ROS_DOMAIN_ID 사용자 입력 옵션화 — 설계 (Design Spec)
 
+> ⚠️ **SUPERSEDED (2026-07-01)** — 이 설계(prompt 입력 + XDG 파일 영속 + 기본 42)는 폐기됨. 현재 방침: `config.sh` 기본값 `0`, 설치는 prompt/주입/파일 영속 안 함, 학생이 직접 `~/.bashrc` 에 `export ROS_DOMAIN_ID=<n>` 삽입(학습 과제). 아래 본문은 역사 기록용.
+
 - **날짜**: 2026-06-30
-- **상태**: Draft (user review 대기)
+- **상태**: Superseded (2026-07-01 — 기능 자체 철회)
 - **관련**: `resources/config.sh` (단일 진실 소스), `resources/dds-tuning.sh` (`~/.bashrc` managed block), `containers/docker-compose.yml` (compose interpolation), ADR-016/ADR-020 (DDS/RMW)
 
 ---

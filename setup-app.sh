@@ -94,7 +94,7 @@ print_copyright
 # progress denominator (purely for the [n/total] display).
 TOTAL=0
 [[ ${DO_WORKSPACE} -eq 1 ]] && TOTAL=$(( TOTAL + 5 ))   # cobot2-verify + dsr + rs-sdk + rs-ros + colcon
-[[ ${DO_CONTAINERS} -eq 1 ]] && TOTAL=$(( TOTAL + 4 ))  # toolkit + images + domain-id + openai-key
+[[ ${DO_CONTAINERS} -eq 1 ]] && TOTAL=$(( TOTAL + 3 ))  # toolkit + images + openai-key
 STEP_N=0
 # Per-step banner — same framed [n/total] format as install.sh (orchestrate.sh step_begin).
 step() {
@@ -184,10 +184,8 @@ do_workspace() {
 do_containers() {
     run "NVIDIA Container Toolkit" env ASSUME_YES=1 SKIP_IF_NO_GPU=1 bash "${RESOURCE_DIR}/nvidia-container-toolkit-install.sh"
     run "build container images (dev-builder)" bash "${SCRIPT_DIR}/containers/build-all.sh"
-    # ROS_DOMAIN_ID → persisted file (config.sh reads it as the default; the containers receive the same
-    # value via compose, and new host shells pick it up from the ~/.bashrc managed block planted by
-    # dds-tuning). INTERACTIVE prompt → stays on the console. Enter keeps the current value (default 42).
-    step "ROS_DOMAIN_ID (DDS domain shared by host and containers)"; prompt_domain_id
+    # ROS_DOMAIN_ID is NOT prompted or injected — students add `export ROS_DOMAIN_ID=<n>` to their own
+    # ~/.bashrc (learning exercise). Default when unset = 0 (ROS2 default), so host and containers match.
     # OPENAI_API_KEY → repo-root .env (the voice container mounts it). INTERACTIVE prompt → stays on the
     # console (not routed to the log). Empty = skip (editable in .env later); idempotent if already set.
     step "OPENAI_API_KEY (.env for the voice container)"; bash "${RESOURCE_DIR}/openai-key-setup.sh"
