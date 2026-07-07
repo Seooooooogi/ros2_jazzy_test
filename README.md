@@ -95,15 +95,12 @@ bash containers/bringup.sh mode:=real      # real robot
 
 **컨테이너 개별 수동 실행**:
 
-```bash
-DEV="-f $HOME/ros2_jazzy_test/containers/docker-compose.yml -f $HOME/ros2_jazzy_test/containers/docker-compose.dev.yml"
-```
-
 **yolo 컨테이너**
 
 1. compose 방식 기동:
 
 ```bash
+DEV="-f $HOME/ros2_jazzy_test/containers/docker-compose.yml -f $HOME/ros2_jazzy_test/containers/docker-compose.dev.yml"
 docker compose $DEV up -d yolo-detection      # 기동 시 clean colcon build 후 idle
 ```
 
@@ -141,6 +138,7 @@ ros2 run object_detection object_detection    # Ctrl+C → host 에서 .py 수�
 1. compose 방식 기동:
 
 ```bash
+DEV="-f $HOME/ros2_jazzy_test/containers/docker-compose.yml -f $HOME/ros2_jazzy_test/containers/docker-compose.dev.yml"
 docker compose $DEV up -d voice-processing    # 기동 시 clean colcon build 후 idle
 ```
 
