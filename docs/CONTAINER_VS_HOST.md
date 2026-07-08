@@ -7,6 +7,7 @@
 
 - **host 단독 (no container)** = `feat/application-shell` — 모든 노드를 host 에서 실행, application Python 은 host venv 한 곳.
 - **분리 컨테이너 (container)** = `feat/application-containers` (현재) — host 는 thin `robot_control` 만, yolo/voice 는 각 이미지.
+- **hybrid (voice 만 host)** = `feat/voice-host` (ADR-027, 2026-07-08) — yolo 는 컨테이너 유지, **voice 만 host 직접 실행**. 마이크가 하드웨어 종속(컨테이너 `asound.conf` 하드코딩 + raw ALSA passthrough 미검증)이라 voice 만 환원. voice application Python 은 host system pip(`--break-system-packages`). yolo 는 카메라 host 소유라 passthrough 문제 없어 컨테이너 유지.
 
 근거(왜 컨테이너화했나)는 ADR 에 있고 여기서 재서술하지 않는다 → [Further reading](#further-reading) 참조.
 본 문서는 *대비*와 *측정틀*에 집중한다.

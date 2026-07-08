@@ -161,6 +161,8 @@ host 미설치 (ADR-008) — 아래는 두 컨테이너 이미지 **안에서** 
 > openwakeword 검증: `import` 가 아닌 **`Model(.tflite)` 인스턴스화 + predict** 로 확인(2026-06-02 컨테이너 실측 PASS). feature 모델(melspectrogram/embedding/VAD)은 wheel 미동봉 → `download_models()` 로 받음(ADR-014).
 > 이미지 크기 (build gate 측정): yolo ≈ 13.6GB (nvidia CUDA 런타임 ≈4.2GB 가 지배), voice ≈ 1.9GB.
 > `OPENAI_API_KEY` 는 이미지에 미포함 — runtime env 주입 (ADR-007). transitive 완전 잠금(lock 파일)은 추후 과제.
+>
+> **ADR-027 (2026-07-08)**: voice-processing 컨테이너는 **폐기**되고 voice_processing 노드가 **host 직접 실행**으로 이관된다(마이크 하드웨어 종속). 위 핀은 `resources/voice-host-install.sh` 가 host 에 system pip(`--break-system-packages`)로 동일하게 설치(scipy<1.18 / openwakeword `--no-deps`+shim / numpy<2). feature 모델은 `download_models()` 대신 `resources/oww_models/` 동봉본 복사 + TFL3 검증. 구현 = `feat/voice-host`(off main) — dev 코드엔 아직 컨테이너가 남아 있어 병합 시 위 컨테이너 항목을 host 항목으로 갱신.
 
 ---
 

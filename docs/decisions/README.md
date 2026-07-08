@@ -853,3 +853,40 @@
 
 **Reopen 조건**:
 - cobot2 취득을 자동화(별도 git repo clone / tarball fetch)할 때 → `obtain_cobot2` 본문 교체(설계상 격리). 소스 위치·핀 방식은 그때 별도 결정.
+
+### ADR-027: voice_processing 컨테이너 폐기 — host 직접 실행 (yolo 컨테이너 유지) (2026-07-08)
+
+**Date**: 2026-07-08
+
+**Status**: ADR-008 의 "host 는 pip install 자체를 안 함" 을 **voice 노드에 한해** 부분 환원. ADR-008 의 자동화 host venv 부재 + yolo 컨테이너화(ADR-006/007/009) 는 유지. ADR-008 Reopen 조건 #2("특정 ROS2 노드에서 application Python 직접 사용")에 해당. 구현 = `feat/voice-host` 브랜치(main 에서 분기), 문서 = 본 dev 브랜치 — 두 곳이 갈려 있어 정합은 병합 시 확정.
+
+**Context**:
+- voice 컨테이너의 마이크 입력이 하드웨어 종속이라 사운드 하드웨어가 다른 머신에서 wakeword/STT 미인식 위험:
+  - `containers/voice-processing/asound.conf` 가 `pcm.!default → hw:1,7` / `ctl.!default → card 1` **하드코딩**(파일 주석도 "동일 모델 fleet 가정"). 카드/디바이스 번호는 사운드칩마다 달라짐.
+  - 오디오 = raw ALSA(`/dev/snd` + `group_add: audio`), PulseAudio/PipeWire 미경유 → noble 기본 PipeWire 데스크톱 세션과 충돌 위험.
+  - `DEVELOPMENT_ROADMAP.md` 4-2 = 마이크 PipeWire passthrough **"미충족"(한 번도 검증 안 됨)**.
+- host 실행 시 PortAudio 가 데스크톱 세션의 PipeWire 기본 입력을 그대로 사용(사용자가 GUI 에서 고른 장치). 앱 `resolve_input_device()`(external cobot2 코드)의 `None` fallback = PipeWire 기본, `VOICE_MIC_DEVICE` = calibration 노브.
+- yolo 는 카메라가 이미 host 소유(ADR-015)라 컨테이너가 DDS 로 토픽만 구독 — 하드웨어 passthrough 문제 없음 → 컨테이너 유지(GPU 격리).
+
+**Decision**:
+- **voice_processing 노드 = host 직접 실행**. application Python(langchain / openai / openwakeword) 을 host 에 **system pip(`--break-system-packages`)** 로 설치(사용자 결정 — venv 아님, noble PEP 668 회피). 신규 `resources/voice-host-install.sh`.
+  - 핀 = 검증본 미러링(폐기되는 `containers/voice-processing/Dockerfile` + `scripts/venv-demo/LAB.md` Part A4): `scipy<1.18`, `openwakeword==0.6.0 --no-deps` + `ai-edge-litert` shim, `numpy<2` 마지막.
+  - wakeword feature 모델 = `resources/oww_models/`(컨테이너에서 이전) 복사 + TFL3 매직바이트 검증(download_models 미사용 — transient 504 시 에러 HTML 유입 차단).
+- **colcon 이 voice_processing 을 host 에서 함께 빌드**(`--packages-skip object_detection` 만) → console_script 의 system python shebang 이 위 host 패키지를 본다.
+- **`containers/bringup.sh`** 가 voice 를 host 백그라운드 프로세스로 기동(`ros2 run voice_processing get_keyword &`) + 종료 시 trap kill. OPENAI 키는 `.env` → `_load_env` 로 주입(컨테이너 mount 폐기).
+- **voice 컨테이너 제거**: `containers/voice-processing/` 삭제, `build-all.sh`·`docker-compose{,.dev}.yml` 에서 voice 이미지/서비스/볼륨/`/dev/snd`/`group_add audio` 제거. OPENAI 키 단계 = `setup-app.sh` containers→workspace 이동(단계 카운트 5/3 → 7/2).
+- **데모 venv 불변**: `scripts/venv-demo/LAB.md`(corecode/pick&place, curriculum) 는 별도 실행 레이어 — 이번 변경과 무관.
+
+**Consequences**:
+- system Python 오염(langchain 등 apt 미제공이라 pip 불가피) + apt python3 패키지와 잠재 충돌 = `--break-system-packages` trade-off. numpy 는 apt(1.26, `<2`) 재사용 → force-reinstall 없이 dpkg 파일 클로버 회피.
+- openwakeword shim/핀 레시피가 이제 3곳(구 container Dockerfile — 폐기, `scripts/venv-demo/LAB.md`, `resources/voice-host-install.sh`)에 존재 → openwakeword/ai-edge-litert 변경 시 동기화 필요.
+- 데모 venv(`--system-site-packages`)가 host 에 깐 voice deps 를 보게 됨 — 핀 동일해 무해하나 drift 주의.
+- 코드는 `feat/voice-host`(off main), 문서는 dev — 두 브랜치가 갈려 있어 정합은 `feat/voice-host` 를 dev/main 에 병합할 때 확정.
+
+**검증**:
+- `shellcheck -x` + `bash -n` 통과, `docker compose config` 가 voice 서비스 없이 파싱, grep 스윕으로 잔존 컨테이너-voice 참조 0.
+- noble/3.12(실기): `voice-host-install.sh` import 게이트(`Model(.tflite)` + predict), `head -1 ~/cobot_ws/install/lib/voice_processing/get_keyword` = `/usr/bin/python3`(그 python 이 host deps 를 봄), bringup e2e(yolo 컨테이너 + host voice `/get_keyword` advertise, Ctrl+C 시 둘 다 정리, `pgrep -f get_keyword` 빈 결과).
+
+**Reopen 조건**:
+- 하드웨어 인덱스 drift 를 견디는 컨테이너 마이크 passthrough(PipeWire 소켓 mount)가 검증되면 재컨테이너화 재검토.
+- openwakeword 가 ai-edge-litert 를 네이티브 지원하면 `tflite_runtime` shim 제거.
