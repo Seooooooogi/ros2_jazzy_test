@@ -77,6 +77,24 @@ sudo apt-get install -y <package>
 echo "<name>: success — <작업> 완료"
 ```
 - step 추가 시 `resources/orchestrate.sh` 의 스테이지 함수 + `STAGE_*_COUNT` 1곳만 갱신(install.sh/a0N 양쪽 자동 반영).
+- 함수 주석 — 비자명 함수는 Google `####` 블록(해당되는 `Globals`/`Arguments`/`Outputs`/`Returns` 섹션만), 사소한 헬퍼는 한 줄:
+
+```bash
+#######################################
+# 단계 하나를 실행하고 성공/실패를 state 에 기록.
+# Globals:
+#   STATE_FILE
+# Arguments:
+#   $1 - 단계 이름
+#   $2.. - 실행할 명령
+# Returns:
+#   명령의 종료 코드
+#######################################
+run_step() { ...; }
+
+# 사소한 헬퍼는 한 줄.
+_ts() { ...; }
+```
 
 ## 7. 한 도메인 = 여러 step → 서브커맨드 dispatch
 같은 vendor/도메인이 여러 step 으로 나뉘면(예: ROS2 desktop+extras, RealSense sdk+ros) 파일을
@@ -93,3 +111,15 @@ esac
 ```
 - `orchestrate.sh` 의 `run_step` 줄에 서브커맨드를 인자로 넘긴다: `bash "${RESOURCE_DIR}/<file>.sh" a`.
 - 서브커맨드 분기 안에서만 쓰는 변수는 해당 함수 `local` 로 — branch 간 누수 차단.
+
+## 8. 주석 스타일
+- **언어** — 주석 본문은 한글. 식별자·경로·플래그·env 이름·`# shellcheck` 지시어·`echo` 출력 문자열은 영어 그대로(한글화 금지).
+- **함수 주석**:
+    - 비자명 함수 → Google `####` 블록(`#######################################` 구분선). 해당되는 섹션만 나열: `Globals:` / `Arguments:` / `Outputs:` / `Returns:`. 없는 섹션에 `None` 채우지 않음.
+    - 자명·짧은 헬퍼 → 한 줄 주석.
+    - `# Public:` / `# Internal:` 태그 안 씀 — 설명이 의도를 담고, `_` prefix 가 내부(private) 신호.
+- **인라인 주석**:
+    - 난이도 = 초심자 기준. jargon(전문 용어) 첫 등장 시 한글 부연(예: "errexit(`set -e` — 실패 시 즉시 중단)").
+    - rationale(왜 이렇게 했나)는 **삭제 금지** — plain 서술로 풀어서 유지.
+- **규칙 번호 인용 금지** — ADR 번호·Hard Rule #N·Tier·내부 Phase 번호를 주석에 박지 않음(재정렬·삭제로 stale 됨). 대신 그 규칙의 **이유·사실을 직접 서술**(예: ❌ "Hard Rule #6" → ✅ "sourced `set -e` 는 호출자 셸을 오염").
+- **source 전용 라이브러리 헤더** — §1 문구 그대로: `# source 전용 라이브러리 — set -euo 를 여기 두지 않는다(호출 진입점이 셸 옵션을 소유).`

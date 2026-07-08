@@ -4,24 +4,24 @@
 #  Copyright (c) 2026 ROKEY bootcamp. All rights reserved.
 # =============================================================
 #
-# setup-app.sh — application layer setup, separate from the base host install (install.sh).
+# setup-app.sh — 앱 레이어(application layer) 셋업. 베이스 호스트 설치(install.sh)와 분리된 단계.
 #
-# install.sh sets up only the base host environment (OS / NVIDIA / Docker / ROS2 + reboot + VS Code +
-# DDS tuning + static IP + corecode). This script sets up the cobot2 APPLICATION on top:
+# install.sh = 베이스 호스트 환경만 담당(OS / NVIDIA / Docker / ROS2 + reboot + VS Code +
+# DDS 튜닝 + 정적 IP + corecode). 이 스크립트 = 그 위에 cobot2 애플리케이션 올림:
 #
-#   workspace : doosan-robot2 driver clone + DSR deps + emulator → verify cobot2 source → RealSense → colcon build.
-#   containers: nvidia-container-toolkit → application container images (built from source as :dev-builder images —
-#               students develop on the cobot2 template with live-mounted source) → OPENAI_API_KEY into .env.
+#   workspace : doosan-robot2 드라이버 clone + DSR 의존성 + 에뮬레이터 → cobot2 소스 확인 → RealSense → colcon build.
+#   containers: nvidia-container-toolkit → 앱 컨테이너 이미지(소스에서 :dev-builder 이미지로 빌드 —
+#               학생은 소스를 live-mount 한 cobot2 템플릿 위에서 개발) → OPENAI_API_KEY 를 .env 에 기록.
 #
-# The cobot2 application source is NOT shipped by this repo. The user places it at ${DSR_WORKSPACE}/src/cobot2
-# (see obtain_cobot2 below — isolated so it can later be swapped for a git clone / tarball fetch). Without it,
-# the workspace step fails loud rather than building a partial workspace that only breaks at runtime.
+# cobot2 애플리케이션 소스 = 이 레포 미제공. 사용자가 ${DSR_WORKSPACE}/src/cobot2 에 직접 배치
+# (아래 obtain_cobot2 참고 — 나중에 git clone / tarball 다운로드로 바꿀 수 있게 이 함수 하나로 격리). 소스 없으면
+# workspace 단계 = 반쪽짜리 워크스페이스 만들어 런타임에서만 깨지는 대신, 곧바로 큰 소리로 실패.
 #
-# Run after install.sh (and its reboot) completes. Supersedes the old reinstall-workspace.sh.
+# install.sh(그리고 그 reboot)가 끝난 뒤에 실행. 예전 reinstall-workspace.sh 를 대체.
 #
-# Console shows only the [n/total] step banner + a liveness heartbeat; each step's detailed output
-# (apt / colcon / docker) goes to the repo-root install_log. --verbose (or VERBOSE=1) also streams it
-# to the console. sudo password prompts use /dev/tty, so they stay visible even when output is routed.
+# 콘솔 = [n/total] 단계 배너 + 살아있음 신호(heartbeat)만 표시. 각 단계의 상세 출력
+# (apt / colcon / docker) = 레포 루트의 install_log 로. --verbose (또는 VERBOSE=1) = 그 출력을
+# 콘솔에도 함께 흘려보냄. sudo 비밀번호 입력 = /dev/tty 사용 → 출력이 로그로 라우팅돼도 화면에 계속 표시.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -30,10 +30,10 @@ RESOURCE_DIR="${SCRIPT_DIR}/resources"
 # shellcheck source=resources/config.sh
 source "${RESOURCE_DIR}/config.sh"
 # shellcheck source=resources/interaction.sh
-source "${RESOURCE_DIR}/interaction.sh"   # sudo_prime
+source "${RESOURCE_DIR}/interaction.sh"   # sudo_prime 제공
 config_assert_set
 
-# Per-step detail is routed here (same install_log as install.sh); console stays clean unless --verbose.
+# 단계별 상세 출력 = 여기로(install.sh 와 같은 install_log). --verbose 아니면 콘솔은 깔끔하게 유지.
 LOG="${LOG_FILE}"
 mkdir -p "$(dirname "${LOG}")"
 VERBOSE="${VERBOSE:-0}"
@@ -60,7 +60,7 @@ The cobot2 application source is NOT shipped by this repo — place it at ${DSR_
 EOF
 }
 
-# Project copyright banner — printed to the console at the start of every actual run (same as install.sh).
+# 저작권 배너 — 실제 실행 시작할 때마다 콘솔에 출력(install.sh 와 동일).
 print_copyright() {
     cat <<'EOF'
 ============================================================
@@ -88,15 +88,22 @@ if [[ ${DO_WORKSPACE} -eq 0 && ${DO_CONTAINERS} -eq 0 ]]; then
     exit 2
 fi
 
-# Copyright banner for an actual run (the --help subcommand above has already exited).
+# 실제 실행일 때 저작권 배너 출력(위의 --help 는 이미 종료됨).
 print_copyright
 
-# progress denominator (purely for the [n/total] display).
+# 진행률 분모 — [n/total] 표시에만 사용.
 TOTAL=0
-[[ ${DO_WORKSPACE} -eq 1 ]] && TOTAL=$(( TOTAL + 5 ))   # cobot2-verify + dsr + rs-sdk + rs-ros + colcon
-[[ ${DO_CONTAINERS} -eq 1 ]] && TOTAL=$(( TOTAL + 3 ))  # toolkit + images + openai-key
+[[ ${DO_WORKSPACE} -eq 1 ]] && TOTAL=$(( TOTAL + 5 ))   # 5개: cobot2 확인 + dsr + rs-sdk + rs-ros + colcon
+[[ ${DO_CONTAINERS} -eq 1 ]] && TOTAL=$(( TOTAL + 3 ))  # 3개: toolkit + images + openai-key
 STEP_N=0
-# Per-step banner — same framed [n/total] format as install.sh (orchestrate.sh step_begin).
+#######################################
+# 단계 배너 출력 + 단계 카운터 1 증가.
+# install.sh 와 같은 [n/total] 틀 포맷 사용.
+# Globals:
+#   STEP_N (1 증가), TOTAL (읽기)
+# Arguments:
+#   $* - 단계 이름(배너에 표시)
+#######################################
 step() {
     STEP_N=$(( STEP_N + 1 ))
     echo
@@ -105,8 +112,15 @@ step() {
     echo "============================================================"
 }
 
-# Liveness heartbeat while a routed step runs (so the clean console does not look stuck). First draw is
-# delayed 2s so a sudo password prompt at step start (sudo uses /dev/tty) is not overwritten.
+#######################################
+# 라우팅된 단계가 도는 동안 "살아있음" 신호(heartbeat)를 화면에 표시.
+# 콘솔이 조용해서 멈춘 것처럼 보이는 것 방지. 첫 출력은 2초 지연 —
+# 단계 시작 때 뜨는 sudo 비밀번호 프롬프트(/dev/tty 사용) 덮어쓰기 방지.
+# Arguments:
+#   $1 - 단계 이름(경과 시간과 함께 표시)
+# Outputs:
+#   stderr 에 같은 줄을 갱신하며 진행 표시(캐리지 리턴 사용)
+#######################################
 _hb() {
     local name="$1" start="$SECONDS" e
     while :; do
@@ -116,9 +130,20 @@ _hb() {
     done
 }
 
-# run <label> <cmd...> — print the step banner, then run the command with its detailed output routed to
-# the log (console keeps just the banner + heartbeat). VERBOSE=1 / --verbose also tees it to the console.
-# On failure: one-line [FAIL] + the log path, then exit. (Interactive / quick steps call step() directly.)
+#######################################
+# 단계 배너 찍고 명령 실행. 상세 출력은 로그로,
+# 콘솔에는 배너 + heartbeat 만 남김. VERBOSE=1 / --verbose 면
+# 상세 출력을 콘솔에도 함께(tee) 표시.
+# 실패하면 [FAIL] 한 줄 + 로그 경로 찍고 종료.
+# (대화형·짧은 단계는 run 대신 step 을 직접 호출.)
+# Globals:
+#   VERBOSE, LOG (읽기)
+# Arguments:
+#   $1  - 단계 라벨
+#   $2… - 실행할 명령과 인자
+# Returns:
+#   명령이 실패하면 그 종료코드로 스크립트를 종료
+#######################################
 run() {
     local label="$1"; shift
     step "${label}"
@@ -141,10 +166,16 @@ run() {
     fi
 }
 
-# obtain_cobot2 — get the cobot2 application source into ${DSR_WORKSPACE}/src/cobot2.
-# CURRENT POLICY: manual placement by the user — verify presence, fail loud if absent.
-# This is the single isolated seam for the source-acquisition policy: to switch to a git clone or a
-# tarball fetch later, replace only this function body (e.g. `git clone <url> "${cobot2}"`).
+#######################################
+# cobot2 애플리케이션 소스를 ${DSR_WORKSPACE}/src/cobot2 로 가져옴.
+# 현재 정책: 사용자가 직접 배치 — 존재만 확인, 없으면 큰 소리로 실패.
+# 소스 취득 방식 바꿀 때(git clone / tarball 다운로드) 이 함수 본문만
+# 고치면 되도록 격리한 지점(예: `git clone <url> "${cobot2}"`).
+# Globals:
+#   DSR_WORKSPACE (읽기)
+# Returns:
+#   소스가 있으면 0, 없으면 안내 메시지 출력 후 종료(exit 1)
+#######################################
 obtain_cobot2() {
     local cobot2="${DSR_WORKSPACE}/src/cobot2"
     if [[ -d "${cobot2}" ]] && find "${cobot2}" -name package.xml -print -quit | grep -q .; then
@@ -157,8 +188,15 @@ obtain_cobot2() {
     exit 1
 }
 
+#######################################
+# doosan-robot2 clone + build/install/log 지우고 처음부터 다시 만들 준비.
+# cobot2(사용자가 직접 둔 소스)는 보존. --yes 없으면 먼저 확인 요청,
+# TTY 없어 물어볼 수 없으면 종료.
+# Globals:
+#   ASSUME_YES, DSR_WORKSPACE (읽기)
+#######################################
 do_reset() {
-    # Destructive but regenerable (re-clone + rebuild). cobot2 (user-placed) is preserved.
+    # 지워도 되는 것만 지움 — 다시 clone·빌드하면 복구됨. cobot2(사용자 배치본)는 그대로 유지.
     if [[ ${ASSUME_YES} -ne 1 ]]; then
         if [[ -t 0 ]]; then
             read -r -p "[setup-app] --reset will rm -rf ${DSR_WORKSPACE}/src/doosan-robot2 and ${DSR_WORKSPACE}/{build,install,log} (cobot2 kept). Continue? [y/N] " reply
@@ -174,7 +212,7 @@ do_reset() {
 }
 
 do_workspace() {
-    step "cobot2 source (verify)"; obtain_cobot2   # quick verify — stays on the console
+    step "cobot2 source (verify)"; obtain_cobot2   # 빠른 확인 — 콘솔에 그대로 표시(로그로 안 보냄)
     run "doosan-robot2 driver + DSR deps" bash "${RESOURCE_DIR}/dsr-project-install.sh"
     run "RealSense SDK"                   bash "${RESOURCE_DIR}/realsense-install.sh" sdk
     run "RealSense ROS2 wrapper"          bash "${RESOURCE_DIR}/realsense-install.sh" ros
@@ -184,10 +222,10 @@ do_workspace() {
 do_containers() {
     run "NVIDIA Container Toolkit" env ASSUME_YES=1 SKIP_IF_NO_GPU=1 bash "${RESOURCE_DIR}/nvidia-container-toolkit-install.sh"
     run "build container images (dev-builder)" bash "${SCRIPT_DIR}/containers/build-all.sh"
-    # ROS_DOMAIN_ID is NOT prompted or injected — students add `export ROS_DOMAIN_ID=<n>` to their own
-    # ~/.bashrc (learning exercise). Default when unset = 0 (ROS2 default), so host and containers match.
-    # OPENAI_API_KEY → repo-root .env (the voice container mounts it). INTERACTIVE prompt → stays on the
-    # console (not routed to the log). Empty = skip (editable in .env later); idempotent if already set.
+    # ROS_DOMAIN_ID 은 묻지도 주입하지도 않음 — 학생이 직접 자기 ~/.bashrc 에
+    # `export ROS_DOMAIN_ID=<n>` 을 넣음(학습 과제). 설정 안 하면 기본값 0(ROS2 기본)이라 호스트와 컨테이너가 일치.
+    # OPENAI_API_KEY → 레포 루트 .env(voice 컨테이너가 이 파일을 마운트). 입력 프롬프트는 대화형이라 콘솔에
+    # 그대로 남음(로그로 안 보냄). 비워두면 skip(나중에 .env 에서 편집 가능), 이미 있으면 멱등(그대로 유지).
     step "OPENAI_API_KEY (.env for the voice container)"; bash "${RESOURCE_DIR}/openai-key-setup.sh"
 }
 
@@ -195,9 +233,9 @@ echo "[setup-app] workspace=${DSR_WORKSPACE} | workspace:$([[ ${DO_WORKSPACE} -e
 
 [[ ${RESET} -eq 1 ]] && do_reset
 
-# Every step below runs sudo (apt / docker). Collect the password ONCE here, before any step banner +
-# heartbeat — otherwise the first routed step's sudo prompt is hidden behind the heartbeat and the run
-# looks like it proceeds before the password is fully typed. Keepalive keeps it warm through colcon build.
+# 아래 모든 단계가 sudo(apt / docker) 사용. 비밀번호를 여기서 딱 한 번 미리 받음 — 단계 배너와
+# heartbeat 가 시작되기 전에. 안 그러면 첫 라우팅 단계의 sudo 프롬프트가 heartbeat 뒤에 가려져,
+# 비밀번호를 다 치기도 전에 진행되는 것처럼 보임. keepalive 가 colcon build 끝날 때까지 sudo 살려둠.
 sudo_prime setup-app
 
 [[ ${DO_WORKSPACE} -eq 1 ]] && do_workspace

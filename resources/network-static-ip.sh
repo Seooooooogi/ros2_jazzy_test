@@ -5,15 +5,15 @@
 # =============================================================
 #
 # shellcheck source-path=SCRIPTDIR
-# resources/network-static-ip.sh — set a robot-LAN static IP on the host wired NIC (install.sh step 16).
+# resources/network-static-ip.sh — host 유선 NIC 에 로봇 LAN 용 고정 IP 를 설정 (install.sh step 16).
 #
-# To communicate on the robot-equipment LAN (.1 OnRobot gripper / .100 robot controller / .30 host), the host
-# wired NIC must have a static IP on the same subnet. Configured via NetworkManager (nmcli). No gateway/DNS is
-# set and never-default is used, so the internet default route stays on wifi (if this connection grabbed the
-# default route, the internet would drop). Idempotent — re-applying the same values is a no-op. The config persists even without a cable (no-carrier).
+# 로봇 장비 LAN (.1 OnRobot 그리퍼 / .100 로봇 컨트롤러 / .30 host) 과 통신 → host 유선 NIC 가
+# 같은 서브넷의 고정 IP 필요. 설정 = NetworkManager (nmcli). gateway/DNS 는 비워 두고
+# never-default (기본 경로로 쓰지 않음) 로 설정 → 인터넷 기본 경로(default route)는 wifi 에 그대로 유지
+# (이 연결이 기본 경로를 가져가면 인터넷 끊김). 멱등 — 같은 값을 다시 적용해도 변화 없음. 케이블 없어도(no-carrier) 설정 유지.
 #
-# Standalone run: bash resources/network-static-ip.sh (re-run on IP change).
-# This script is a pure install body — the state framing (run_step) is owned by the caller (install.sh).
+# 단독 실행: bash resources/network-static-ip.sh (IP 가 바뀌면 다시 실행).
+# 이 스크립트 = 순수 설치 본문 — state 관리(run_step)는 호출자(install.sh) 담당.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -23,8 +23,8 @@ config_assert_set
 
 command -v nmcli >/dev/null || { echo "net: no nmcli — not a NetworkManager environment." >&2; exit 1; }
 
-# --- 1. determine the wired NIC -----------------------------------------
-# Use HOST_ETH_NETIF as-is if set. If empty, auto-detect the physical wired NIC (excluding wireless/docker/virtual).
+# --- 1. 유선 NIC 결정 -----------------------------------------
+# HOST_ETH_NETIF 가 설정돼 있으면 그대로 사용. 비어 있으면 물리 유선 NIC 를 자동 탐지 (wireless/docker/virtual 제외).
 nic=""
 if [[ -n "${HOST_ETH_NETIF}" ]]; then
     nic="${HOST_ETH_NETIF}"
@@ -35,8 +35,8 @@ else
         n="$(basename "${path}")"
         [[ "${n}" == "lo" ]] && continue
         case "${n}" in docker*|veth*|br-*|virbr*|bond*|tap*|tun*) continue ;; esac
-        [[ -e "${path}/wireless" ]] && continue   # exclude wireless — the robot LAN is wired
-        [[ -e "${path}/device" ]]   || continue   # physical (device symlink) only
+        [[ -e "${path}/wireless" ]] && continue   # wireless 제외 — 로봇 LAN 은 유선
+        [[ -e "${path}/device" ]]   || continue   # 물리 장치(device symlink 존재)만
         found+=("${n}")
     done
     if [[ "${#found[@]}" -eq 0 ]]; then
@@ -52,11 +52,11 @@ else
     echo "[net] wired NIC auto-detect → ${nic}"
 fi
 
-# --- 2. determine the NetworkManager connection -------------------------
-# Active connection first. If the device is down (no cable), there is no active connection, so find a saved
-# ethernet profile bound to that NIC (or the default form with no interface specified). Create one if neither exists.
-# Modify the existing profile in place to prevent a competing profile (e.g. the default 'Wired connection 1' DHCP autoconnect)
-# from overriding the static config.
+# --- 2. NetworkManager 연결(connection) 결정 -------------------------
+# 활성(active) 연결을 먼저 탐색. 장치가 내려가 있으면(케이블 없음) 활성 연결이 없으므로, 그 NIC 에 묶인
+# 저장된 ethernet 프로필(또는 인터페이스 지정이 없는 기본 형태)을 탐색. 둘 다 없으면 새로 생성.
+# 기존 프로필을 그 자리에서 수정하는 이유: 경쟁 프로필(예: 기본 'Wired connection 1' 의 DHCP autoconnect)이
+# 고정 설정을 덮어쓰는 것을 막기 위함.
 conn="$(nmcli -t -f NAME,DEVICE con show --active 2>/dev/null | awk -F: -v d="${nic}" '$2==d{print $1; exit}')"
 if [[ -z "${conn}" ]]; then
     while IFS= read -r name; do
@@ -73,8 +73,8 @@ if [[ -z "${conn}" ]]; then
 fi
 echo "[net] target connection: ${conn} (device ${nic})"
 
-# --- 3. apply the static IP (no gateway/DNS → protect wifi internet) ------------
-# Pin interface-name and autoconnect together so this profile reliably comes up on that NIC.
+# --- 3. 고정 IP 적용 (gateway/DNS 없음 → wifi 인터넷 보호) ------------
+# interface-name 과 autoconnect 를 함께 핀(고정) → 이 프로필이 그 NIC 에서 확실히 올라오게 함.
 nmcli con modify "${conn}" \
     connection.interface-name "${nic}" \
     connection.autoconnect yes \
@@ -85,14 +85,14 @@ nmcli con modify "${conn}" \
     ipv4.never-default yes
 echo "[net] configured: ${HOST_ETH_IP}/${HOST_ETH_PREFIX} (no gateway/DNS, never-default)"
 
-# con up is best-effort: it may fail without a cable (no-carrier), but the config persists.
+# con up 은 best-effort: 케이블이 없으면(no-carrier) 실패할 수 있지만 설정 자체는 유지.
 if nmcli con up "${conn}" >/dev/null 2>&1; then
     echo "[net] connection activated."
 else
     echo "[net] warning: failed to activate the connection (cable may be unplugged) — config saved, applied when the cable is connected." >&2
 fi
 
-# --- 4. verify ----------------------------------------------------------
+# --- 4. 검증 ----------------------------------------------------------
 applied="$(nmcli -g IP4.ADDRESS device show "${nic}" 2>/dev/null | head -1 || true)"
 if [[ "${applied}" == "${HOST_ETH_IP}/${HOST_ETH_PREFIX}" ]]; then
     echo "[net] verification OK: ${nic} = ${applied}"

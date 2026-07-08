@@ -5,27 +5,27 @@
 # =============================================================
 #
 # shellcheck shell=bash
-# resources/interaction.sh — install UX/secret helpers (.env loader + confirm prompt + resume autostart).
-# Source-only library — no `set -euo` here (the calling entry point owns shell options).
+# resources/interaction.sh — 설치 UX/secret 헬퍼 (.env 로더 + confirm 프롬프트 + 재개용 autostart).
+# source 전용 라이브러리 — set -euo 를 여기 두지 않는다(호출 진입점이 셸 옵션을 소유).
 #
-# Bundles three concerns in one file — all on one axis: "interaction with people/credentials":
-#   1) env-load   — safely load/record .env credentials without hardcoding them in scripts (manual parsing, no `source`).
-#                   Used by openai-key-setup.sh (run by setup-app.sh during container setup) — _set_env_key/_relocate_example_secret.
-#   2) confirm    — explicit consent before irreversible operations (reboot / purge / driver swap).
-#   3) resume     — register/remove a one-shot GUI autostart entry so install.sh auto-resumes after the step-6 reboot.
+# 한 파일에 세 가지 관심사를 묶음 — 모두 "사람/자격증명과의 상호작용" 이라는 한 축:
+#   1) env-load   — .env 자격증명을 스크립트에 하드코딩하지 않고 안전하게 로드/기록 (수동 파싱, source 안 씀).
+#                   openai-key-setup.sh 가 사용 (컨테이너 셋업 중 setup-app.sh 가 실행) — _set_env_key/_relocate_example_secret.
+#   2) confirm    — 되돌릴 수 없는 작업 (reboot / purge / 드라이버 교체) 전 명시적 동의.
+#   3) resume     — 일회성 GUI autostart 항목 등록/제거 → step-6 reboot 후 install.sh 가 자동 재개.
 #
-# Functions resolve at call time, so only definition order matters, independent of the caller's source order.
+# 함수는 호출 시점(call time)에 해석 → 정의 순서만 중요, 호출자의 source 순서와 무관.
 
 # ============================================================================
-# 1) env-load — Safe .env loader (load credentials from .env instead of hardcoding them in scripts)
+# 1) env-load — 안전한 .env 로더 (자격증명을 스크립트에 하드코딩하는 대신 .env 에서 로드)
 # ============================================================================
-# Usage:
+# 사용법:
 #   _load_env "${HOME}/ros2_jazzy_test/.env"
 #   _require_env OPENAI_API_KEY
-#   # ${OPENAI_API_KEY} is usable afterwards. Never echo / log the value.
+#   # 이후 ${OPENAI_API_KEY} 사용 가능. 값을 절대 echo / log 하지 말 것.
 #
-# Format: KEY=VALUE per line. Ignore blank lines and # comments. No quote support (simple format).
-# Security: does not use `source` (blocks a malicious .env file from running shell commands). Manual parsing.
+# 형식: 한 줄에 KEY=VALUE. 빈 줄과 # 주석은 무시. 따옴표(quote) 미지원 (단순 형식).
+# 보안: source 안 씀 (악의적 .env 파일이 셸 명령을 실행하는 것을 차단). 수동 파싱.
 
 _load_env() {
     local file="$1"
@@ -34,26 +34,26 @@ _load_env() {
         return 1
     fi
 
-    # Permission warning: if .env is world-readable, only warn (do not force chmod).
+    # 권한 경고: .env 를 누구나 읽을 수 있으면(world-readable) 경고만 (강제로 chmod 하지 않음).
     if [[ "$(stat -c %a "$file" 2>/dev/null)" == *[4-7] ]]; then
         echo "env-load: warning — $file is world-readable. Consider chmod 600." >&2
     fi
 
     local key value
     while IFS='=' read -r key value; do
-        # skip blank lines / comments
+        # 빈 줄 / 주석은 건너뜀
         [[ -z "${key// }" || "$key" =~ ^[[:space:]]*# ]] && continue
-        # trim leading/trailing whitespace from key
+        # key 앞뒤 공백 제거
         key="${key#"${key%%[![:space:]]*}"}"
         key="${key%"${key##*[![:space:]]}"}"
-        # validate variable name (security: block arbitrary variable injection)
+        # 변수 이름 검증 (보안: 임의 변수 주입 차단)
         [[ "$key" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] || continue
-        # export the value (no quote handling — convention is no quotes in .env)
+        # 값을 export (따옴표 처리 없음 — .env 에는 따옴표를 안 쓰는 게 관례)
         export "${key}=${value}"
     done < "$file"
 }
 
-# Public: error if a required variable is empty. Never print the value itself.
+# 필수 변수가 비어 있으면 에러로 알림. 값 자체는 절대 미출력.
 _require_env() {
     local var="$1"
     if [[ -z "${!var:-}" ]]; then
@@ -62,14 +62,20 @@ _require_env() {
     fi
 }
 
-# Public: set KEY to VALUE in .env (replace if present, append if absent). Never print the value.
-# A commented-out '# KEY=' line is also replaced with an active 'KEY=VALUE'.
-# Does not pass the value as an argument to external commands like sed/awk (pure bash) — preventing both
-# special-character corruption of the API key and exposure via the `ps` process list. The temp file is created
-# next to .env (same fs) with mode 600 and swapped via atomic rename, so the secret does not leak through /tmp.
+#######################################
+# .env 안의 KEY 를 VALUE 로 설정 (있으면 교체, 없으면 뒤에 추가). 값은 절대 미출력.
+# 주석 처리된 '# KEY=' 줄도 활성 'KEY=VALUE' 로 교체.
+# 값을 sed/awk 같은 외부 명령의 인자로 안 넘김 (순수 bash) — API 키가 특수문자로 깨지는 것과
+# `ps` 프로세스 목록에 노출되는 것을 둘 다 차단. 임시 파일은 .env 옆(같은 파일시스템)에 mode 600
+# 으로 만들고 atomic rename(원자적 교체)으로 바꿔치기 → /tmp 를 거쳐 secret 이 새지 않게 함.
+# Arguments:
+#   $1 - .env 파일 경로
+#   $2 - 설정할 KEY 이름
+#   $3 - 설정할 값 (출력 금지)
+#######################################
 _set_env_key() {
     local file="$1" key="$2" value="$3"
-    # validate variable name — block arbitrary key injection (same policy as _load_env). Never print the value.
+    # 변수 이름 검증 — 임의 key 주입 차단 (_load_env 와 동일 정책). 값은 절대 미출력.
     [[ "$key" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] || { echo "env-load: invalid key name" >&2; return 1; }
     local tmp line found=0
     tmp="$(mktemp "${file}.XXXXXX")" || return 1
@@ -89,26 +95,31 @@ _set_env_key() {
     chmod 600 "$file"
 }
 
-# Public: move a real KEY value accidentally placed in the tracked file (.env.example) to .env and restore
-# the example to a placeholder. .env.example is git-tracked, so a leftover real value leaks the secret.
-# Never print the value to screen/log. Idempotent — does nothing if the example has no value.
-# Args: <env_file> <env_example> <key>
+#######################################
+# 추적 대상 파일(.env.example)에 실수로 들어간 진짜 KEY 값을 .env 로 이동 + example 은 다시
+# placeholder 로 복원. .env.example 은 git 추적 대상 → 진짜 값이 남으면 secret 유출.
+# 값은 화면/로그에 절대 미출력. 멱등 — example 에 값 없으면 no-op.
+# Arguments:
+#   $1 - .env 파일 경로 (env_file)
+#   $2 - .env.example 파일 경로 (example)
+#   $3 - 대상 KEY 이름
+#######################################
 _relocate_example_secret() {
     local env_file="$1" example="$2" key="$3"
     [[ "$key" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] || { echo "env-load: invalid key name" >&2; return 1; }
     [[ -f "$example" ]] || return 0
-    # Find the KEY line in the example that has a value (content after '=') (regardless of comment state). Value not printed.
+    # example 에서 값이 있는(= 뒤에 내용이 있는) KEY 줄을 탐색 (주석 여부 무관). 값은 미출력.
     local line val
     line="$(grep -E "^[[:space:]]*#?[[:space:]]*${key}=.+" "$example" 2>/dev/null | head -1)" || true
     [[ -z "$line" ]] && return 0
     val="${line#*=}"
-    [[ "$val" =~ ^[[:space:]]*$ ]] && return 0   # ignore empty/whitespace placeholder
+    [[ "$val" =~ ^[[:space:]]*$ ]] && return 0   # 빈 값/공백뿐인 placeholder 는 무시
     echo "env-load: warning — the tracked file ${example} contains a real value for ${key} (secret-leak risk)." >&2
     echo "          Moving it to ${env_file} and restoring ${example} to a placeholder (value not shown)." >&2
-    # Ensure .env exists, then move the key (_set_env_key does not print the value).
+    # .env 가 있는지 보장한 뒤 키 이동 (_set_env_key 는 값 미출력).
     [[ -f "$env_file" ]] || { : > "$env_file"; chmod 600 "$env_file"; }
     _set_env_key "$env_file" "$key" "$val"
-    # Restore the matching example line to an empty placeholder ('# KEY=') to remove the value.
+    # 매칭된 example 줄을 빈 placeholder ('# KEY=') 로 되돌려 값 제거.
     local tmp l
     tmp="$(mktemp "${example}.XXXXXX")" || return 1
     chmod 600 "$tmp"
@@ -124,20 +135,20 @@ _relocate_example_secret() {
 }
 
 # ============================================================================
-# 2) confirm — explicit consent before irreversible (state-changing) operations
+# 2) confirm — 되돌릴 수 없는(상태 변경) 작업 전 명시적 동의
 # ============================================================================
-# (irreversible operations like sudo reboot / apt purge / driver swap require explicit user consent).
+# (sudo reboot / apt purge / 드라이버 교체 같은 되돌릴 수 없는 작업은 사용자 동의 필요).
 #
-# Usage:
+# 사용법:
 #   confirm_or_abort "Reboot now? Unsaved work will be lost."
 #
-# Default: N. Only [yY] proceeds. On a non-interactive shell (no TTY), abort safely.
+# 기본값: N. [yY] 만 진행. 비대화형 셸(TTY 없음)에서는 안전하게 중단.
 
 confirm_or_abort() {
     local msg="$1"
     local reply=""
 
-    # On a non-interactive shell (CI / cron / systemd), default N — never proceed without a user decision.
+    # 비대화형 셸(CI / cron / systemd)에서는 기본 N — 사용자 결정 없이 절대 진행 안 함.
     if [[ ! -t 0 ]]; then
         echo "confirm: non-interactive shell, aborting." >&2
         echo "        msg: $msg" >&2
@@ -152,8 +163,14 @@ confirm_or_abort() {
     fi
 }
 
-# Public: when you do not want to ask the same message again — auto-consent if the env var ASSUME_YES=1.
-# A channel for a CI / automation wrapper to explicitly express consent.
+#######################################
+# 같은 질문을 다시 묻고 싶지 않을 때 — 환경변수 ASSUME_YES=1 이면 자동 동의.
+# CI / 자동화 래퍼가 동의를 명시적으로 표현하는 통로.
+# Globals:
+#   ASSUME_YES (읽기)
+# Arguments:
+#   $1 - 확인 메시지
+#######################################
 confirm_or_abort_assumable() {
     local msg="$1"
     if [[ "${ASSUME_YES:-0}" == "1" ]]; then
@@ -164,19 +181,26 @@ confirm_or_abort_assumable() {
 }
 
 # ============================================================================
-# 3) resume — auto-resume the install across the step-6 reboot
+# 3) resume — step-6 reboot 를 넘어 설치를 자동 재개
 # ============================================================================
-# Register/remove a one-shot GUI autostart entry so install.sh continues automatically after its reboot.
-# (OPENAI_API_KEY is no longer pre-collected here — it is install.sh's final step, openai-key-setup.sh.)
+# 일회성 GUI autostart 항목을 등록/제거 → reboot 후 install.sh 가 자동으로 이어지게 함.
+# (OPENAI_API_KEY 는 더 이상 여기서 미리 안 받음 — install.sh 의 마지막 단계 openai-key-setup.sh 담당.)
 #
-# Mechanism: GNOME autostart (.desktop) opens a terminal on login to run install-resume-launcher.sh
-# → relaunches install.sh. When install.sh re-enters on resume, it immediately removes
-# the autostart (one-shot) so it does not re-fire on every login.
+# 동작 방식: GNOME autostart (.desktop) 가 로그인 시 터미널을 열어 install-resume-launcher.sh 실행
+# → install.sh 재실행. install.sh 가 재개로 다시 진입하면 즉시 autostart 제거(일회성)
+# — 그래야 로그인할 때마다 또 실행 안 됨.
 
 RESUME_AUTOSTART_DIR="${HOME}/.config/autostart"
 RESUME_AUTOSTART_FILE="${RESUME_AUTOSTART_DIR}/ros2-jazzy-install-resume.desktop"
 
-# Register auto-resume after reboot: launch install-resume-launcher.sh from a terminal on login.
+#######################################
+# reboot 후 자동 재개 등록: 로그인 시 터미널에서 install-resume-launcher.sh 를 실행.
+# 터미널 에뮬레이터가 없으면 등록을 건너뛰고 수동 재실행을 안내.
+# Globals:
+#   RESUME_AUTOSTART_DIR, RESUME_AUTOSTART_FILE (읽기)
+# Arguments:
+#   $1 - 레포 루트 경로 (repo)
+#######################################
 register_resume_autostart() {
     local repo="$1"
     local launcher="${repo}/resources/install-resume-launcher.sh"
@@ -203,7 +227,7 @@ EOF
     echo "[install] registered auto-resume after reboot: ${RESUME_AUTOSTART_FILE}" >&2
 }
 
-# Remove the autostart entry (idempotent) — called on resume entry (to guarantee one-shot) and on completion.
+# autostart 항목을 제거 (멱등) — 재개 진입 시(일회성 보장)와 완료 시 호출됨.
 remove_resume_autostart() {
     if [[ -f "${RESUME_AUTOSTART_FILE}" ]]; then
         rm -f "${RESUME_AUTOSTART_FILE}"
@@ -213,31 +237,30 @@ remove_resume_autostart() {
 }
 
 # ============================================================================
-# 4) sudo-prime — collect the sudo password ONCE upfront, then keep the cache warm
+# 4) sudo-prime — sudo 비밀번호를 처음에 한 번만 받고, 이후 캐시를 살려 둠
 # ============================================================================
-# Usage: sudo_prime [prefix]   # prefix labels the error line, e.g. sudo_prime install / sudo_prime setup-app
+# 사용법: sudo_prime [prefix]   # prefix 는 에러 줄의 라벨, 예: sudo_prime install / sudo_prime setup-app
 #
-# Why upfront: steps route their detailed output (including the first `sudo` prompt) to the log and draw a
-# liveness heartbeat on the console. If the password were collected lazily inside the first routed step its
-# prompt would be hidden behind the heartbeat, so the run looks like it proceeds before the password is fully
-# typed. Calling this BEFORE any step makes the prompt the first thing on the console — the password is
-# entered before the steps begin.
+# 왜 처음에 받나: 각 단계는 상세 출력(첫 `sudo` 프롬프트 포함)을 로그로 보내고 콘솔엔 살아있음을
+# 알리는 heartbeat(작업 살아있음 신호)만 그림. 만약 비밀번호를 첫 단계 안에서 뒤늦게 받으면 그
+# 프롬프트가 heartbeat 뒤에 가려져, 비밀번호를 다 입력하기도 전에 진행되는 것처럼 보임. 어떤
+# 단계보다 먼저 이걸 부르면 프롬프트가 콘솔의 첫 화면이 됨 — 단계가 시작되기 전에 비밀번호를 입력.
 #
-# Keepalive: refreshes the sudo timestamp every 60s so long steps (driver / colcon build) do not re-prompt
-# mid-run. It must stay in the CALLER's shell session so `sudo -n` refreshes the SAME tty timestamp
-# (tty_tickets) the foreground commands use — a detached (setsid) session would warm a different ticket and
-# not actually keep it alive. `$$` inside the `( ) &` subshell is the caller script's PID (bash), so the
-# keepalive self-terminates when the script exits.
+# Keepalive: 60초마다 sudo 타임스탬프를 갱신해 긴 단계(드라이버 / colcon 빌드) 도중 다시 묻지 않게
+# 함. 반드시 호출자(CALLER)의 셸 세션 안에 있어야 `sudo -n` 이 foreground 명령들과 같은 tty
+# 타임스탬프(tty_tickets)를 갱신 — 분리된(setsid) 세션은 다른 티켓을 데워서 실제로는 살려 두지
+# 못함. `( ) &` 서브셸 안의 `$$` 는 호출자 스크립트의 PID(bash) 이므로, 스크립트가 종료되면
+# keepalive 도 스스로 종료됨.
 sudo_prime() {
     local prefix="${1:-setup}"
     if ! sudo -v; then
         echo "${prefix}: cannot verify sudo privileges. Run as a sudo-capable regular user." >&2
         exit 1
     fi
-    # set +e inside the subshell — so the keepalive does not die silently on a transient sudo -n failure or
-    # sleep interrupt. The subshell traps its own teardown and kills the in-flight `sleep`: otherwise the EXIT
-    # trap below kills only the subshell, orphaning the `sleep` child into the caller's process group (which in
-    # a handed-off terminal would sit in the foreground process group and block input).
+    # 서브셸 안에서 set +e — 일시적인 sudo -n 실패나 sleep 인터럽트에 keepalive 가 조용히 죽지 않게.
+    # 서브셸은 자신의 teardown 을 trap 으로 잡아 진행 중인 `sleep` 을 죽임: 안 그러면 아래 EXIT
+    # trap 이 서브셸만 죽여서 `sleep` 자식이 호출자의 프로세스 그룹으로 고아가 됨 (넘겨받은 터미널
+    # 에선 foreground 프로세스 그룹에 남아 입력을 막음).
     ( set +e
       trap 'kill "${_ka_sleep:-0}" 2>/dev/null; exit 0' TERM EXIT
       while kill -0 "$$" 2>/dev/null; do
