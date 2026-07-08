@@ -115,15 +115,11 @@ bash containers/bringup.sh mode:=real      # real robot
 
 > bringup 은 컨테이너 안 colcon build 가 끝나길 기다렸다가 각 노드를 자동 기동한다. 개별 컨테이너를 직접 다뤄 보려면 아래 수동 절차를 따른다(디버깅/학습용). 이미지 수동 재빌드는 `bash containers/build-all.sh`(cobot2 staging + 빌드 + 검증).
 
-**컨테이너 개별 수동 실행** — 아래 블록에서 `$DEV` 로 base + dev override 를 머지한다:
-
-```bash
-DEV="-f $HOME/ros2_jazzy_test/containers/docker-compose.yml -f $HOME/ros2_jazzy_test/containers/docker-compose.dev.yml"
-```
+**컨테이너 개별 수동 실행** — 각 compose 블록 첫 줄의 `DEV` 로 base + dev override 두 compose 파일을 머지한다.
 
 **compose 인자**
 
-- `-f fileA -f fileB` : compose 파일 2개를 위→아래 순으로 머지(base + dev override). `$DEV` 로 묶어 재사용.
+- `DEV="-f a -f b"` : compose 파일 2개를 위→아래 순으로 머지(base + dev override). 각 블록에 인라인해 복붙 시 자기완결.
 - `docker compose $DEV up -d <service>` : 지정 서비스만 백그라운드(`-d`)로 기동.
 
 > **블록을 위에서부터 하나씩** 실행한다(한 번에 붙여넣지 않는다). 특히 기동 직후엔 컨테이너 안 colcon build 가 끝날 때까지 `docker logs -f` 로 기다린 뒤 `docker exec` 한다 — 빌드 중 진입하면 overlay 가 덜 써진 상태라 `not found: "/ws/install/local_setup.bash"` 경고가 뜬다(무해하지만 노드는 패키지를 못 찾는다).
@@ -133,6 +129,7 @@ DEV="-f $HOME/ros2_jazzy_test/containers/docker-compose.yml -f $HOME/ros2_jazzy_
 기동 (compose):
 
 ```bash
+DEV="-f $HOME/ros2_jazzy_test/containers/docker-compose.yml -f $HOME/ros2_jazzy_test/containers/docker-compose.dev.yml"
 docker compose $DEV up -d yolo-detection      # 기동 시 clean colcon build 후 idle
 ```
 
@@ -204,6 +201,7 @@ ros2 run object_detection object_detection    # Ctrl+C → host 에서 .py 수�
 기동 (compose):
 
 ```bash
+DEV="-f $HOME/ros2_jazzy_test/containers/docker-compose.yml -f $HOME/ros2_jazzy_test/containers/docker-compose.dev.yml"
 docker compose $DEV up -d voice-processing    # 기동 시 clean colcon build 후 idle
 ```
 
