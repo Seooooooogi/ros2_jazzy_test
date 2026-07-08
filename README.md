@@ -122,7 +122,7 @@ docker run -d --name yolo-detection \
 
 **플래그 해설**
 
-- `docker rm -f yolo-detection 2>/dev/null || true` : 같은 이름 컨테이너가 있으면 강제 삭제.
+- `docker rm -f yolo-detection 2>/dev/null || true` : 같은 이름 컨테이너가 있으면 강제 삭제
 - `-d` : detached — 백그라운드 실행
 - `--name yolo-detection` : 컨테이너 이름 고정
 - `--network host` : host 네트워크를 그대로 공유
@@ -141,7 +141,7 @@ docker run -d --name yolo-detection \
 - `bash -c '…'` : 컨테이너가 뜨면서 실행할 명령. 내부 순서:
   - `source /opt/ros/$ROS_DISTRO/setup.bash` : ROS 환경 로드
   - `find /ws/build /ws/install -mindepth 1 -delete 2>/dev/null || true` : 이전 빌드 산출물 삭제(clean build)
-  - `colcon build --symlink-install --merge-install` : 워크스페이스 빌드. `--symlink-install`=산출물 심링크
+  - `colcon build --symlink-install --merge-install` : 워크스페이스 빌드(`--symlink-install`=산출물 심링크)
   - `sleep infinity` : 컨테이너 진입 가능 상태 유지
 
 빌드 완료까지 대기 → 진입:
@@ -151,22 +151,13 @@ docker logs -f yolo-detection                 # "Summary: N package finished" �
 docker exec -it yolo-detection bash
 ```
 
-**플래그 해설**
-
-- `docker logs -f yolo-detection` : 컨테이너 stdout 을 실시간 tail(`-f`=follow). 빌드 로그를 보다 `Summary: N packages finished` 가 뜨면 빌드 완료 → `Ctrl+C`.
-- `docker exec -it yolo-detection bash` : 떠 있는 컨테이너 안으로 셸 진입(`-i`=stdin 유지, `-t`=tty 할당 → 대화형).
-
 컨테이너 안에서 노드 실행:
 
 ```bash
 ros2 run object_detection object_detection    # Ctrl+C → host 에서 .py 수정 → 재실행
 ```
 
-**플래그 해설**
-
-- `ros2 run <pkg> <node>` : 패키지의 실행 노드(entry point) 하나를 실행.
-
-**voice 컨테이너** — 소스 mount + 수동 기동. yolo 와 동일하게 한 블록씩, 기동 후 빌드 대기 → 진입.
+**voice 컨테이너**
 
 기동 (compose):
 
