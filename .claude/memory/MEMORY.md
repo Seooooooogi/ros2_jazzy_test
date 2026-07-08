@@ -32,6 +32,7 @@
 - **ADR-010 (2026-05-27)**: **로컬 git 도입** (rollback / bisect 안전망 목적). remote 추가 금지. commit 메시지 외부 친화 (내부 마일스톤 코드 / 결정 기록 번호 / 룰 ID 미사용, 기능 단위 분할). tag = semver. 기본 branch = `main`, 실험은 short-lived feature branch. 첫 baseline tag `v0.1.0` 부착 (2026-05-27).
 - **ADR-007 (2026-05-27)**: Phase 4 컨테이너 (yolo / voice) 를 **Docker Hub public** 으로 publish. `latest` 금지 + semver/SHA 태그. Secret 차단 3중 layer (`.dockerignore` + runtime env injection only + multi-stage build) + publish 전 `docker history` grep 수동 검증 mandatory. `install.sh` (M5) 는 pull-first 분기 (`docker manifest inspect` 성공 시 `compose pull`, 실패 시 `compose build`).
 - **ADR-008**: host venv 폐기. application Python (PyTorch / ultralytics / langchain / openai 등) 은 모두 Phase 4 yolo/voice 컨테이너 image 안에서만 존재. host 는 system Python (apt) + colcon 워크스페이스만 책임.
+- **컨테이너 이미지 표준 (2026-07-08)**: 앱 컨테이너(yolo/voice) = `:dev-builder` 단일. `:dev`(runtime) 폐기 — 실행/디버깅 안내에 제안 금지, 설치는 이미 `--target builder` 로만 빌드해 배제됨. 상세 → `project_container-dev-builder-canonical.md`.
 
 ## 트러블슈팅 누적 (Phase 3 산출물 예고)
 > 마이그레이션 중 발견하는 이슈는 `docs/TROUBLESHOOTING.md`에 카테고리별로. 본 인덱스에는 한 줄 요약만.
