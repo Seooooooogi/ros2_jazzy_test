@@ -5,15 +5,15 @@
 # =============================================================
 #
 # shellcheck source-path=SCRIPTDIR
-# resources/realsense-install.sh — RealSense install (a02 step 2-3).
+# resources/realsense-install.sh — RealSense 설치(a02 그룹의 2·3 단계).
 #
-# Bundles two subcommands in one file but runs each as a separate step in a separate process
-# (bash realsense-install.sh <sub>) — separate set -euo entry point + independent run_step progress/resume key per subcommand.
-#   sdk : librealsense2 SDK (DKMS kernel module + utils + headers). Includes apt repo/keyring registration.
-#   ros : ROS2 realsense2 wrapper packages (camera + description). Assumes the SDK is installed first.
+# 한 파일에 두 개의 subcommand 를 담지만, 각각을 별도 프로세스의 별도 단계로 실행
+# (bash realsense-install.sh <sub>) — subcommand 마다 set -euo 진입점이 따로 있고, run_step 의 진행률/재개(resume) 키도 독립적.
+#   sdk : librealsense2 SDK(DKMS 커널 모듈 + 유틸 + 헤더). apt repo·키링(apt 서명 키) 등록 포함.
+#   ros : ROS2 realsense2 wrapper 패키지(camera + description). SDK 가 먼저 설치돼 있다고 가정.
 #
-# jazzy/noble migration of backup a04-realsense01.sh / a05-realsense02.sh.
-# Pure install body — no state calls.
+# backup 의 a04-realsense01.sh / a05-realsense02.sh 를 jazzy/noble 로 옮긴 버전.
+# 순수 설치 본문 — state 를 건드리는 호출 없음.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -23,41 +23,48 @@ source "${SCRIPT_DIR}/config.sh"
 source "${SCRIPT_DIR}/apt-repo.sh"
 config_assert_set
 
-# librealsense2 SDK (former realsense-sdk-install.sh).
-#   - In 2025-11 RealSense was spun off from Intel → RealSense AI, swapping the apt repo domain and signing key.
-#     The old librealsense.intel.com/.../librealsense.pgp serves the 2018 Intel key (C8B3A55A...), but the
-#     noble repo is signed with the new key (...FB0B24895113F120, @realsenseai.com) → the old key fails verification
-#     (NO_PUBKEY). The official current method (librealsense/doc/distribution_linux.md) = realsenseai.com
-#     domain + .asc (armored) key converted via gpg --dearmor.
-#   - keyring ${KEYRING_DIR}/librealsenseai.gpg + signed-by (no deprecated apt-key).
-#   - repo codename `lsb_release -cs` → ${UBUNTU_CODENAME} (config single source).
-#   - DKMS kernel-module build needs kernel headers → install the HWE headers meta (${KERNEL_HEADERS_META}) +
-#     the current kernel headers together. With the meta present, headers are auto-tracked after a kernel update,
-#     so the librealsense2-dkms rebuild does not break (missing headers = camera kernel-module build failure).
-#   - removed: `apt remove --purge libgtk-3-dev` (irreversible purge / unneeded on noble),
-#              auto-launch of `realsense-viewer` (GUI blocking).
+#######################################
+# librealsense2 SDK(DKMS 커널 모듈 + 유틸 + 헤더) 설치. apt repo·키링 등록 포함.
+# Globals:
+#   KEYRING_DIR, KERNEL_HEADERS_META, UBUNTU_CODENAME (읽기)
+# Outputs:
+#   성공 시 요약 한 줄을 stdout 으로 출력.
+#######################################
+# 배경/이유:
+#   - 2025-11 에 RealSense 가 Intel 에서 분사(spin-off)해 RealSense AI 가 되며 apt repo 도메인과 서명 키가 함께 바뀜.
+#     옛 librealsense.intel.com/.../librealsense.pgp 는 2018 년 Intel 키(C8B3A55A...)를 주지만, noble repo 는
+#     새 키(...FB0B24895113F120, @realsenseai.com)로 서명돼 있어 옛 키로는 검증 실패(NO_PUBKEY).
+#     현재 공식 방법(librealsense/doc/distribution_linux.md) = realsenseai.com 도메인 + .asc(armored) 키를
+#     gpg --dearmor 로 변환(dearmor = armored 텍스트 키를 바이너리 GPG 키로 변환).
+#   - 키링은 ${KEYRING_DIR}/librealsenseai.gpg + signed-by 로 지정(deprecated 된 apt-key 미사용).
+#   - repo codename 은 `lsb_release -cs` 대신 ${UBUNTU_CODENAME}(config 단일 소스) 사용.
+#   - DKMS 커널 모듈 빌드에는 커널 헤더가 필요 → HWE 커널(Ubuntu 하드웨어 지원 커널) 헤더 메타(${KERNEL_HEADERS_META})와
+#     현재 커널 헤더를 함께 설치. 메타가 있으면 커널 업데이트 뒤에도 헤더가 자동으로 따라와서 librealsense2-dkms
+#     재빌드가 깨지지 않음(헤더가 없으면 카메라 커널 모듈 빌드 실패).
+#   - 제거됨: `apt remove --purge libgtk-3-dev`(되돌릴 수 없는 purge, noble 에선 불필요),
+#              `realsense-viewer` 자동 실행(GUI 가 떠서 진행이 막힘).
 realsense_sdk() {
     local RS_KEY="${KEYRING_DIR}/librealsenseai.gpg"
     local RS_LIST=/etc/apt/sources.list.d/librealsenseai.list
     local RS_KEY_URL="https://librealsense.realsenseai.com/Debian/librealsenseai.asc"
     local RS_REPO="https://librealsense.realsenseai.com/Debian/apt-repo"
 
-    # 0) Remove leftover pre-spinoff Intel key/source (if any) — if not cleaned before apt-get update,
-    #    the old repo's NO_PUBKEY blocks the first update. This is an artifact this project created, so it is regenerable.
+    # 0) 분사(spin-off) 이전 Intel 키/소스가 남아 있으면 제거 — apt-get update 전에 안 지우면
+    #    옛 repo 의 NO_PUBKEY 때문에 첫 update 가 막힘. 이 파일은 이 프로젝트가 만든 산출물이라 다시 생성 가능.
     sudo rm -f /etc/apt/sources.list.d/librealsense.list "${KEYRING_DIR}/librealsense.pgp"
 
-    # 1) prerequisite tools + keyring directory + kernel headers (for the DKMS build — HWE headers meta + current kernel).
+    # 1) 사전 도구 + 키링 디렉터리 + 커널 헤더(DKMS 빌드용 — HWE 커널 헤더 메타 + 현재 커널).
     sudo apt-get update
     sudo apt-get install -y curl ca-certificates gnupg apt-transport-https \
         "${KERNEL_HEADERS_META}" "linux-headers-$(uname -r)"
-    # 2) keyring + apt source (add_apt_repo — dearmor the armored key, idempotent).
+    # 2) 키링 + apt 소스(add_apt_repo — armored 키를 dearmor 변환, 멱등(여러 번 실행해도 결과 동일)).
     add_apt_repo \
         --mode dearmor --downloader curl-sSf --key-write tee \
         --key-url "${RS_KEY_URL}" --key-file "${RS_KEY}" \
         --list-file "${RS_LIST}" \
         --list-line "deb [signed-by=${RS_KEY}] ${RS_REPO} ${UBUNTU_CODENAME} main"
 
-    # 4) librealsense2 SDK (kernel DKMS module + utils + headers + debug symbols).
+    # 4) librealsense2 SDK(커널 DKMS 모듈 + 유틸 + 헤더 + 디버그 심볼).
     sudo apt-get install -y \
         librealsense2-dkms \
         librealsense2-utils \
@@ -67,27 +74,34 @@ realsense_sdk() {
     echo "realsense-sdk: success installing RealSense librealsense2 SDK (${UBUNTU_CODENAME} apt repo)"
 }
 
-# ROS2 realsense2 wrapper (former realsense-ros-install.sh).
-#   - ros-humble-realsense2-* → ros-${ROS_DISTRO}-realsense2-*.
-#   - explicit packages instead of the original glob (`ros-humble-realsense2-*`) — deterministic install.
-#     camera pulls in realsense2-camera-msgs as a dependency.
-#   - rosdep init/update + colcon build moved to a02 colcon-build.sh (dedup).
+#######################################
+# ROS2 realsense2 wrapper 패키지(camera + description) 설치. SDK 가 먼저 설치돼 있다고 가정.
+# Globals:
+#   ROS_DISTRO (읽기)
+# Outputs:
+#   성공 시 요약 한 줄을 stdout 으로 출력.
+#######################################
+# 배경/이유:
+#   - ros-humble-realsense2-* → ros-${ROS_DISTRO}-realsense2-* 로 옮김.
+#   - 원래의 glob(`ros-humble-realsense2-*`) 대신 패키지를 명시 — 설치 결과가 항상 같도록(deterministic).
+#     camera 는 realsense2-camera-msgs 를 의존성으로 함께 끌어옴.
+#   - rosdep init/update + colcon build 는 a02 의 colcon-build.sh 로 옮겨 중복 제거.
 realsense_ros() {
     sudo apt-get update
 
-    # ROS2 binary packages form a synchronized snapshot with loose inter-package deps and no SONAME bumps,
-    # so mixing snapshots breaks ABI at dlopen. realsense2_camera then dies with an undefined symbol
-    # (diagnostic_updater::Updater::Updater(NodeBaseInterface, ... , double, uint8)) when the installed
-    # diagnostic_updater predates the realsense2_camera snapshot: the dependency is loose, so apt does not
-    # auto-upgrade the already-installed older diagnostic_updater. Re-sync the installed ROS packages to the
-    # current snapshot first so realsense's ABI deps match what the wrapper was built against.
-    # Scoped to the ros-${ROS_DISTRO}-* namespace on purpose: a blanket `apt upgrade` is avoided here (it drifts
-    # the held docker/nvidia pins), and those packages are outside this glob and held anyway, so this stays pin-safe.
+    # ROS2 바이너리 패키지들은 하나의 동기화된 snapshot 을 이룸. 패키지 간 의존이 느슨하고(loose) SONAME 도
+    # 안 올라가서, 서로 다른 snapshot 을 섞으면 dlopen 시점에 ABI 가 깨짐. 그러면 realsense2_camera 가
+    # undefined symbol(diagnostic_updater::Updater::Updater(NodeBaseInterface, ... , double, uint8))로 죽음 —
+    # 이미 깔린 diagnostic_updater 가 realsense2_camera snapshot 보다 오래된 경우. 의존이 느슨해서 apt 가
+    # 이미 설치된 옛 diagnostic_updater 를 자동으로 올려주지 않기 때문. 그래서 먼저 설치된 ROS 패키지들을 현재
+    # snapshot 으로 다시 맞춰(re-sync), realsense 가 요구하는 ABI 의존을 wrapper 가 빌드된 버전과 일치시킴.
+    # 범위를 ros-${ROS_DISTRO}-* 네임스페이스로 일부러 한정: 여기서 전체 `apt upgrade` 는 피함(hold 로 잡아둔
+    # docker/nvidia 핀(버전 고정)을 흔들기 때문). 그 패키지들은 이 glob 밖이고 어차피 hold 돼 있어 핀 안전(pin-safe).
     local ros_installed
     ros_installed="$(dpkg-query -W -f='${db:Status-Status} ${Package}\n' "ros-${ROS_DISTRO}-*" 2>/dev/null \
         | awk '$1 == "installed" { print $2 }' || true)"
     if [[ -n "${ros_installed}" ]]; then
-        # shellcheck disable=SC2086  # intentional word-splitting: ros_installed is a newline-separated package list
+        # shellcheck disable=SC2086  # 일부러 word-splitting 함: ros_installed 는 줄바꿈으로 구분된 패키지 목록
         sudo apt-get install -y --only-upgrade ${ros_installed}
     fi
 
