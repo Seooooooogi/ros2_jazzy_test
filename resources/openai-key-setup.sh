@@ -5,10 +5,11 @@
 # =============================================================
 #
 # shellcheck source-path=SCRIPTDIR
-# resources/openai-key-setup.sh — OPENAI_API_KEY 를 .env 에 넣는 단계(setup-app.sh 가 컨테이너 셋업 중에 실행; host 에는 아무것도 설치하지 않음).
+# resources/openai-key-setup.sh — OPENAI_API_KEY 를 .env 에 넣는 단계(setup-app.sh 의 workspace 셋업 중에 실행).
 #
-# voice/추론용 Python 패키지 = 앱 컨테이너 안에만 존재. 컨테이너는 실행 시 mount 로 레포 루트의
-# .env 에서 OPENAI_API_KEY 를 읽음. 이 단계가 하는 일 = 딱 하나 — 그 키를 .env 에 넣기.
+# voice 노드(voice_processing)는 host 에서 실행되며 os.getenv("OPENAI_API_KEY") 로 키를 읽는다.
+# containers/bringup.sh 가 `ros2 run` 직전에 레포 루트 .env 를 프로세스 env 로 로드해 주입.
+# 이 단계가 하는 일 = 딱 하나 — 그 키를 .env 에 넣기.
 # 절대 도중에 멈추지(fail-stop) 않음: 키 없으면 한 번만 물어봄(입력 숨김), 빈 답도 무방 —
 # 나중에 .env 직접 수정 가능. 키 값 = 입력 시 화면에 미표시 + 콘솔/로그에도 절대 미출력.
 set -euo pipefail
@@ -38,14 +39,13 @@ if [[ ! -f "${ENV_FILE}" ]]; then
 fi
 
 # 2) OPENAI_API_KEY 확보 — 이미 있으면 그냥 통과; 비어 있으면 즉석에서 물어보고 .env 에 기록.
-#    입력은 화면에 미표시(read -s) + 콘솔/로그에도 미출력. 앱 컨테이너는 실행 시
-#    mount 로 이 .env 를 읽음.
+#    입력은 화면에 미표시(read -s) + 콘솔/로그에도 미출력. bringup.sh 가 실행 시 이 .env 를 로드.
 # 추적되는 파일(.env.example)에 실제 키가 실수로 들어간 경우 → 그 값을 .env 로 옮기고 example 은 원래대로 복원(비밀값 유출 방지).
 _relocate_example_secret "${ENV_FILE}" "${ENV_EXAMPLE}" OPENAI_API_KEY
-# 키 존재 여부 = "셸 환경변수"가 아니라 ".env 파일 내용"으로 판단 — 컨테이너는 .env 만 읽고
-# (셸 환경변수는 물려받지 않음), 그래서 셸에서 export 했더라도 .env 가 비어 있으면 컨테이너는 키 없음으로 죽음.
+# 키 존재 여부 = "셸 환경변수"가 아니라 ".env 파일 내용"으로 판단 — bringup.sh 는 .env 를 로드해
+# host voice 노드에 넘김. 셸에서 export 했더라도 .env 가 비어 있으면 STT/LLM 이 키 없음으로 실패.
 if grep -qE '^[[:space:]]*OPENAI_API_KEY=.+' "${ENV_FILE}"; then
-    echo "openai-key: OPENAI_API_KEY confirmed (.env — the application container uses it via mount)." >&2
+    echo "openai-key: OPENAI_API_KEY confirmed (.env — host voice node reads it via bringup.sh)." >&2
 elif [[ -t 0 ]]; then
     echo "openai-key: OPENAI_API_KEY is not in .env. If you type it now, it will be saved to ${ENV_FILE}." >&2
     echo "           The input is not shown on screen. Leave it blank and press Enter to skip (you can edit .env later)." >&2
@@ -58,11 +58,11 @@ elif [[ -t 0 ]]; then
         echo "openai-key: saved OPENAI_API_KEY to ${ENV_FILE} (value not shown)." >&2
     else
         unset _openai_key
-        echo "openai-key: input empty, skipping — set 'OPENAI_API_KEY=...' in ${ENV_FILE} before running the application container." >&2
+        echo "openai-key: input empty, skipping — set 'OPENAI_API_KEY=...' in ${ENV_FILE} before running the host voice node." >&2
     fi
 else
     echo "openai-key: warning — OPENAI_API_KEY is empty and this is a non-interactive run, so it cannot be prompted." >&2
-    echo "           Set 'OPENAI_API_KEY=...' in ${ENV_FILE} directly before running the application container." >&2
+    echo "           Set 'OPENAI_API_KEY=...' in ${ENV_FILE} directly before running the host voice node." >&2
 fi
 
-echo "openai-key: done (key lives in ${ENV_FILE}; the application container reads it via mount)."
+echo "openai-key: done (key lives in ${ENV_FILE}; host voice node reads it via bringup.sh)."

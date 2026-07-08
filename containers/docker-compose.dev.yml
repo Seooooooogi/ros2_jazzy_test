@@ -1,14 +1,14 @@
 # Phase 4 컨테이너 dev override — 코드 수정 live-mount + 노드 수동 기동(디버깅용).
 #
 # base(docker-compose.yml)와 함께 머지해 쓴다:
-#   # 전제: install.sh(DSR 단계)가 통합 ws ~/cobot_ws 를 생성(cobot2/{yolo_container,voice_container} 서브디렉토리 포함).
+#   # 전제: install.sh(DSR 단계)가 통합 ws ~/cobot_ws 를 생성(cobot2/yolo_container 서브디렉토리 포함).
 #   docker compose -f containers/docker-compose.yml -f containers/docker-compose.dev.yml build
 #   docker compose -f containers/docker-compose.yml -f containers/docker-compose.dev.yml up -d yolo-detection
 #   docker exec -it yolo-detection bash   # 안에서: colcon build --symlink-install --merge-install && ros2 run object_detection object_detection
 #
 # 프로덕션(docker-compose.yml 단독) 대비 차이:
 #   - build.target=builder — colcon·빌드도구·/ws/src 가 있는 스테이지로 빌드(runtime 엔 colcon 없음).
-#   - 통합 ws 서브디렉토리(~/cobot_ws/src/cobot2/{yolo_container,voice_container})를 /ws/src 에 bind-mount → 수정 즉시 반영.
+#   - 통합 ws 서브디렉토리(~/cobot_ws/src/cobot2/yolo_container)를 /ws/src 에 bind-mount → 수정 즉시 반영.
 #     서브디렉토리 자체가 패키지를 담아(중첩 src 없음) mount 대상이 된다. 소스는 install.sh(DSR 단계)가 레포에서 복사 생성.
 #   - 노드 auto-run(CMD ros2 run) 끔 → 기동 시 1회 colcon build 후 sleep. exec 로 들어가 수동 실행.
 #   - 빌드 전에 /ws/build·/ws/install 을 비운 뒤 colcon build --symlink-install --merge-install:
@@ -17,14 +17,14 @@
 #     패키지(od_msg)가 'failed to create symbolic link ... existing path ... Is a directory' 로 충돌해
 #     빌드가 실패한다(과거엔 || true 로 묻혀 baked 복사본이 조용히 실행 → host 편집 미반영). 그래서 매
 #     기동마다 이전 산출물을 비워 clean symlink 빌드를 보장한다(증분 캐시는 포기 — 두 패키지라 수초).
-#     이러면 egg-link/심링크가 /ws/src 를 가리켜 .py 수정이 노드 재실행만으로 즉시 반영된다. pure
-#     ament_python(voice)은 이 충돌이 없지만 동일 명령으로 통일한다. compose 없는 docker run 도 같은 명령.
+#     이러면 egg-link/심링크가 /ws/src 를 가리켜 .py 수정이 노드 재실행만으로 즉시 반영된다.
+#     compose 없는 docker run 도 같은 명령.
 #   - 별도 이미지 태그(dev-builder) — 프로덕션 이미지 tag clobber 방지.
 #   - dev/bashrc 를 /root/.bashrc 로 mount → docker exec 셸이 ROS overlay+venv PYTHONPATH 자동 source.
 #     (entrypoint 는 PID1 전용이라 docker exec 로 띄운 셸엔 그 환경이 실리지 않는다.)
 #
-# network_mode host·GPU(yolo)·/dev/snd+audio(voice)·env·env_file·cyclonedds.xml mount 은 base 에서 상속.
-# 전제(base 와 동일): ~/.config/cyclonedds/cyclonedds.xml(dds-tuning) + (voice).env. 카메라 토픽은 host 소유.
+# network_mode host·GPU(yolo)·cyclonedds.xml mount 은 base 에서 상속.
+# 전제(base 와 동일): ~/.config/cyclonedds/cyclonedds.xml(dds-tuning). 카메라 토픽은 host 소유.
 
 services:
   yolo-detection:
@@ -41,24 +41,9 @@ services:
     command: ["bash", "-c", "set +u; source /opt/ros/$$ROS_DISTRO/setup.bash; find /ws/build /ws/install -mindepth 1 -delete 2>/dev/null || true; colcon build --symlink-install --merge-install; sleep infinity"]
     restart: "no"
 
-  voice-processing:
-    image: docker.io/${DOCKERHUB_USER:-local}/ros2-jazzy-voice:dev-builder
-    build:
-      target: builder
-    working_dir: /ws
-    volumes:
-      - ${VOICE_WS:-${HOME}/cobot_ws/src/cobot2/voice_container}:/ws/src
-      - voice_build:/ws/build
-      - voice_install:/ws/install
-      - ./dev/bashrc:/root/.bashrc:ro
-    command: ["bash", "-c", "set +u; source /opt/ros/$$ROS_DISTRO/setup.bash; find /ws/build /ws/install -mindepth 1 -delete 2>/dev/null || true; colcon build --symlink-install --merge-install; sleep infinity"]
-    restart: "no"
-
 # colcon 빌드 산출물 영속화 — /ws/build·/ws/install 을 named volume 에 둬 컨테이너 재생성(down→up)
 # 후에도 보존(증분 빌드, 풀 빌드 회피). 소스(/ws/src)는 host bind-mount, 빌드 산출물만 볼륨.
 # 초기화는 'docker compose ... down -v'(볼륨째 삭제 → 다음 up 은 풀 빌드).
 volumes:
   yolo_build:
   yolo_install:
-  voice_build:
-  voice_install:

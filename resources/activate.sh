@@ -14,8 +14,9 @@
 #   source "$(dirname "${BASH_SOURCE[0]}")/activate.sh"
 #   # 이후 ros2 / colcon / rclpy 사용 가능(system Python).
 #
-# 애플리케이션 Python(PyTorch / ultralytics / langchain / openai 등) = 별도
-# (yolo/voice) Docker 컨테이너 안에만 존재 — 이 wrapper 는 다루지 않음.
+# voice application Python(langchain / openai / openwakeword) = host 직접 설치(voice-host-install.sh) →
+# system python 이 그대로 봄(별도 활성화 불요). yolo application Python 은 컨테이너 image 안.
+# 이 wrapper 는 ROS2 + 워크스페이스 overlay 를 켜서 host 노드(voice_processing 등)를 인식하게 한다.
 
 _ACT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=./config.sh
@@ -26,4 +27,10 @@ if [[ -f "/opt/ros/${ROS_DISTRO}/setup.bash" ]]; then
     source "/opt/ros/${ROS_DISTRO}/setup.bash"
 else
     echo "activate: /opt/ros/${ROS_DISTRO}/setup.bash not found — ROS2 ${ROS_DISTRO} not installed?" >&2
+fi
+
+# 워크스페이스 overlay(colcon 빌드 후) — `ros2 run voice_processing get_keyword` 등 host 패키지 인식용.
+if [[ -f "${DSR_WORKSPACE}/install/setup.bash" ]]; then
+    # shellcheck disable=SC1090,SC1091
+    source "${DSR_WORKSPACE}/install/setup.bash"
 fi

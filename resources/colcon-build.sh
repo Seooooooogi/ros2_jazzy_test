@@ -9,8 +9,10 @@
 #
 # DSR + RealSense 설치 후 딱 한 번만 빌드 (중복 빌드 방지 — DSR/RealSense 하위 스크립트는 빌드 안 함).
 # 하나로 합쳐진 워크스페이스의 src/ (dsr-project-install.sh 가 레포에서 복사해 둠) 안에 모든 패키지 묶임.
-# host 빌드는 컨테이너 전용 패키지(object_detection / voice_processing — 각자 이미지 안에서만 실행)를
-# --packages-skip 로 건너뛰고, pick_and_place_* 는 그 안의 COLCON_IGNORE 파일로 skip.
+# host 빌드는 컨테이너 전용 패키지(object_detection — yolo 이미지 안에서만 실행)를 --packages-skip 로
+# 건너뛴다. voice_processing 은 host 에서 직접 실행(voice-host-install.sh)하므로 여기서 함께 빌드 —
+# console_script 가 system python shebang 을 받아 host 에 깐 langchain/openwakeword 를 본다.
+# pick_and_place_* 는 그 안의 COLCON_IGNORE 파일로 skip.
 #   - rosdep init 은 a01 의 ros2-desktop-main.sh 에서 이미 처리 → 여기선 update 만.
 #   - --skip-keys=librealsense2: 이 SDK 는 apt 로 까는 네이티브 패키지 → ROS rosdep 키 아님 (a02 step2).
 #   - 증분(incremental) 빌드 — build/install/log 를 rm -rf 안 함 → 재개(resume) 시 빠름.
@@ -50,10 +52,9 @@ rosdep update
 rosdep install --from-paths src --ignore-src --rosdistro "${ROS_DISTRO}" \
     --skip-keys=librealsense2 -y
 
-# colcon 빌드. 합쳐진 워크스페이스 src 에는 이제 컨테이너 패키지(object_detection / voice_processing)도 포함
-# (컨테이너 dev bind-mount 용). 하지만 host 에서는 이들을 실행 불가 — torch / openwakeword 가 yolo/voice
-# 이미지 안에만 있기 때문. 그래서 host 빌드가 host 범위를 벗어나지 않도록 건너뜀 (ament_python 이라 "빌드"
-# 자체는 문제없이 되지만, 실행 못 하는 노드를 host 에 깔면 오해 유발). pick_and_place_* 는 COLCON_IGNORE 로 자동 skip.
-colcon build --packages-skip object_detection voice_processing
+# colcon 빌드. object_detection(yolo)은 host 에서 실행 불가(torch 가 yolo 이미지 안에만) → --packages-skip.
+# voice_processing 은 host 직접 실행이라 여기서 빌드(voice-host-install.sh 가 langchain/openwakeword 를
+# host 에 깔아 둠 → console_script 의 system python 이 그대로 봄). pick_and_place_* 는 COLCON_IGNORE 로 자동 skip.
+colcon build --packages-skip object_detection
 
 echo "colcon-build: success building colcon workspace at ${DSR_WORKSPACE}"

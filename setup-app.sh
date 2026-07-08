@@ -9,9 +9,9 @@
 # install.sh = 베이스 호스트 환경만 담당(OS / NVIDIA / Docker / ROS2 + reboot + VS Code +
 # DDS 튜닝 + 정적 IP + corecode). 이 스크립트 = 그 위에 cobot2 애플리케이션 올림:
 #
-#   workspace : doosan-robot2 드라이버 clone + DSR 의존성 + 에뮬레이터 → cobot2 소스 확인 → RealSense → colcon build.
-#   containers: nvidia-container-toolkit → 앱 컨테이너 이미지(소스에서 :dev-builder 이미지로 빌드 —
-#               학생은 소스를 live-mount 한 cobot2 템플릿 위에서 개발) → OPENAI_API_KEY 를 .env 에 기록.
+#   workspace : doosan-robot2 드라이버 clone + DSR 의존성 + 에뮬레이터 → cobot2 소스 확인 → RealSense →
+#               host voice Python(직접 설치) → colcon build → OPENAI_API_KEY 를 .env 에 기록.
+#   containers: nvidia-container-toolkit → yolo 앱 컨테이너 이미지(:dev-builder — 소스 live-mount).
 #
 # cobot2 애플리케이션 소스 = 이 레포 미제공. 사용자가 ${DSR_WORKSPACE}/src/cobot2 에 직접 배치
 # (아래 obtain_cobot2 참고 — 나중에 git clone / tarball 다운로드로 바꿀 수 있게 이 함수 하나로 격리). 소스 없으면
@@ -47,9 +47,9 @@ usage() {
     cat <<EOF
 setup-app.sh — set up the cobot2 application (workspace + containers) on top of the base install.sh.
 
-  bash setup-app.sh                 workspace (driver + cobot2 + RealSense + colcon) + containers (toolkit + build :dev-builder images from source + OPENAI key)
-  bash setup-app.sh --workspace-only   only the colcon workspace
-  bash setup-app.sh --containers-only  only the container layer (toolkit + images + OPENAI key)
+  bash setup-app.sh                 workspace (driver + cobot2 + RealSense + host voice + colcon + OPENAI key) + containers (toolkit + yolo :dev-builder image)
+  bash setup-app.sh --workspace-only   only the workspace (incl. host voice Python + OPENAI key)
+  bash setup-app.sh --containers-only  only the container layer (toolkit + yolo image)
   bash setup-app.sh --reset         wipe the doosan-robot2 clone + build/install/log first, then rebuild
                                     (cobot2 source is NOT touched). Asks to confirm unless --yes.
   bash setup-app.sh --verbose       also stream each step's detailed output to the console (default: only install_log).
@@ -93,8 +93,8 @@ print_copyright
 
 # 진행률 분모 — [n/total] 표시에만 사용.
 TOTAL=0
-[[ ${DO_WORKSPACE} -eq 1 ]] && TOTAL=$(( TOTAL + 5 ))   # 5개: cobot2 확인 + dsr + rs-sdk + rs-ros + colcon
-[[ ${DO_CONTAINERS} -eq 1 ]] && TOTAL=$(( TOTAL + 3 ))  # 3개: toolkit + images + openai-key
+[[ ${DO_WORKSPACE} -eq 1 ]] && TOTAL=$(( TOTAL + 7 ))   # 7개: cobot2 확인 + dsr + rs-sdk + rs-ros + voice-host + colcon + openai-key
+[[ ${DO_CONTAINERS} -eq 1 ]] && TOTAL=$(( TOTAL + 2 ))  # 2개: toolkit + yolo image
 STEP_N=0
 #######################################
 # 단계 배너 출력 + 단계 카운터 1 증가.
@@ -216,17 +216,20 @@ do_workspace() {
     run "doosan-robot2 driver + DSR deps" bash "${RESOURCE_DIR}/dsr-project-install.sh"
     run "RealSense SDK"                   bash "${RESOURCE_DIR}/realsense-install.sh" sdk
     run "RealSense ROS2 wrapper"          bash "${RESOURCE_DIR}/realsense-install.sh" ros
+    # voice-host: colcon 앞에 둠 — obtain_cobot2 뒤라 wakeword 모델이 있어 import 게이트가 돌고,
+    # colcon 이 voice_processing 을 system python 으로 빌드하면 그 shebang 이 여기서 깐 deps 를 본다.
+    run "host voice Python (direct)"      bash "${RESOURCE_DIR}/voice-host-install.sh"
     run "colcon build"                    bash "${RESOURCE_DIR}/colcon-build.sh"
+    # OPENAI_API_KEY → 레포 루트 .env. host voice 노드(get_keyword)가 os.getenv 로 읽음(bringup.sh 가 .env 로드).
+    # 대화형 프롬프트라 콘솔에 그대로 남음. 비우면 skip(나중에 .env 편집), 이미 있으면 멱등.
+    step "OPENAI_API_KEY (.env for host voice)"; bash "${RESOURCE_DIR}/openai-key-setup.sh"
 }
 
 do_containers() {
     run "NVIDIA Container Toolkit" env ASSUME_YES=1 SKIP_IF_NO_GPU=1 bash "${RESOURCE_DIR}/nvidia-container-toolkit-install.sh"
-    run "build container images (dev-builder)" bash "${SCRIPT_DIR}/containers/build-all.sh"
-    # ROS_DOMAIN_ID 은 묻지도 주입하지도 않음 — 학생이 직접 자기 ~/.bashrc 에
-    # `export ROS_DOMAIN_ID=<n>` 을 넣음(학습 과제). 설정 안 하면 기본값 0(ROS2 기본)이라 호스트와 컨테이너가 일치.
-    # OPENAI_API_KEY → 레포 루트 .env(voice 컨테이너가 이 파일을 마운트). 입력 프롬프트는 대화형이라 콘솔에
-    # 그대로 남음(로그로 안 보냄). 비워두면 skip(나중에 .env 에서 편집 가능), 이미 있으면 멱등(그대로 유지).
-    step "OPENAI_API_KEY (.env for the voice container)"; bash "${RESOURCE_DIR}/openai-key-setup.sh"
+    # yolo 이미지만 빌드(voice 는 host 실행 — do_workspace 참조). ROS_DOMAIN_ID 은 묻지도 주입하지도
+    # 않음 — 학생이 자기 ~/.bashrc 에 `export ROS_DOMAIN_ID=<n>`(학습 과제). 안 하면 기본 0 이라 host↔컨테이너 일치.
+    run "build container image (yolo dev-builder)" bash "${SCRIPT_DIR}/containers/build-all.sh"
 }
 
 echo "[setup-app] workspace=${DSR_WORKSPACE} | workspace:$([[ ${DO_WORKSPACE} -eq 1 ]] && echo on || echo off) containers:$([[ ${DO_CONTAINERS} -eq 1 ]] && echo on || echo off)$([[ ${RESET} -eq 1 ]] && echo ' | reset')"
@@ -243,6 +246,7 @@ sudo_prime setup-app
 
 echo
 echo "[setup-app] done."
-[[ ${DO_WORKSPACE} -eq 1 ]] && echo "  workspace: source ${DSR_WORKSPACE}/install/setup.bash"
-[[ ${DO_CONTAINERS} -eq 1 ]] && echo "  containers: docker images | integrated run: bash containers/bringup.sh"
+[[ ${DO_WORKSPACE} -eq 1 ]] && echo "  workspace: source ${SCRIPT_DIR}/resources/activate.sh  (ROS + overlay)"
+[[ ${DO_WORKSPACE} -eq 1 ]] && echo "  host voice: ros2 run voice_processing get_keyword  (mic = PipeWire default; override VOICE_MIC_DEVICE)"
+[[ ${DO_CONTAINERS} -eq 1 ]] && echo "  containers: docker images | integrated run: bash containers/bringup.sh (yolo container + host voice)"
 echo "  detailed log: ${LOG}"

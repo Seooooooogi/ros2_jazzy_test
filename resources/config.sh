@@ -28,9 +28,13 @@ export UBUNTU_CODENAME=noble
 # 질문 자체 제거.
 export DEBIAN_FRONTEND=noninteractive
 
-# 참고: host venv 폐기됨(decision 2026-05-27). 애플리케이션 Python 패키지
-# (PyTorch / ultralytics / langchain / openai 등) = 분리된 (yolo/voice) 컨테이너 안에만 존재.
-# host = system Python(apt) + colcon 워크스페이스만 책임.
+# 참고: host application Python 책임 분리.
+#   - yolo (object_detection): 컨테이너 image 안에만 존재(PyTorch / ultralytics 등).
+#   - voice (voice_processing): host 에 직접 설치(voice-host-install.sh — langchain / openai /
+#     openwakeword). 마이크가 하드웨어 종속이라 컨테이너 오디오 passthrough 대신 host 실행(ADR-027).
+#     noble PEP 668(externally-managed) 회피 = pip --break-system-packages.
+# 자동화 host venv 는 두지 않음(2026-05-27 결정 유지). corecode / pick&place 데모용 수동 venv 는
+# scripts/venv-demo/LAB.md 참조 — 인스톨러가 관여 안 함(별도 실행 모델).
 
 # --- 레포 소스 트리 루트 ----------------------------------------------
 # 이 파일(resources/config.sh)의 부모 디렉토리 = 레포 루트. clone 경로와 무관하게 자기 위치에서
@@ -44,13 +48,12 @@ export ROS2_JAZZY_TEST_REPO
 : "${DSR_EMULATOR_VERSION:=3.0.1}"
 : "${DSR_WORKSPACE:=${HOME}/cobot_ws}"
 
-# --- 앱 컨테이너(yolo/voice) dev 워크스페이스 (컨테이너 코드 live-mount, docker-compose.dev.yml 전용) ----
-# yolo/voice 컨테이너가 dev 모드로 돌 때, 통합 cobot_ws 아래의 이 host 하위 디렉토리들이
-# 컨테이너의 /ws/src 로 bind-mount 됨. 하위 디렉토리 자체가 패키지를 담고 있어
-# (yolo_container = od_msg + object_detection, voice_container = voice_processing) — 안에 별도 src/ 가 없으므로 mount
-# 대상 = 그 디렉토리 자체. 이 패키지들 = dsr-project-install.sh 가 빌드하는 host colcon
-# 워크스페이스의 일부 → 별도 복사 단계 없음.
-# production(install.sh / docker-compose.yml)과 무관 — dev override 가 돌 때만 쓰임. 덮어쓰기 허용.
+# --- 앱 워크스페이스 경로 (통합 cobot_ws 하위) ------------------------------------
+# YOLO_WS: yolo_container(od_msg + object_detection) — dev 모드(docker-compose.dev.yml)에서
+#   컨테이너 /ws/src 로 bind-mount(live-mount). 별도 src/ 없이 디렉토리 자체가 패키지.
+# VOICE_WS: voice_container(voice_processing) — voice 는 host 직접 실행(컨테이너 아님).
+#   voice-host-install.sh 가 wakeword 모델(${VOICE_WS}/voice_processing/resource/*.tflite)을 이 경로에서 읽어 검증.
+# 두 경로 모두 dsr-project-install.sh 가 빌드하는 host colcon 워크스페이스의 일부 → 별도 복사 단계 없음. 덮어쓰기 허용.
 : "${YOLO_WS:=${DSR_WORKSPACE}/src/cobot2/yolo_container}"
 : "${VOICE_WS:=${DSR_WORKSPACE}/src/cobot2/voice_container}"
 
