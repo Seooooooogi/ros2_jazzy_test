@@ -1,6 +1,10 @@
 # venv-demo 의존 핀 — containers/{yolo-detection,voice-processing}/Dockerfile 미러 + 모놀리식 추가분.
-# 설치 순서/방법은 LAB.md Part A4 참조(numpy<2 는 반드시 마지막). 본 파일은 핀 대조용 reference.
-# torch==2.11.0 / torchvision==0.26.0 (cu128) 은 별도 index 라 본문 줄 대신 LAB.md 의 --index-url 명령에 핀(실측: yolo 이미지).
+#
+# 활성 줄 = `pip install -r requirements.txt` 로 일괄 설치 가능(정상 의존 패키지).
+# 주석 줄(torch / openwakeword / roboflow / numpy) = 각각 별도 명령 필요 — -r 로 깔면 깨진다(이유는 각 줄에 표기).
+# 설치 절차: LAB.md Part A4(한 줄씩 · 학습) 또는 A4-fast(재구성용 · -r 일괄) 참조. numpy<2 는 반드시 최후.
+#
+# torch==2.11.0 / torchvision==0.26.0 (cu128) — 별도 --index-url 이라 -r 불가. LAB.md 의 --index-url 명령에 핀(실측: yolo 이미지).
 ultralytics<9
 opencv-python<4.10
 langchain<2
@@ -12,14 +16,22 @@ scipy<1.18
 python-dotenv
 # pymodbus 3.7 부터 client 의 잉여 kwargs 가 제거돼 onrobot.py 의 ModbusTcpClient(stopbits/bytesize/parity/baudrate) 가 TypeError → <3.7 필수.
 pymodbus<3.7
-openwakeword==0.6.0
+# openwakeword 의 실제 런타임 의존(tflite-runtime 자리에 ai-edge-litert). 정상 패키지라 -r 로 설치.
 onnxruntime<2,>=1.10.0
 tqdm<5,>=4.0
 scikit-learn<2,>=1
 requests<3,>=2.0
 ai-edge-litert>=2.0.2,<3
-# roboflow: YOLO 데이터셋 다운로드용(OD_Tutorial/data_download.ipynb). 컨테이너엔 없는 모놀리식 추가분.
-# 기본 설치 시 opencv-python-headless 를 끌어와 위 opencv-python<4.10 과 cv2/ 가 충돌 → 본체는 --no-deps,
-# typer 등은 별도 설치. 설치 절차는 LAB.md Part A4 참조.
-roboflow<2
-numpy<2
+# roboflow 의 안전 의존(opencv 를 끌어오지 않음) → -r 로 설치. roboflow 본체는 아래 --no-deps 별도.
+typer
+filetype
+pi-heif
+pillow-avif-plugin
+#
+# --- 아래 3종은 -r 에 넣지 말 것(넣으면 설치가 깨진다) · 별도 명령으로 설치 ---
+# openwakeword==0.6.0  → 의존 tflite-runtime 의 Python 3.12 wheel 이 없어 -r 은 설치 실패.
+#                        `pip install --no-deps "openwakeword==0.6.0"`
+# roboflow<2           → 기본 설치가 opencv-python-headless 를 끌어와 위 opencv-python<4.10 과 cv2/ 충돌.
+#                        `pip install --no-deps "roboflow<2"`
+# numpy<2              → ultralytics 가 numpy>=2 를 끌어오므로 반드시 최후에 재핀.
+#                        `pip install --force-reinstall "numpy<2"`

@@ -235,6 +235,9 @@ pip --version                                # 예상: pip 26.x from .../venv/..
 
 ### A4. 의존성 설치 (pip)
 
+> **처음이면 아래를 한 줄씩** 복사·실행하며 각 핀의 이유를 관찰한다(한 단계씩 체감하는 게 이 실습의 목적).
+> 이미 한 번 마쳤고 venv 만 다시 만드는 거면 → 아래 **A4-fast** 로 `-r` 일괄 설치.
+
 순서가 고정돼 있다. **numpy<2 재핀은 반드시 마지막**에 온다.
 
 ```bash
@@ -299,6 +302,35 @@ print('deps OK', numpy.__version__)
 ```
 
 기대 출력: `deps OK 1.26.x`
+
+### A4-fast. 빠른 경로 (선택 · venv 재구성용)
+
+> 이미 A4 를 한 번 해 본 사람이 venv 를 다시 만들 때만. 처음이면 위 A4 를 한 줄씩(학습).
+> 완전 원샷은 불가 — `--no-deps`(openwakeword/roboflow)·별도 index(torch)·numpy 최후 재핀은 `-r` 로 못 묶는다.
+> 그래서 **`-r` 일괄 1콜 + 특수 3콜 + shim/모델 블록**으로 정리한다. 각 단계 의미는 위 A4 참조.
+
+```bash
+# venv 활성화 상태에서(A3 완료). 실행 순서 고정 — numpy<2 재핀은 반드시 최후.
+
+# 1) torch — 별도 cu128 인덱스라 -r 로 못 묶음(수 GB)
+pip install --index-url https://download.pytorch.org/whl/cu128 torch==2.11.0 torchvision==0.26.0
+
+# 2) 나머지 정상-의존 패키지 일괄 — requirements.txt 활성 줄(A4 의 ultralytics/opencv/langchain/pymodbus/
+#    onnxruntime·typer 그룹을 한 방에). openwakeword/roboflow/numpy 는 파일에서 주석이라 여기서 안 깔림.
+pip install -r ~/ros2_jazzy_test/scripts/venv-demo/requirements.txt
+
+# 3) --no-deps 스트래글러 — openwakeword(tflite-runtime 3.12 wheel 없음) · roboflow(opencv-headless 충돌) 회피
+pip install --no-deps "openwakeword==0.6.0" "roboflow<2"
+
+# 4) tflite shim + feature 모델 복사 + TFL3 검증:
+#    위 A4 코드블록의 주석 "# tflite_runtime 호환 shim" / "# openwakeword feature 모델 복사" /
+#    "# TFL3 매직바이트 검증" 3개 파트를 그대로 실행(내용 동일 — 여기 중복 표기 안 함).
+
+# 5) numpy<2 최후 재핀 — ultralytics·torch 가 numpy>=2 를 끌어오므로 반드시 마지막
+pip install --force-reinstall "numpy<2"
+```
+
+검증은 A4 의 import 블록 그대로 실행 → `deps OK 1.26.x`.
 
 ### A4b. voice 에셋 스테이징
 
