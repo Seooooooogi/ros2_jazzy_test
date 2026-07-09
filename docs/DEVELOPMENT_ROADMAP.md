@@ -134,8 +134,8 @@ ROS2 Humble installer → ROS2 Jazzy installer 마이그레이션. 1–4주, sol
   - **GPU 패스스루**: NVIDIA Container Toolkit 의존 (host a01 에서 driver 설치되어 있다는 전제)
   - 모델 가중치 / 설정은 volume mount (image 안에 안 박음)
   - **`od_msg` 빌드 정합성**: yolo 컨테이너 + host(robot_control) + voice 가 동일 `od_msg` 정의를 빌드해야 service type hash 일치. 단일 source = `cobot2_ws/od_msg`
-- [ ] 4-2. `containers/voice-processing/Dockerfile` + 빌드 스크립트 (cobot2_ws `voice_processing` 패키지) — *빌드 게이트 부분 완료(2026-05-30): Dockerfile + multi-stage 빌드 + import smoke. 미충족: 마이크 PipeWire passthrough, `.env` 런타임 주입 동작, service 왕복.*
-  - Base: `ros:jazzy-ros-base-noble` 명시 핀
+- [ ] 4-2. voice_processing 실행 환경 — **컨테이너 폐기, host 직접 실행으로 이관**(ADR-027, 2026-07-08). 마이크가 하드웨어 종속이라(`asound.conf` 의 `hw:1,7` 하드코딩 + raw `/dev/snd`) 사운드칩이 다른 머신에서 wakeword/STT 가 안 잡혔다. 이제 `resources/voice-host-install.sh` 가 host system Python 에 스택을 깔고, `containers/bringup.sh` 가 노드를 host 백그라운드로 띄운다. 폐기된 레시피는 `backup/voice-processing/` 보존. — *미충족: `.env` 런타임 주입 동작, service 왕복 실기 검증.*
+  - ~~Base: `ros:jazzy-ros-base-noble` 명시 핀~~ (컨테이너 폐기)
   - **역할 = service server** `/get_keyword` (`std_srvs/Trigger`). client 는 host 의 `robot_control` 노드. wake-word 발화 → STT → keyword 추출 결과를 response 로 반환.
   - 내부: langchain + langchain-openai + openai + PyAudio + openwakeword + tflite-runtime + sounddevice
   - **오디오 입력 소스 = 노트북 내장 마이크** (USB 외장 마이크 아님, 사용자 결정 2026-05-27)
@@ -207,7 +207,7 @@ ROS2 Humble installer → ROS2 Jazzy installer 마이그레이션. 1–4주, sol
 
 **Phase 4 산출물**:
 - `containers/yolo-detection/Dockerfile` + 부속 (entrypoint, requirements, `.dockerignore`)
-- `containers/voice-processing/Dockerfile` + 부속 (`.dockerignore`)
+- ~~`containers/voice-processing/Dockerfile` + 부속 (`.dockerignore`)~~ → 폐기(ADR-027). 대체 = `resources/voice-host-install.sh` + `resources/oww_models/`. 보존본 `backup/voice-processing/`
 - `containers/docker-compose.yml` (image 태그 = ADR-007 publish target, secret 은 runtime env 주입)
 - `containers/build-all.sh` (빌드 게이트 wrapper — `docker build` ×2 + secret hygiene grep + isolated import smoke 자동화. compose 플러그인 부재로 `docker build` 직접 사용) — *완료 2026-05-30*
 - `containers/entrypoint.sh` (공유 — ROS2 + `/ws/install` overlay source) — *완료 2026-05-30*

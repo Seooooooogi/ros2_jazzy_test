@@ -10,10 +10,10 @@
 
 ## 여기 없지만 복구 가능한 것
 - **feature 모델**(`oww_models/`): 삭제 아님 — `resources/oww_models/` 로 이전(host 설치가 사용). 살아 있음.
-- **compose voice 서비스 / build-all voice 빌드·smoke / docker-compose.dev voice 서비스·볼륨 / setup-app OPENAI 키 위치**: 코드 커밋 `511406a`(feat/voice-host)에서 제거. 전체 diff = `git show 511406a`.
+- **compose voice 서비스 / build-all voice 빌드·smoke / docker-compose.dev voice 서비스·볼륨 / setup-app OPENAI 키 위치**: 코드 커밋 `4be7d00` 에서 제거. 전체 diff = `git show 4be7d00`.
 - **빌드된 로컬 이미지**(`*/ros2-jazzy-voice:dev-builder`): 이번 이관은 이미지를 지우지 않는다(레포 어디에도 `docker rmi` 없음). 실기에 그대로 존재 — 필요하면 그대로 재사용 가능.
 
 ## 롤백 방법
-- 전체 되돌리기: `git revert 511406a` (feat/voice-host 에서) — voice 컨테이너 복원 + host 설치 제거.
-- 레시피만 복원: `git checkout 511406a^ -- containers/voice-processing/`.
+- 전체 되돌리기: `git revert 4be7d00` — voice 컨테이너 복원 + host 설치 제거.
+- 레시피만 복원: `git checkout 4be7d00^ -- containers/voice-processing/`.
 - **재빌드 시 주의**: 이 `Dockerfile` 은 `COPY containers/voice-processing/oww_models /tmp/oww_models` 를 참조하는데 모델이 `resources/oww_models/` 로 옮겨졌다 → 그 COPY 경로를 고치거나 모델을 원위치로 되돌려야 빌드된다.

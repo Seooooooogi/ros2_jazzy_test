@@ -276,9 +276,9 @@ open(os.path.join(d, '__init__.py'), 'w').close()
 open(os.path.join(d, 'interpreter.py'), 'w').write('from ai_edge_litert.interpreter import Interpreter  # noqa: F401\n')
 "
 
-# openwakeword feature 모델 복사 (컨테이너 oww_models/ → 설치 경로)
+# openwakeword feature 모델 복사 (레포 동봉본 resources/oww_models/ → 설치 경로)
 OWW_DIR="$(python3 -c 'import os,openwakeword;print(os.path.join(os.path.dirname(openwakeword.__file__),"resources","models"))')"
-mkdir -p "$OWW_DIR" && cp ~/ros2_jazzy_test/containers/voice-processing/oww_models/* "$OWW_DIR"/
+mkdir -p "$OWW_DIR" && cp ~/ros2_jazzy_test/resources/oww_models/* "$OWW_DIR"/
 
 # TFL3 매직바이트 검증
 python3 -c "

@@ -12,7 +12,7 @@
 # 스택을 host 에 깔아, colcon 이 만든 console_script(system python shebang)의 `ros2 run
 # voice_processing get_keyword` 이 이 패키지들을 그대로 보게 한다.
 #
-# 핀은 검증본을 미러링: containers/voice-processing/Dockerfile + scripts/venv-demo/LAB.md(Part A4).
+# 핀은 검증본을 미러링: backup/voice-processing/Dockerfile(폐기된 컨테이너 레시피) + scripts/venv-demo/LAB.md(Part A4).
 # noble 은 PEP 668(externally-managed) 이라 system pip 는 --break-system-packages 필요.
 # apt 로 되는 system C 라이브러리는 apt, apt 미제공 스택만 pip.
 #   - openwakeword 0.6.0 은 tflite-runtime(Python 3.12 wheel 없음)을 의존으로 강제 → --no-deps 로 깔고
