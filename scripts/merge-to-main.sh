@@ -11,7 +11,8 @@
 # Single source of excluded paths = .claude-main-exclude at the repo root.
 #
 # Behavior: checkout main → --no-ff --no-commit merge (before finalizing the tree) → remove excluded paths →
-#       abort if conflicts remain outside Claude paths (manual resolution) → otherwise commit.
+#       restore .main-keep-ours files to the main version → abort if conflicts remain outside Claude paths
+#       (manual resolution) → otherwise commit.
 # Excluded paths are removed again on every merge (if a previous merge deleted those paths on main, the next
 # merge gets a modify/delete conflict, and this removal also resolves it).
 #
@@ -64,14 +65,16 @@ for p in "${EXCLUDES[@]}"; do
     rm -rf -- "${REPO_ROOT:?}/${p}"
 done
 
-# Files where main keeps its own version (README, etc.): on conflict, do not overwrite with dev, preserve the main (ours) version.
+# Files where main keeps its own version (README, etc.): restore the main version unconditionally,
+# whether or not the merge conflicted. dev-side edits to these files never reach main.
+# `git checkout HEAD -- <path>` writes stage 0 from the target branch (HEAD during the merge),
+# which also clears any unmerged stages, so no separate conflict branch is needed.
 # The list was read earlier (before checkout = SRC/dev version) into KEEP_OURS — because .main-keep-ours
 # is an excluded target and may not be in the working tree at this point.
 if [[ ${#KEEP_OURS[@]} -gt 0 ]]; then
     for f in "${KEEP_OURS[@]}"; do
-        # resolve only those in unmerged (conflict) state to ours (main).
-        if git ls-files -u -- "${f}" | grep -q .; then
-            git checkout --ours -- "${f}" 2>/dev/null || true
+        # `if` guard: a file absent from the target branch is not an error — leave the dev version alone.
+        if git checkout HEAD -- "${f}" 2>/dev/null; then
             git add -- "${f}"
         fi
     done

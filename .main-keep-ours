@@ -1,6 +1,9 @@
 # main 병합 시 main(ours) 버전을 유지할 파일 (한 줄에 하나) — dev 버전으로 덮지 않는다.
-# scripts/merge-to-main.sh 가 충돌 시 'git checkout --ours' 로 main 버전을 보존한다.
+# scripts/merge-to-main.sh 가 머지 직후 'git checkout HEAD' 로 main 버전을 무조건 되돌린다.
+# 충돌 여부와 무관 — dev 쪽 변경은 main 에 전파되지 않는다.
 #
 # 제외(.claude-main-exclude)와 다른 의미: 그 파일은 main 에도 "존재"하되 내용은 main 이 직접 관리한다.
 #
-# (현재 목록 비어 있음 — README 는 dev(feat) 단일 관리로 전환해 머지로 main 에 전파한다.)
+# README = main 에서 직접 관리하는 공개 설치 안내. GitHub 웹에서 main 을 고쳐도 다음 머지가 덮지 않는다.
+# dev 의 README 는 작업용 사본 — 고쳐도 main 에 안 간다. 공개 문구는 main 에서 편집할 것.
+README.md
