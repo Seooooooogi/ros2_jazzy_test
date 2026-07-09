@@ -72,9 +72,12 @@ cleanup() {
     echo "[bringup] stopping application containers (docker compose down)…"
     docker compose "${COMPOSE_ARGS[@]}" down --timeout 5 || true
     # host voice 노드 = 이 shell 이 백그라운드로 소유. trap 발동 시점에 VOICE_PID 평가(정의 전 발동돼도 안전).
+    # `-- -PID` = 프로세스 그룹 전체에 신호. 기동부의 `set -m` 덕에 PGID == VOICE_PID 이므로,
+    # `ros2 run` 래퍼뿐 아니라 그 자식인 실제 노드(와 노드가 띄운 자손)까지 함께 내려간다.
+    # 래퍼만 kill 하면 노드가 마이크를 쥔 채 orphan 으로 남아 다음 실행과 겹친다.
     if [[ -n "${VOICE_PID:-}" ]] && kill -0 "${VOICE_PID}" 2>/dev/null; then
-        echo "[bringup] stopping host voice node (pid ${VOICE_PID})…"
-        kill "${VOICE_PID}" 2>/dev/null || true
+        echo "[bringup] stopping host voice node (pgid ${VOICE_PID})…"
+        kill -TERM -- -"${VOICE_PID}" 2>/dev/null || true
         wait "${VOICE_PID}" 2>/dev/null || true
     fi
 }
@@ -139,9 +142,19 @@ docker exec -d yolo-detection bash -c 'source /root/.bashrc; exec ros2 run objec
 # host voice 노드 — 컨테이너 아님. 위에서 ROS underlay + cobot_ws 오버레이 이미 source(get_keyword
 # console_script shebang = system python → voice-host-install.sh 가 host 에 깐 langchain/openwakeword 를 봄).
 # 백그라운드로 띄우고 PID 를 trap(cleanup)이 회수. 마이크 = 데스크톱 PipeWire 기본(VOICE_MIC_DEVICE override).
+#
+# `set -m`(job control) 이유: `ros2 run` 은 노드를 exec 하지 않고 자식 프로세스로 띄운다
+# (ros2run/api/__init__.py 가 subprocess.Popen 사용). 그래서 $! 는 래퍼 PID 일 뿐이고, 래퍼에
+# SIGTERM 을 보내면 래퍼만 죽고(SIGTERM 핸들러 없음) 노드는 마이크를 쥔 채 살아남는다.
+# job control 을 켜면 이 백그라운드 잡이 자기 프로세스 그룹의 리더가 되어(PGID == $!),
+# cleanup 이 그룹 전체에 신호를 보내 노드와 그 자손까지 함께 내린다.
+# 대가: 노드가 스크립트의 포그라운드 그룹을 벗어나므로 터미널 Ctrl+C 가 노드에 직접 가지 않는다
+# → cleanup 의 그룹 kill 이 유일한 종료 경로가 된다. 두 변경은 반드시 함께 유지할 것.
 echo "[bringup] launching host voice node (ros2 run voice_processing get_keyword)…"
+set -m
 ros2 run voice_processing get_keyword &
 VOICE_PID=$!
+set +m
 
 echo "[bringup] launching robot driver + camera — Ctrl+C tears everything down."
 ros2 launch cobot2_bringup bringup_all.launch.py "$@"
