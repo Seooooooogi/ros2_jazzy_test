@@ -50,7 +50,10 @@ step() { printf '\n[%d/%d] %s\n' "$1" "${TOTAL}" "$2"; }
 #######################################
 secret_scan() {
     local image="$1"
-    if docker history --no-trunc "${image}" | grep -iE 'OPENAI|API_KEY|TOKEN|SECRET|PASSWORD'; then
+    # 변수 이름만으론 판단 불가 — `openai` 는 pip 패키지 이름이기도 하다.
+    # 값이 실제로 대입된 흔적(NAME=값) 또는 OpenAI 키 리터럴(sk-…)만 유출로 취급.
+    if docker history --no-trunc "${image}" \
+        | grep -iE '(API_?KEY|TOKEN|SECRET|PASSWD|PASSWORD)[[:space:]]*=[[:space:]]*[^[:space:]]|sk-[A-Za-z0-9_-]{16,}'; then
         echo "  ✗ secret trace found — ${image}" >&2
         return 1
     fi
