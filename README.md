@@ -199,15 +199,16 @@ ros2 run object_detection object_detection    # Ctrl+C → host 에서 .py 수�
 **host voice 노드** — 컨테이너가 아니다. 마이크가 하드웨어에 종속돼(컨테이너 오디오 passthrough 가 머신마다 깨짐) host 에서 직접 실행한다. Python 스택은 `setup-app.sh` 의 `voice-host-install.sh` 가 host 에 이미 설치했다. ROS + 워크스페이스 overlay 를 켠 뒤 노드를 띄운다:
 
 ```bash
-source ~/ros2_jazzy_test/resources/activate.sh   # ROS underlay + cobot_ws overlay
-set -a; source ~/ros2_jazzy_test/.env; set +a    # OPENAI_API_KEY (STT/LLM 용)
-ros2 run voice_processing get_keyword            # Ctrl+C → .py 수정 → 재실행
+source ~/ros2_jazzy_test/resources/activate.sh      # ROS underlay + cobot_ws overlay
+source ~/ros2_jazzy_test/resources/interaction.sh   # _load_env 등 헬퍼
+_load_env ~/ros2_jazzy_test/.env                    # OPENAI_API_KEY (STT/LLM 용)
+ros2 run voice_processing get_keyword               # Ctrl+C → .py 수정 → 재실행
 ```
 
 **해설**
 
 - `source resources/activate.sh` : ROS2 + `~/cobot_ws/install` overlay 를 켜 `voice_processing` 패키지를 인식. langchain/openwakeword 는 host 에 직접 설치돼 있어(`voice-host-install.sh`) system python 이 그대로 본다 — venv 활성화 불요.
-- `set -a; source .env; set +a` : `OPENAI_API_KEY` 를 프로세스 env 로 로드(STT=Whisper·LLM 호출에 필요). wakeword 만 확인하면 생략 가능. `bringup.sh` 통합 실행은 이 로드를 대신 해 준다.
+- `_load_env .env` : `OPENAI_API_KEY` 를 프로세스 env 로 로드(STT=Whisper·LLM 호출에 필요). wakeword 만 확인하면 생략 가능. `bringup.sh` 통합 실행은 이 로드를 대신 해 준다. `.env` 를 `source` 하지 않고 한 줄씩 파싱해 `KEY=VALUE` 만 export 한다 — `.env` 에 섞여 든 셸 명령이 실행되는 것을 막는다(`bringup.sh` 도 같은 함수를 쓴다).
 - **마이크** : 데스크톱 세션의 PipeWire 기본 입력 장치를 그대로 사용한다(GUI 사운드 설정에서 고른 그것). 특정 장치를 강제하려면 `export VOICE_MIC_DEVICE=<hw:C,D 또는 sounddevice 인덱스>` 후 실행 — 컨테이너 때의 `asound.conf`/`/dev/snd` 하드코딩이 사라져 머신마다 재설정할 필요가 없다.
 
 > yolo 컨테이너 정지·삭제: `docker rm -f <name>` (dev 빌드 볼륨까지 비우려면 `docker volume rm yolo_build yolo_install`). host voice 는 Ctrl+C(또는 `pkill -f get_keyword`)로 종료.

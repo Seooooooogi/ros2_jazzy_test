@@ -156,5 +156,17 @@ ros2 run voice_processing get_keyword &
 VOICE_PID=$!
 set +m
 
+# 기동 확인. yolo 는 colcon 완료 로그로 pass/fail 을 내지만 voice 는 fire-and-forget 이라
+# import 실패·모델 누락·마이크 점유 같은 사고가 조용히 묻힌다. 실패하면 노드가 수 초 안에 죽는다.
+# 래퍼(`ros2 run`)는 자식 노드가 끝나면 함께 끝나므로, 래퍼 생존 확인만으로 충분하다.
+# 여기서 exit 하면 EXIT trap 의 cleanup 이 yolo 컨테이너까지 내린다.
+sleep 5
+if ! kill -0 "${VOICE_PID}" 2>/dev/null; then
+    echo "[bringup] host voice node died on startup — 위 출력에서 원인 확인" >&2
+    echo "          (모델/의존성 점검: bash resources/voice-host-install.sh)" >&2
+    exit 1
+fi
+echo "[bringup] host voice node up (pgid ${VOICE_PID})"
+
 echo "[bringup] launching robot driver + camera — Ctrl+C tears everything down."
 ros2 launch cobot2_bringup bringup_all.launch.py "$@"

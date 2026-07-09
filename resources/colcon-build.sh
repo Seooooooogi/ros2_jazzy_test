@@ -57,4 +57,18 @@ rosdep install --from-paths src --ignore-src --rosdistro "${ROS_DISTRO}" \
 # host 에 깔아 둠 → console_script 의 system python 이 그대로 봄). pick_and_place_* 는 COLCON_IGNORE 로 자동 skip.
 colcon build --packages-skip object_detection
 
+# wakeword 모델이 설치 트리(install/)에 들어갔는지 확인.
+# 런타임의 voice_processing 은 모델을 get_package_share_directory() 로 찾는다 — 소스 트리가 아니다.
+# voice-host-install.sh 의 검증 게이트는 이 빌드보다 먼저 돌기 때문에 소스 경로만 볼 수 있다.
+# 그래서 setup.py 의 data_files 가 resource/ 를 설치하지 않는 경우를 여기서만 잡을 수 있다.
+# 안 잡으면 첫 `ros2 run voice_processing get_keyword` 에서야 드러난다.
+voice_share="${DSR_WORKSPACE}/install/voice_processing/share/voice_processing/resource"
+if [[ -d "${DSR_WORKSPACE}/install/voice_processing" ]] \
+    && ! compgen -G "${voice_share}/*.tflite" >/dev/null; then
+    echo "colcon-build: voice_processing 의 wakeword 모델이 설치 트리에 없음" >&2
+    echo "           기대 경로: ${voice_share}/*.tflite" >&2
+    echo "           voice_processing/setup.py 의 data_files 가 resource/ 를 설치하는지 확인." >&2
+    exit 1
+fi
+
 echo "colcon-build: success building colcon workspace at ${DSR_WORKSPACE}"
