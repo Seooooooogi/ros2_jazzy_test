@@ -96,7 +96,7 @@
 | NVIDIA Container Toolkit | `nvidia-container-toolkit` (NVIDIA libnvidia-container repo, noble; 실측 버전 클린설치 후 기재) | `resources/nvidia-container-toolkit-install.sh` — **install.sh step14(reboot 이후)** 에서 호출(2026-06-09). **reboot 전(docker-install/step3) 설치는 GPU 드라이버 커널 모듈 미로드로 실패** → step6 reboot 뒤로 분리 | host GPU 를 컨테이너에 주입하는 런타임. compose `deploy.reservations.devices: nvidia` / `docker run --gpus` 가 의존 — 없으면 yolo 컨테이너가 GPU 로 못 떠 `compose up` 실패. keyring `/etc/apt/keyrings/nvidia-container-toolkit.gpg`(signed-by). `nvidia-ctk runtime configure --runtime=docker` 로 daemon.json 등록 후 docker 재시작(설치 흐름은 `ASSUME_YES=1` 자동). `SKIP_IF_NO_GPU=1` 면 nvidia-smi 부재를 정상 skip(GPU 없는 host 전용). 컨테이너 CUDA 는 PyTorch wheel 번들 — toolkit 은 드라이버 라이브러리 + `/dev/nvidia*` 주입만 |
 | CUDA / CUDA toolkit | **host 미설치** — 12-8 (Phase 4 컨테이너) | ADR-006 (2026-05-29) | host colcon 패키지에 CUDA 소비자 없음(ADR-008). 12-8 은 Phase 4 yolo 컨테이너 base image 에서만. Noble repo 12-4 부재, cu130 PyTorch wheel 없음 → 12-8 채택 |
 | PyTorch / torchvision | `cu128` — `application-containers`: 컨테이너만 · `application-shell`: **host venv** (ADR-014) | ADR-006 / ADR-008 / ADR-014 | 컨테이너 변종은 host `import torch`→ImportError 가 정상. shell 변종은 host venv 에 cu128 wheel(toolkit 불요) |
-| Doosan DSR | `ROKEY-SPARK/doosan-robot2_jazzy` fork 의 `main` (= upstream `doosan-robotics/doosan-robot2` jazzy commit 816ecb5d 스냅샷 — fork 에 jazzy 브랜치 없이 핀이 main 에 있어 default 브랜치 clone), emulator `doosanrobot/dsr_emulator:3.0.1` 핀 | `resources/dsr-project-install.sh` | clone 위치 `~/cobot_ws/src/doosan-robot2`(setup-app.sh 가 호출). host 빌드(`colcon-build.sh`) = doosan-robot2 + **사용자가 배치한 cobot2**(`robot_control`/`od_msg`/`cobot2_bringup`/`rokey_cobot2`; `object_detection`/`voice_processing` 는 컨테이너 전용이라 `--packages-skip`). **cobot2 소스는 레포 미제공 — `~/cobot_ws/src/cobot2` 에 사용자 배치**(setup-app.sh::obtain_cobot2 가 fail-loud 검증). DSR 전용 apt: `velocity-controllers`, `eigen3-cmake-module` (나머지는 rosdep 자동). 실측 2026-05-29: doosan-robot2 30개 패키지 colcon 빌드 성공, emulator 이미지 1.83GB |
+| Doosan DSR | `ROKEY-SPARK/doosan-robot2_jazzy` fork 의 `main` (= upstream `doosan-robotics/doosan-robot2` jazzy commit 816ecb5d 스냅샷 — fork 에 jazzy 브랜치 없이 핀이 main 에 있어 default 브랜치 clone), emulator `doosanrobot/dsr_emulator:3.0.1` 핀 | `resources/dsr-project-install.sh` | clone 위치 `~/cobot_ws/src/doosan-robot2`(setup-app.sh 가 호출). host 빌드(`colcon-build.sh`) = doosan-robot2 + **사용자가 배치한 cobot2**(`robot_control`/`od_msg`/`cobot2_bringup`/`rokey_cobot2`/`voice_processing`; `object_detection` 만 컨테이너(yolo) 전용이라 `--packages-skip`. `voice_processing` 은 host 직접 실행이라 host 에서 함께 빌드 — ADR-027). **cobot2 소스는 레포 미제공 — `~/cobot_ws/src/cobot2` 에 사용자 배치**(setup-app.sh::obtain_cobot2 가 fail-loud 검증). DSR 전용 apt: `velocity-controllers`, `eigen3-cmake-module` (나머지는 rosdep 자동). 실측 2026-05-29: doosan-robot2 30개 패키지 colcon 빌드 성공, emulator 이미지 1.83GB |
 | librealsense2 SDK | `librealsense2-{dkms,utils,dev,dbg}` (RealSense AI apt repo, noble 정식) | `resources/realsense-install.sh sdk` | **humble 의 "22.04 공급 중단 → ROS vendored 폴백" 우회 불필요**. **2025-11 Intel→RealSense AI 분사**로 도메인/키 교체: repo `librealsense.realsenseai.com/Debian/apt-repo` (구 `librealsense.intel.com`), 서명 키 `…FB0B24895113F120` (2025-11 신 키, 구 intel `librealsense.pgp` 의 2018 키로는 NO_PUBKEY). keyring `/etc/apt/keyrings/librealsenseai.gpg` (`.asc` → dearmor). **DKMS 커널 모듈** — 빌드에 헤더 메타 `linux-headers-generic-hwe-24.04` + 현재 커널 헤더 동반(메타가 커널 업데이트 후 헤더를 자동 추적 → 재빌드 깨짐 방지). 커널 6.17.0-29/35 양쪽 DKMS 빌드 검증. 실측 2026-05-29: `librealsense2-utils 2.58.1-0~realsense.19174`, `librealsense2-dkms 1.3.31`, `ros-jazzy-realsense2-camera 4.57.7` |
 | realsense-ros (래퍼) | `ros-jazzy-realsense2-camera` + `-description` (실측 candidate 4.57.7) | `resources/realsense-install.sh ros` | camera 가 realsense2-camera-msgs 동반. 원본 a05 의 `ros-humble-realsense2-*` glob 대신 명시 패키지 |
 | VS Code | `code` (Microsoft apt repo, codename 무관 stable main) | `resources/vscode-install.sh` | 일회성 .deb 다운로드 → apt repo + keyring `/etc/apt/keyrings/packages.microsoft.gpg` (서명 키 `…EB3E94ADBE1229CF`). apt 관리 업데이트. `code` GUI 자동 실행 제거. 실측 버전: _(a03 실행 후 기입)_ |
@@ -123,10 +123,11 @@
 
 ---
 
-## Phase 4 컨테이너 Python 의존 (실측 빌드 2026-05-30, build gate)
+## Phase 4 application Python 의존 (실측 빌드 2026-05-30, build gate)
 
-host 미설치 (ADR-008) — 아래는 두 컨테이너 이미지 **안에서** `pip` 가 해소한 실측 버전.
-빌드 검증 = `containers/build-all.sh` (builder 스테이지 = `:dev-builder` 이미지 빌드 + 컨테이너 내부 import smoke). builder 엔 runtime entrypoint 가 없어 smoke 는 ROS + overlay + venv PYTHONPATH 를 명시 source 후 import. 메이저 상한 핀은 각 Dockerfile 에 명시 (silent major drift 차단).
+두 애플리케이션 스택의 실측 버전. **yolo 는 컨테이너 안**, **voice 는 host system Python** — voice 는 마이크 하드웨어 종속 때문에 컨테이너를 폐기하고 host 직접 실행으로 이관했다 (ADR-027, 2026-07-08).
+yolo 빌드 검증 = `containers/build-all.sh` (builder 스테이지 = `:dev-builder` 이미지 빌드 + 컨테이너 내부 import smoke). builder 엔 runtime entrypoint 가 없어 smoke 는 ROS + overlay + venv PYTHONPATH 를 명시 source 후 import. 메이저 상한 핀은 Dockerfile 에 명시 (silent major drift 차단).
+voice 설치 검증 = `resources/voice-host-install.sh` 마지막의 `Model(.tflite)` 인스턴스화 + `predict` 1회 (import 만으론 모델 누락을 못 잡는다).
 
 ### yolo-detection (base `ros:jazzy-ros-base-noble`, Python 3.12)
 
@@ -142,9 +143,11 @@ host 미설치 (ADR-008) — 아래는 두 컨테이너 이미지 **안에서** 
 > 카메라는 **host 소유**(ADR-015, 2026-06-02): 이 컨테이너엔 realsense2_camera 드라이버를 두지 않는다. apt 런타임 ROS 의존은 `cv-bridge`/`sensor-msgs` 만(이미지 슬림화). host 가 `/camera/camera/*` 를 publish 하고 `object_detection` 노드는 subscribe — host 카메라 패키지는 위 시스템 표의 `ros-jazzy-realsense2-camera`(4.57.7) 행.
 > DDS 통신: host↔컨테이너 동일 `RMW_IMPLEMENTATION`(표준 `rmw_cyclonedds_cpp`, ADR-016) + 동일 `ROS_DOMAIN_ID`(setup-app prompt 로 선택, 기본 42) + compose `network_mode: host` 필요(`resources/config.sh` 가 host 에, compose env 가 컨테이너에 주입). compose 가 host 의 `cyclonedds.xml` 을 컨테이너에 mount 하고, `network_mode: host` 라 커널 소켓 버퍼·NIC 화이트리스트(loopback + 전체 물리 NIC, ADR-020)를 그대로 상속한다(같은 netns 라 host↔컨테이너는 loopback 으로 붙음, 컨테이너 내 별도 sysctl 불필요).
 
-### voice-processing (base `ros:jazzy-ros-base-noble`, Python 3.12)
+### voice_processing — host system Python 3.12 (컨테이너 폐기, ADR-027)
 
-| 패키지 | 실측 버전 | Dockerfile 핀 | 비고 |
+`resources/voice-host-install.sh` 가 host 의 system Python 에 `pip --break-system-packages` 로 설치한다 (venv 아님 — 사용자 결정). 핀은 폐기된 컨테이너 레시피(`backup/voice-processing/Dockerfile`)와 `scripts/venv-demo/LAB.md` Part A4 의 검증본을 그대로 미러링한다. 아래 실측 버전은 컨테이너 빌드 게이트(2026-05-30) 측정치이며, 같은 핀으로 host 에 설치된다.
+
+| 패키지 | 실측 버전 | 핀 (`voice-host-install.sh`) | 비고 |
 |--------|----------|---------------|------|
 | langchain | 1.3.2 | `<2` | 메이저 사이 import 경로 변경 위험 (`langchain.prompts` → `langchain_core.prompts`) |
 | langchain-core | 1.4.0 | (langchain 의존) | |
@@ -155,14 +158,16 @@ host 미설치 (ADR-008) — 아래는 두 컨테이너 이미지 **안에서** 
 | onnxruntime | 1.26.0 | `<2,>=1.10.0` (openwakeword 실제 의존, 명시 설치) | |
 | scikit-learn / tqdm / requests | 1.8.0 / 4.67 / 2.34 | (openwakeword 실제 의존, 명시) | `--no-deps` 로 빠진 base 의존 보충 |
 | scipy | 1.17.1 | `<1.18` | 1.18+ 은 런타임 numpy>=2.0 요구(np.long 사용) → numpy<2 재핀과 충돌. `<2` 면 1.18 로 drift |
+| numpy | 1.26.4 | `<2` (**마지막에 재핀**) | scipy/scikit-learn 이 numpy>=2 를 끌어온다 → 설치 순서상 반드시 최후에 `--force-reinstall`. 설치 스크립트가 `numpy.__version__` 이 `1.` 로 시작하는지 단언 |
+| python-dotenv | 1.2.2 | — | `.env` 의 `OPENAI_API_KEY` 로드 |
 | sounddevice | 0.5.5 | — | |
 | PyAudio | 0.2.14 | — | apt `portaudio19-dev` 빌드 의존 |
 
-> openwakeword 검증: `import` 가 아닌 **`Model(.tflite)` 인스턴스화 + predict** 로 확인(2026-06-02 컨테이너 실측 PASS). feature 모델(melspectrogram/embedding/VAD)은 wheel 미동봉 → `download_models()` 로 받음(ADR-014).
-> 이미지 크기 (build gate 측정): yolo ≈ 13.6GB (nvidia CUDA 런타임 ≈4.2GB 가 지배), voice ≈ 1.9GB.
-> `OPENAI_API_KEY` 는 이미지에 미포함 — runtime env 주입 (ADR-007). transitive 완전 잠금(lock 파일)은 추후 과제.
->
-> **ADR-027 (2026-07-08)**: voice-processing 컨테이너는 **폐기**되고 voice_processing 노드가 **host 직접 실행**으로 이관된다(마이크 하드웨어 종속). 위 핀은 `resources/voice-host-install.sh` 가 host 에 system pip(`--break-system-packages`)로 동일하게 설치(scipy<1.18 / openwakeword `--no-deps`+shim / numpy<2). feature 모델은 `download_models()` 대신 `resources/oww_models/` 동봉본 복사 + TFL3 검증. 구현 = `feat/voice-host`(off main) — dev 코드엔 아직 컨테이너가 남아 있어 병합 시 위 컨테이너 항목을 host 항목으로 갱신.
+> openwakeword 검증: `import` 가 아닌 **`Model(.tflite)` 인스턴스화 + predict** 로 확인. `import openwakeword` 는 `.tflite` 를 열지 않아 모델이 없어도 통과한다(2026-07-09 실측). `voice-host-install.sh` 와 `LAB.md` Part A4 검증 블록 양쪽이 이 게이트를 건다.
+> feature 모델(melspectrogram/embedding/VAD)은 wheel 미동봉. 초기(ADR-014)엔 `download_models()` 로 받았으나, transient 504 시 에러 HTML 을 `.tflite` 로 저장해 런타임에 크래시했다 → 지금은 `resources/oww_models/` 동봉본을 복사하고 `TFL3` 식별자(offset 4)를 검증한다. 다운로드 경로 미사용.
+> `tflite-runtime` 은 Python 3.12 wheel 이 없다(cp311 이 마지막). 그래서 openwakeword 를 `--no-deps` 로 깔고, 후속작 `ai-edge-litert`(cp312, 동일 `Interpreter` API)를 `tflite_runtime.interpreter` 이름으로 노출하는 shim 을 site-packages 에 만든다. Humble baseline 표의 `tflite-runtime 2.14.0` 행은 Python 3.10 환경이라 그대로 유효하다 — 혼동 주의.
+> 이미지 크기 (build gate 측정, voice 컨테이너 폐기 전): yolo ≈ 13.6GB (nvidia CUDA 런타임 ≈4.2GB 가 지배), voice ≈ 1.9GB.
+> `OPENAI_API_KEY` 는 host `.env` 에서 런타임 주입 (ADR-007). transitive 완전 잠금(lock 파일)은 추후 과제.
 
 ---
 
