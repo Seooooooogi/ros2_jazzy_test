@@ -261,6 +261,9 @@ pip install "langchain<2" "langchain-openai<2" "openai<3" pyaudio sounddevice "s
 pip install "pymodbus<3.7"
 
 # (5) openwakeword — Python 3.12 에서 tflite-runtime 미지원 → no-deps 로 설치 후 의존성 직접 지정
+# 아래 두 번째 줄이 끝나며 pip 이 붉은 ERROR 를 뱉는다 — 정상이다. 실패 아님(exit 0).
+#   ERROR: pip's dependency resolver ... openwakeword 0.6.0 requires tflite-runtime<3,>=2.8.0 ... not installed
+# --no-deps 로 건너뛴 그 의존을 pip 이 뒤늦게 일러 주는 것. 바로 아래 shim 이 그 자리를 메운다.
 pip install --no-deps "openwakeword==0.6.0"
 pip install "onnxruntime<2,>=1.10.0" "tqdm<5,>=4.0" "scikit-learn<2,>=1" "requests<3,>=2.0" "ai-edge-litert>=2.0.2,<3"
 
@@ -303,6 +306,29 @@ print('deps OK', numpy.__version__)
 
 기대 출력: `deps OK 1.26.x`
 
+여기까지는 **import 만** 확인한 것이다. `import openwakeword` 는 `.tflite` 를 열지 않으므로,
+위 모델 복사가 통째로 실패해도 이 블록은 그대로 `deps OK` 를 찍는다. 앞의 TFL3 검사도 마찬가지 —
+검사 대상 파일이 0개면 아무것도 안 보고 통과한다. 그 상태로 넘어가면 실습 당일
+`ros2 run` 에서 `ValueError: Could not open ... melspectrogram.tflite` 로 깨진다.
+
+그래서 wakeword 모델을 실제로 올려 추론 1회까지 돌려 본다. 이게 진짜 게이트다.
+
+```bash
+python3 -c "
+import numpy as np
+from openwakeword.model import Model
+m = Model(wakeword_models=['$HOME/cobot_ws/src/cobot2/pick_and_place_voice/resource/hello_rokey_8332_32.tflite'])
+m.predict(np.zeros(1280, dtype=np.int16))
+print('wakeword gate OK — Model(.tflite) load + predict')
+"
+```
+
+기대 출력: `wakeword gate OK — Model(.tflite) load + predict`
+(`INFO: Created TensorFlow Lite XNNPACK delegate for CPU.` 가 함께 나오면 정상)
+
+`Model(...)` 은 shim 을 거쳐 `melspectrogram.tflite` / `embedding_model.tflite` 를 로드한다.
+즉 이 한 줄이 **의존성 · shim · feature 모델 · wakeword 모델**을 한꺼번에 확증한다.
+
 ### A4-fast. 빠른 경로 (선택 · venv 재구성용)
 
 > 이미 A4 를 한 번 해 본 사람이 venv 를 다시 만들 때만. 처음이면 위 A4 를 한 줄씩(학습).
@@ -330,7 +356,8 @@ pip install --no-deps "openwakeword==0.6.0" "roboflow<2"
 pip install --force-reinstall "numpy<2"
 ```
 
-검증은 A4 의 import 블록 그대로 실행 → `deps OK 1.26.x`.
+검증은 A4 의 import 블록 + **wakeword 게이트** 두 개 모두 실행 → `deps OK 1.26.x`, `wakeword gate OK`.
+import 블록만으로는 모델 복사 실패를 못 잡는다(A4 의 설명 참조).
 
 ### A4b. voice 에셋 스테이징
 
