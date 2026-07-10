@@ -54,6 +54,13 @@ PIP=(sudo python3 -m pip install --break-system-packages --no-cache-dir)
 # 2) 음성/LLM 스택(voice 컨테이너 핀 미러링). scipy 는 1.18 부터 런타임이 numpy>=2 를 요구(np.long)
 #    → 마지막 numpy<2 재핀과 충돌하므로 <1.18 로 상한.
 echo "[voice-host-install] 2/6 langchain / openai / 음성 스택"
+# openai(>=4.14)가 apt 설치본 python3-typing-extensions(4.10)를 업그레이드하려 하지만 dpkg 설치분은
+# RECORD 파일이 없어 pip uninstall 이 실패한다("Cannot uninstall typing_extensions ... RECORD file not
+# found. Hint: installed by debian"). --ignore-installed --no-deps 로 상위본을 /usr/local(sys.path 우선)에
+# 먼저 얹어 apt 본을 shadow → 이후 스텝은 이미 충족으로 보고 uninstall 시도 자체를 안 한다.
+# ponytail: 지금 apt 파이썬 패키지 중 pip 상향이 필요한 건 typing-extensions 뿐. 다른 게 같은 식으로
+#           걸리면(같은 RECORD 에러) 그 패키지도 여기에 한 줄 추가.
+"${PIP[@]}" --ignore-installed --no-deps "typing-extensions>=4.14,<5"
 "${PIP[@]}" \
     "langchain<2" "langchain-openai<2" "openai<3" \
     pyaudio sounddevice "scipy<1.18" python-dotenv
