@@ -10,7 +10,7 @@
 git clone https://github.com/Seooooooogi/ros2_jazzy_test.git
 cd ros2_jazzy_test
 
-# 2) base 환경 설치 (kernel/NVIDIA/Docker/ROS2 + reboot + VS Code + DDS + 정적 IP + corecode, 10 step)
+# 2) base 환경 설치 (kernel/NVIDIA/Docker/ROS2 + reboot + VS Code + DDS + 정적 IP + corecode 확인, 10 step)
 bash install.sh
 ```
 
@@ -19,7 +19,7 @@ bash install.sh
 mkdir -p ~/cobot_ws/src
 cp -a ~/Downloads/cobot2 ~/cobot_ws/src/cobot2
 
-# 4) 애플리케이션 셋업 — 워크스페이스(DSR 드라이버 + RealSense + host voice 설치 + cobot2 colcon 빌드 + OPENAI_API_KEY 입력)
+# 4) 애플리케이션 셋업 — 워크스페이스(DSR 드라이버 + RealSense + host voice 설치 + cobot2 colcon 빌드)
 #    + 컨테이너(toolkit + yolo :dev-builder 이미지 빌드)
 bash setup-app.sh
 ```
@@ -39,7 +39,7 @@ bash install.sh --help      # 도움말
 
 ```bash
 bash setup-app.sh                    # 기본: :dev-builder 컨테이너 이미지를 소스에서 빌드 (cobot2 템플릿을 수정해 개발하는 수업 흐름)
-bash setup-app.sh --workspace-only   # 워크스페이스만 (DSR + RealSense + host voice + colcon + OPENAI key)
+bash setup-app.sh --workspace-only   # 워크스페이스만 (DSR + RealSense + host voice + colcon)
 bash setup-app.sh --containers-only  # 컨테이너만 (toolkit + yolo 이미지 빌드)
 bash setup-app.sh --reset            # doosan-robot2 재클론 + build/install/log 삭제 후 풀 빌드 (cobot2 보존)
 bash setup-app.sh --help
@@ -201,14 +201,14 @@ ros2 run object_detection object_detection    # Ctrl+C → host 에서 .py 수�
 ```bash
 source ~/ros2_jazzy_test/resources/activate.sh      # ROS underlay + cobot_ws overlay
 source ~/ros2_jazzy_test/resources/interaction.sh   # _load_env 등 헬퍼
-_load_env ~/ros2_jazzy_test/.env                    # OPENAI_API_KEY (STT/LLM 용)
+_load_env ~/.config/cobot2/.env                     # OPENAI_API_KEY (STT/LLM 용)
 ros2 run voice_processing get_keyword               # Ctrl+C → .py 수정 → 재실행
 ```
 
 **해설**
 
 - `source resources/activate.sh` : ROS2 + `~/cobot_ws/install` overlay 를 켜 `voice_processing` 패키지를 인식. langchain/openwakeword 는 host 에 직접 설치돼 있어(`voice-host-install.sh`) system python 이 그대로 본다 — venv 활성화 불요.
-- `_load_env .env` : `OPENAI_API_KEY` 를 프로세스 env 로 로드(STT=Whisper·LLM 호출에 필요). wakeword 만 확인하면 생략 가능. `bringup.sh` 통합 실행은 이 로드를 대신 해 준다. `.env` 를 `source` 하지 않고 한 줄씩 파싱해 `KEY=VALUE` 만 export 한다 — `.env` 에 섞여 든 셸 명령이 실행되는 것을 막는다(`bringup.sh` 도 같은 함수를 쓴다).
+- `_load_env ~/.config/cobot2/.env` : `OPENAI_API_KEY` 를 프로세스 env 로 로드(STT=Whisper·LLM 호출에 필요). 이 `.env` 는 인스톨러가 만들지 않음 — `.env.example` 을 `~/.config/cobot2/.env` 로 복사 후 키 입력(레포 밖이라 커밋 위험 없음). wakeword 만 확인하면 생략 가능. `bringup.sh` 통합 실행은 이 로드를 대신 해 준다. `.env` 를 `source` 하지 않고 한 줄씩 파싱해 `KEY=VALUE` 만 export 한다 — `.env` 에 섞여 든 셸 명령이 실행되는 것을 막는다(`bringup.sh` 도 같은 함수를 쓴다).
 - **마이크** : 데스크톱 세션의 PipeWire 기본 입력 장치를 그대로 사용한다(GUI 사운드 설정에서 고른 그것). 특정 장치를 강제하려면 `export VOICE_MIC_DEVICE=<hw:C,D 또는 sounddevice 인덱스>` 후 실행 — 컨테이너 때의 `asound.conf`/`/dev/snd` 하드코딩이 사라져 머신마다 재설정할 필요가 없다.
 
 > yolo 컨테이너 정지·삭제: `docker rm -f <name>` (dev 빌드 볼륨까지 비우려면 `docker volume rm yolo_build yolo_install`). host voice 는 Ctrl+C(또는 `pkill -f get_keyword`)로 종료.

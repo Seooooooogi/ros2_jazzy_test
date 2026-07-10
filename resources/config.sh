@@ -43,6 +43,13 @@ export DEBIAN_FRONTEND=noninteractive
 : "${ROS2_JAZZY_TEST_REPO:=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 export ROS2_JAZZY_TEST_REPO
 
+# --- host voice 자격증명(.env) 경로 --------------------------------------
+# host voice 노드(get_keyword)가 os.getenv("OPENAI_API_KEY") 로 읽을 키를 담는 .env.
+# 인스톨러는 이 파일을 만들지 않음 — 사용자가 직접 생성(.env.example 을 여기로 복사 후 키 입력).
+# bringup.sh 가 실행 직전 이 경로를 로드해 프로세스 env 로 주입. 레포 밖(XDG)이라 재clone/삭제와 무관.
+: "${COBOT2_ENV:=${XDG_CONFIG_HOME:-${HOME}/.config}/cobot2/.env}"
+export COBOT2_ENV
+
 # --- DSR (jazzy 브랜치 활성 확인 2026-05-26) ---------------
 : "${DSR_BRANCH:=${ROS_DISTRO}}"
 : "${DSR_EMULATOR_VERSION:=3.0.1}"

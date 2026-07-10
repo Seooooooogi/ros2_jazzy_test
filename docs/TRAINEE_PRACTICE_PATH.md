@@ -24,9 +24,9 @@ docker-first 가 초급에 무리라는 판단에서, 하드웨어·GPU 작업�
 
 ## 공통 전제 (선행 — 이미 됐으면 skip)
 
-- base 환경: `bash install.sh` (kernel/NVIDIA/Docker/ROS2/DDS tuning/static IP/corecode relocate, 10 step).
+- base 환경: `bash install.sh` (kernel/NVIDIA/Docker/ROS2/DDS tuning/static IP/corecode check, 10 step).
 - 애플리케이션: `bash setup-app.sh` (`~/cobot_ws` 워크스페이스 + yolo/voice 이미지 + OPENAI key → voice `.env`).
-- corecode 위치: `~/corecode` (install.sh step 10 relocate 후) 또는 레포 `corecode/`.
+- corecode 위치: `~/corecode` (사용자가 corecode.zip 을 홈에 풀어 배치 → install.sh step 10 이 확인). 레포엔 미포함(ADR-029).
 - DDS: `resources/dds-tuning.sh` 완료 (`~/.config/cyclonedds/cyclonedds.xml` — 컨테이너가 read-only mount).
 
 ---

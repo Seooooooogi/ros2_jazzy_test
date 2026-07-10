@@ -890,3 +890,52 @@
 **Reopen 조건**:
 - 하드웨어 인덱스 drift 를 견디는 컨테이너 마이크 passthrough(PipeWire 소켓 mount)가 검증되면 재컨테이너화 재검토.
 - openwakeword 가 ai-edge-litert 를 네이티브 지원하면 `tflite_runtime` shim 제거.
+
+### ADR-028: OPENAI 키 셋업 인스톨러 제거 + .env 를 레포 밖 `~/.config/cobot2/.env` 로 이관 (2026-07-10)
+
+**Date**: 2026-07-10
+
+**Status**: ADR-027 후속. `resources/openai-key-setup.sh`(setup-app.sh workspace 단계) 폐기 + `.env` 위치를 레포 루트 → `~/.config/cobot2/.env` 로 이관. 인스톨러는 이미 embed 아닌 **사용자 직접입력**이었음(공유/기본 키 없음) → 이제 키 셋업 단계 자체를 없애고 사용자가 수동 생성. dev(`feat/application-containers`) 직접.
+
+**Context**:
+- 인스톨러가 대화형 프롬프트로 레포 루트 `.env` 를 만들던 단계는 (a) 값이 embed 가 아니라 사용자 입력이라 "제공"하는 게 없었고, (b) `.env` 가 레포 working tree 안이라 재clone/삭제·`.gitignore` 관리와 얽힘.
+- `.env` 소비처는 host voice 노드(`get_keyword` 가 `os.getenv`) 하나뿐이고, `containers/bringup.sh` 만 실행 직전 로드해 주입(compose 는 안 읽음).
+
+**Decision**:
+- `resources/openai-key-setup.sh` 삭제. 그 전용 헬퍼 `_set_env_key`/`_relocate_example_secret`(interaction.sh) 도 dead code 라 제거(`_load_env`/`_require_env` 는 bringup 이 쓰므로 유지).
+- `setup-app.sh` `do_workspace()` 에서 OPENAI 키 스텝 제거(workspace 단계 7 → 6).
+- `.env` 경로 = `resources/config.sh` 의 신규 단일 소스 `COBOT2_ENV=${XDG_CONFIG_HOME:-~/.config}/cobot2/.env`. `bringup.sh` 가 이 경로를 `_load_env` — 없으면 non-fatal 경고(wakeword 만 동작).
+- `.env.example` = 수동 셋업 템플릿(레포 루트 유지). 인스톨러는 `.env` 를 만들지 않음 — 사용자가 `mkdir -p ~/.config/cobot2 && cp .env.example ~/.config/cobot2/.env` 후 키 입력.
+
+**Consequences**:
+- 신규 clone/CI 에 `.env` 없으면 bringup 비-fatal 경고(STT/LLM 만 실패, wakeword OK).
+- 기존에 레포 루트 `.env` 를 쓰던 사용자는 `~/.config/cobot2/.env` 로 이전 필요.
+- `.env` 가 레포 밖 → working tree·`.gitignore` 와 분리, 커밋 유출 위험 원천 제거.
+- `_relocate_example_secret` 자동 스크럽(추적 `.env.example` 에 실키 유입 시 `.env` 로 이동+placeholder 복원) 제거 — 자동 `.env` 생성도 함께 사라져 정합. 잔여 위험(수용): 사용자가 추적 `.env.example` 에 실키를 직접 넣으면 자동 가드 없음. 완화 = `.env.example` 은 복사 소스(편집 대상 아님)·실키는 레포 밖 `~/.config/cobot2/.env`(추적 밖). 필요 시 `.env.example` 실값 grep CI 가드 추가 가능.
+
+**검증**: `shellcheck -x`+`bash -n` 통과. `source config.sh interaction.sh; _load_env "$COBOT2_ENV"; _require_env OPENAI_API_KEY` 성공(값 미출력). `do_workspace` 6스텝, `TOTAL +6`. 코드 잔재 참조(openai-key-setup / 구 `REPO_DIR/.env` / dead 헬퍼) 0. 문서(setup-app 주석·usage, install.sh, README, CLAUDE.md, TRAINEE, COMPATIBILITY)도 갱신. (별도: ADR-027 이전 강의/실습 문서의 "voice 컨테이너" 서술은 이 변경 밖 — 후속 정리 대상.)
+
+**Reopen 조건**: 인스톨러가 자동 키 셋업을 다시 원하면 `openai-key-setup.sh` 재도입(단 embed 금지·값 미출력 유지). ROS 공유를 재설계해 `.env` 를 다른 위치로 옮기면 `COBOT2_ENV` 만 갱신.
+
+### ADR-029: corecode 레포 제거 → 사용자 수동 배치(`~/corecode`), 별도 배포본(corecode.zip) (2026-07-10)
+
+**Date**: 2026-07-10
+
+**Status**: ADR-026(cobot2 소스 외부화)와 동형 — corecode 도 레포에서 빼고 사용자가 배치. `install.sh` step 10 relocate → verify. dev 직접.
+
+**Context**:
+- corecode(Calibration / DRL / OD / VoiceProcessing 튜토리얼)가 레포 루트에 tracked(29파일)라 `.claude-main-exclude` 에도 없어 **public main 에 그대로 실려나감**(용량 + 설치와 무관한 콘텐츠). ADR-026 이 cobot2 앱 소스를 외부화한 것과 동일 논리.
+- 기존 전달 = `install.sh` step 10 `corecode-relocate.sh` 가 레포 `corecode/` 를 `~/corecode` 로 `mv`. 레포에 corecode 가 있어야 성립.
+
+**Decision**:
+- git 에서 `corecode/` 제거. `resources/corecode-relocate.sh`(mv) → `resources/corecode-verify.sh`(`obtain_cobot2` 스타일 verify + 안내 + 중단) 로 교체. `install.sh` step 10 은 유지(relocate → verify, 스텝 수 10 불변).
+- 배포 = `corecode.zip`(untracked, `*.zip` gitignore) — 사용자에게 별도 전달, 홈에 풀어(`unzip corecode.zip -d ~`) `~/corecode` 생성. 배포본은 **최신 소스에서 재생성**(구 zip 은 pymodbus 2.x·`langchain.prompts` 구 API 버그본이었음 → 교체, pycache 제외·wakeword 자산 포함).
+- `.gitignore` 의 corecode 전용 자산 제외 줄 제거(디렉토리 자체가 사라짐).
+
+**Consequences**:
+- base install 이 `~/corecode` 미배치 시 step 10 에서 중단(사용자 선택). corecode 는 독립 튜토리얼이라 기능적 의존은 아님 — warn 완화는 `corecode-verify.sh` 의 `exit 1`→`exit 0` 한 줄 토글.
+- corecode 콘텐츠는 git 히스토리 + `corecode.zip` 에 보존.
+
+**검증**: `corecode-verify.sh` 양쪽 분기(`~/corecode` 없음 → exit 1 + 안내, 있음 → exit 0). `install.sh` 10스텝·"all 10 steps complete" 유지. `corecode.zip` 재생성(39파일, 자산 2개 포함, pycache 0, 노트북 outputs 정리). `git status` = corecode/ 29 deleted.
+
+**Reopen 조건**: corecode 를 다시 레포 동봉하려면 step 10 을 relocate 로 복원 + `corecode/` 재추가.

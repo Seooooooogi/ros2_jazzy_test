@@ -36,13 +36,14 @@ set -a
 source "${REPO_DIR}/resources/config.sh"
 set +a
 
-# host voice 노드(get_keyword)가 읽을 OPENAI_API_KEY 를 .env 에서 프로세스 env 로 로드(interaction.sh
-# 헬퍼 — 값은 출력 안 함). 비어 있으면 non-fatal 경고: wakeword 는 돌지만 STT/LLM 은 키가 필요.
+# host voice 노드(get_keyword)가 읽을 OPENAI_API_KEY 를 ${COBOT2_ENV}(레포 밖 ~/.config/cobot2/.env)에서
+# 프로세스 env 로 로드(interaction.sh 헬퍼 — 값은 출력 안 함). 인스톨러는 이 파일을 만들지 않음 —
+# 사용자가 직접 생성. 비어 있으면 non-fatal 경고: wakeword 는 돌지만 STT/LLM 은 키가 필요.
 # shellcheck disable=SC1090,SC1091
 source "${REPO_DIR}/resources/interaction.sh"
-_load_env "${REPO_DIR}/.env" || true
+_load_env "${COBOT2_ENV}" || true
 if ! _require_env OPENAI_API_KEY 2>/dev/null; then
-    echo "[bringup] warning: OPENAI_API_KEY 비어 있음 — STT/LLM 실패(wakeword 는 동작). ${REPO_DIR}/.env 에 설정." >&2
+    echo "[bringup] warning: OPENAI_API_KEY 비어 있음 — STT/LLM 실패(wakeword 는 동작). ${COBOT2_ENV} 에 설정." >&2
 fi
 
 # ROS underlay + cobot_ws 오버레이 source 해야 `ros2 launch cobot2_bringup` 인식.

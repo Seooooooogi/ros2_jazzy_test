@@ -10,7 +10,8 @@
 # DDS 튜닝 + 정적 IP + corecode). 이 스크립트 = 그 위에 cobot2 애플리케이션 올림:
 #
 #   workspace : doosan-robot2 드라이버 clone + DSR 의존성 + 에뮬레이터 → cobot2 소스 확인 → RealSense →
-#               host voice Python(직접 설치) → colcon build → OPENAI_API_KEY 를 .env 에 기록.
+#               host voice Python(직접 설치) → colcon build. (OPENAI_API_KEY 는 인스톨러가 다루지 않음 —
+#               사용자가 ~/.config/cobot2/.env 를 직접 생성; bringup.sh 가 로드.)
 #   containers: nvidia-container-toolkit → yolo 앱 컨테이너 이미지(:dev-builder — 소스 live-mount).
 #
 # cobot2 애플리케이션 소스 = 이 레포 미제공. 사용자가 ${DSR_WORKSPACE}/src/cobot2 에 직접 배치
@@ -47,8 +48,8 @@ usage() {
     cat <<EOF
 setup-app.sh — set up the cobot2 application (workspace + containers) on top of the base install.sh.
 
-  bash setup-app.sh                 workspace (driver + cobot2 + RealSense + host voice + colcon + OPENAI key) + containers (toolkit + yolo :dev-builder image)
-  bash setup-app.sh --workspace-only   only the workspace (incl. host voice Python + OPENAI key)
+  bash setup-app.sh                 workspace (driver + cobot2 + RealSense + host voice + colcon) + containers (toolkit + yolo :dev-builder image)
+  bash setup-app.sh --workspace-only   only the workspace (incl. host voice Python)
   bash setup-app.sh --containers-only  only the container layer (toolkit + yolo image)
   bash setup-app.sh --reset         wipe the doosan-robot2 clone + build/install/log first, then rebuild
                                     (cobot2 source is NOT touched). Asks to confirm unless --yes.
@@ -93,7 +94,7 @@ print_copyright
 
 # 진행률 분모 — [n/total] 표시에만 사용.
 TOTAL=0
-[[ ${DO_WORKSPACE} -eq 1 ]] && TOTAL=$(( TOTAL + 7 ))   # 7개: cobot2 확인 + dsr + rs-sdk + rs-ros + voice-host + colcon + openai-key
+[[ ${DO_WORKSPACE} -eq 1 ]] && TOTAL=$(( TOTAL + 6 ))   # 6개: cobot2 확인 + dsr + rs-sdk + rs-ros + voice-host + colcon
 [[ ${DO_CONTAINERS} -eq 1 ]] && TOTAL=$(( TOTAL + 2 ))  # 2개: toolkit + yolo image
 STEP_N=0
 #######################################
@@ -220,9 +221,8 @@ do_workspace() {
     # colcon 이 voice_processing 을 system python 으로 빌드하면 그 shebang 이 여기서 깐 deps 를 본다.
     run "host voice Python (direct)"      bash "${RESOURCE_DIR}/voice-host-install.sh"
     run "colcon build"                    bash "${RESOURCE_DIR}/colcon-build.sh"
-    # OPENAI_API_KEY → 레포 루트 .env. host voice 노드(get_keyword)가 os.getenv 로 읽음(bringup.sh 가 .env 로드).
-    # 대화형 프롬프트라 콘솔에 그대로 남음. 비우면 skip(나중에 .env 편집), 이미 있으면 멱등.
-    step "OPENAI_API_KEY (.env for host voice)"; bash "${RESOURCE_DIR}/openai-key-setup.sh"
+    # OPENAI_API_KEY 는 인스톨러가 다루지 않음 — host voice 노드(get_keyword)가 os.getenv 로 읽고,
+    # bringup.sh 가 실행 직전 ${COBOT2_ENV}(= ~/.config/cobot2/.env)를 로드해 주입. 사용자가 직접 생성.
 }
 
 do_containers() {
