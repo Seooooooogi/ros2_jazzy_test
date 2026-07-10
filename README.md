@@ -16,13 +16,21 @@ bash install.sh
 
 ```bash
 # 3) cobot2 애플리케이션 소스 배치
-mkdir -p ~/cobot_ws/src
+mkdir -p ~/cobot_ws/src ~/cobot_demo_ws/src
 cp -a ~/Downloads/cobot2 ~/cobot_ws/src/cobot2
+
+# 3-1) 모놀리식 실습 패키지는 별도 워크스페이스로 분리 — 정식 빌드/overlay 비오염
+mv ~/cobot_ws/src/cobot2/pick_and_place_{text,voice} ~/cobot_demo_ws/src/
+rm -f ~/cobot_demo_ws/src/pick_and_place_*/COLCON_IGNORE
 
 # 4) 애플리케이션 셋업 — 워크스페이스(DSR 드라이버 + RealSense + host voice 설치 + cobot2 colcon 빌드)
 #    + 컨테이너(toolkit + yolo :dev-builder 이미지 빌드)
 bash setup-app.sh
 ```
+
+> 3-1 의 `pick_and_place_text` / `pick_and_place_voice` 는 컨테이너 이전의 모놀리식 원본이라 정식 실행 경로가 아니다.
+> `~/cobot_ws` 에 두면 `robot_control` 등 동명 패키지와 충돌하고 host colcon 빌드에 딸려 들어간다.
+> 별도 `~/cobot_demo_ws` 로 옮겨 비교 실습([`scripts/venv-demo/LAB.md`](scripts/venv-demo/LAB.md))에서만 쓴다.
 
 ## 옵션
 

@@ -1,7 +1,7 @@
 # venv 기반 pick & place 실습 데모 — 설계 (Design Spec)
 
 - **날짜**: 2026-06-26
-- **상태**: Draft (user review 대기)
+- **상태**: ⚠️ **§4 레이아웃은 ADR-030 (2026-07-10) 으로 superseded** — 두 패키지는 `~/cobot_ws` 를 떠나 `~/cobot_demo_ws/src/` 에 놓이고, 격리 overlay(`~/.cobot2_venv_demo/ws`) + 심볼릭 링크 구조는 폐기됐다. 현행 절차는 `scripts/venv-demo/LAB.md`. 아래 내용은 결정 흐름 추적용 보존.
 - **관련**: `docs/decisions/` ADR-008 (host venv 폐기), 컨테이너 데모 (`containers/`), 외부 소스 `~/cobot_ws/src/cobot2` (이 레포 비추적)
 
 ---

@@ -792,7 +792,7 @@
 - 런타임 host ws = `~/cobot_ws`(구 `~/cobot2_ws` 대체). `dsr-project-install.sh` 가 repo 의 grouped src(cobot1_ws+cobot2_ws)를 미러 복사 + doosan-robot2 클론.
 - 컨테이너 dev override 는 통합 ws 의 서브디렉토리(`cobot2_ws/yolo_ws`, `cobot2_ws/voice_ws`)를 `/ws/src` 로 bind-mount(서브디렉토리 자체가 패키지를 담아 중첩 src 없음 → mount 에서 `/src` 접미사 제거). 별도 `~/yolo_ws`·`~/voice_ws` 와 `dev-ws-setup.sh`, install.sh step `container_dev_ws` **폐기**(전체 17→16 step).
 - `rokey` 이름 충돌(같은 colcon ws 에 동명 패키지 둘 금지): DoosanBootcamInt1 rokey → `rokey_cobot1`(cobot1_ws), 기존 repo rokey → `rokey_cobot2`(cobot2_ws). 둘 다 빌드 가능, 명령은 `ros2 run rokey_cobotN ...` 로 분리.
-- host colcon build 는 컨테이너 전용 패키지(`object_detection`/`voice_processing`, torch·openwakeword 가 이미지에만)를 `--packages-skip` — 통합 ws 에 소스는 있으나(컨테이너 bind-mount 용) host 에선 실행 불가. `pick_and_place_*` 는 데모(자체 중첩 패키지 사본 보유)라 `COLCON_IGNORE` 로 빌드 제외.
+- host colcon build 는 컨테이너 전용 패키지(`object_detection`/`voice_processing`, torch·openwakeword 가 이미지에만)를 `--packages-skip` — 통합 ws 에 소스는 있으나(컨테이너 bind-mount 용) host 에선 실행 불가. `pick_and_place_*` 는 데모(자체 중첩 패키지 사본 보유)라 `COLCON_IGNORE` 로 빌드 제외. *(이 마지막 문장은 ADR-030 으로 superseded — 두 패키지는 `~/cobot_ws` 에 아예 두지 않는다.)*
 - rokey 의 `<depend>common2</depend>` → `dsr_common2`(미해소 rosdep 키 → doosan-robot2 가 제공하는 실제 패키지).
 
 **Consequences**:
@@ -939,3 +939,30 @@
 **검증**: `corecode-verify.sh` 양쪽 분기(`~/corecode` 없음 → exit 1 + 안내, 있음 → exit 0). `install.sh` 10스텝·"all 10 steps complete" 유지. `corecode.zip` 재생성(39파일, 자산 2개 포함, pycache 0, 노트북 outputs 정리). `git status` = corecode/ 29 deleted.
 
 **Reopen 조건**: corecode 를 다시 레포 동봉하려면 step 10 을 relocate 로 복원 + `corecode/` 재추가.
+
+---
+
+### ADR-030: 모놀리식 실습 패키지를 `~/cobot_demo_ws` 로 분리 (COLCON_IGNORE 의존 폐기) (2026-07-10)
+
+**Context**:
+- `pick_and_place_text` / `pick_and_place_voice` 는 컨테이너화 이전의 모놀리식 원본. 정식 실행 경로가 아니라 "컨테이너 있고 없고"를 대비시키는 교육 아티팩트(`scripts/venv-demo/LAB.md`).
+- 지금까지 두 패키지는 `~/cobot_ws/src/cobot2/` 안에 있고 `COLCON_IGNORE` 파일로만 host 빌드에서 빠졌다.
+- 그런데 LAB.md 첫 단계가 그 `COLCON_IGNORE` 를 `rm` 한다. colcon 은 워크스페이스와 무관하게 그 파일만 보므로, 지우는 순간 두 패키지가 `~/cobot_ws` 빌드에도 노출된다 — 실습 후 `setup-app.sh` 를 다시 돌리면 정식 `install/` 에 딸려 들어간다. 원복은 Part C 의 선택 단계라 건너뛰기 쉽다.
+- 즉 "정식 설치 비오염" 이라는 설계 목표와 실제 절차가 어긋나 있었다.
+
+**Decision**:
+- 두 패키지를 설치 시점(README 3-1)에 `~/cobot_demo_ws/src/` 로 `mv` 하고 `COLCON_IGNORE` 를 지운다. `~/cobot_ws` 는 두 패키지를 애초에 담지 않는다.
+- 데모 워크스페이스 하나가 소스 + colcon 빌드 + venv 를 모두 담는다: `~/cobot_demo_ws/{src,build,install,log,.venv}`. venv 는 `.` 로 시작해 colcon 스캔에서 자동 제외(실측 확인).
+- 옮기는 주체는 README 의 수동 `mv` — 설치 스크립트가 사용자 소스 트리를 재배치하는 side effect 를 갖지 않는다.
+- 격리 overlay(`~/.cobot2_venv_demo/ws`) + 심볼릭 링크 구조 폐기. LAB.md 의 `ln -sfn` 2줄과 `COLCON_IGNORE` 제거/재생성 단계가 함께 사라진다.
+
+**Consequences**:
+- teardown 이 `rm -rf ~/cobot_demo_ws` 한 줄. rename(`ppv_*`) · import 패치 · langchain 패치 · MicController/stt 수정이 전부 그 안이라 함께 사라진다. 기존의 "rename 역수행 + COLCON_IGNORE 재생성 + git checkout" 원복 절차 폐기.
+- 재실습에는 원본 사본(`~/Downloads/cobot2`)이 필요하다 — teardown 이 소스까지 지우므로.
+- 실행 시에는 여전히 `~/cobot_ws/install` overlay 를 함께 source 한다(DSR + od_msg). 따라서 `robot_control` 등 python import 네임스페이스 충돌은 그대로 존재 → `ppv_*` rename 단계는 유지.
+- `resources/colcon-build.sh` 의 `COLCON_IGNORE` 전제 주석 갱신. `--packages-skip object_detection` 은 불변.
+- `docs/specs/2026-06-26-venv-pickplace-demo-design.md` 의 §4 레이아웃은 superseded(문서 상단에 표기).
+
+**검증**: colcon 이 숨김 디렉토리를 건너뛰는지 실측 — `ws/.venv/fakepkg` + `ws/src/realpkg` 로 `colcon list` → `realpkg` 만 출력. LAB.md 전 경로가 `~/cobot_demo_ws` 로 일관됨(`grep cobot2_venv_demo` 0건).
+
+**Reopen 조건**: cobot2 배포본이 두 패키지를 더 이상 포함하지 않게 되면 README 3-1 자체가 불필요 — 그때 이 ADR 을 닫는다.
