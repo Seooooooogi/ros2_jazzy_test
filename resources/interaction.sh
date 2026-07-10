@@ -5,65 +5,17 @@
 # =============================================================
 #
 # shellcheck shell=bash
-# resources/interaction.sh — 설치 UX/secret 헬퍼 (.env 로더 + confirm 프롬프트 + 재개용 autostart).
+# resources/interaction.sh — 설치 UX 헬퍼 (confirm 프롬프트 + 재개용 autostart).
 # source 전용 라이브러리 — set -euo 를 여기 두지 않는다(호출 진입점이 셸 옵션을 소유).
 #
-# 한 파일에 세 가지 관심사를 묶음 — 모두 "사람/자격증명과의 상호작용" 이라는 한 축:
-#   1) env-load   — .env 자격증명을 스크립트에 하드코딩하지 않고 안전하게 로드 (수동 파싱, source 안 씀).
-#                   bringup.sh 가 사용 — 실행 직전 host voice 자격증명(.env)을 프로세스 env 로 로드(_load_env/_require_env).
-#   2) confirm    — 되돌릴 수 없는 작업 (reboot / purge / 드라이버 교체) 전 명시적 동의.
-#   3) resume     — 일회성 GUI autostart 항목 등록/제거 → step-6 reboot 후 install.sh 가 자동 재개.
+# 한 파일에 두 가지 관심사를 묶음 — 모두 "사람과의 상호작용" 이라는 한 축:
+#   1) confirm    — 되돌릴 수 없는 작업 (reboot / purge / 드라이버 교체) 전 명시적 동의.
+#   2) resume     — 일회성 GUI autostart 항목 등록/제거 → step-6 reboot 후 install.sh 가 자동 재개.
 #
 # 함수는 호출 시점(call time)에 해석 → 정의 순서만 중요, 호출자의 source 순서와 무관.
 
 # ============================================================================
-# 1) env-load — 안전한 .env 로더 (자격증명을 스크립트에 하드코딩하는 대신 .env 에서 로드)
-# ============================================================================
-# 사용법:
-#   _load_env "${XDG_CONFIG_HOME:-${HOME}/.config}/cobot2/.env"   # = config.sh 의 COBOT2_ENV
-#   _require_env OPENAI_API_KEY
-#   # 이후 ${OPENAI_API_KEY} 사용 가능. 값을 절대 echo / log 하지 말 것.
-#
-# 형식: 한 줄에 KEY=VALUE. 빈 줄과 # 주석은 무시. 따옴표(quote) 미지원 (단순 형식).
-# 보안: source 안 씀 (악의적 .env 파일이 셸 명령을 실행하는 것을 차단). 수동 파싱.
-
-_load_env() {
-    local file="$1"
-    if [[ ! -f "$file" ]]; then
-        echo "env-load: file not found: $file" >&2
-        return 1
-    fi
-
-    # 권한 경고: .env 를 누구나 읽을 수 있으면(world-readable) 경고만 (강제로 chmod 하지 않음).
-    if [[ "$(stat -c %a "$file" 2>/dev/null)" == *[4-7] ]]; then
-        echo "env-load: warning — $file is world-readable. Consider chmod 600." >&2
-    fi
-
-    local key value
-    while IFS='=' read -r key value; do
-        # 빈 줄 / 주석은 건너뜀
-        [[ -z "${key// }" || "$key" =~ ^[[:space:]]*# ]] && continue
-        # key 앞뒤 공백 제거
-        key="${key#"${key%%[![:space:]]*}"}"
-        key="${key%"${key##*[![:space:]]}"}"
-        # 변수 이름 검증 (보안: 임의 변수 주입 차단)
-        [[ "$key" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] || continue
-        # 값을 export (따옴표 처리 없음 — .env 에는 따옴표를 안 쓰는 게 관례)
-        export "${key}=${value}"
-    done < "$file"
-}
-
-# 필수 변수가 비어 있으면 에러로 알림. 값 자체는 절대 미출력.
-_require_env() {
-    local var="$1"
-    if [[ -z "${!var:-}" ]]; then
-        echo "env: required variable '$var' is empty (set in .env or environment)" >&2
-        return 1
-    fi
-}
-
-# ============================================================================
-# 2) confirm — 되돌릴 수 없는(상태 변경) 작업 전 명시적 동의
+# 1) confirm — 되돌릴 수 없는(상태 변경) 작업 전 명시적 동의
 # ============================================================================
 # (sudo reboot / apt purge / 드라이버 교체 같은 되돌릴 수 없는 작업은 사용자 동의 필요).
 #
@@ -109,10 +61,9 @@ confirm_or_abort_assumable() {
 }
 
 # ============================================================================
-# 3) resume — step-6 reboot 를 넘어 설치를 자동 재개
+# 2) resume — step-6 reboot 를 넘어 설치를 자동 재개
 # ============================================================================
 # 일회성 GUI autostart 항목을 등록/제거 → reboot 후 install.sh 가 자동으로 이어지게 함.
-# (OPENAI_API_KEY 는 인스톨러가 다루지 않음 — 사용자가 ~/.config/cobot2/.env 직접 생성, bringup.sh 가 로드.)
 #
 # 동작 방식: GNOME autostart (.desktop) 가 로그인 시 터미널을 열어 install-resume-launcher.sh 실행
 # → install.sh 재실행. install.sh 가 재개로 다시 진입하면 즉시 autostart 제거(일회성)

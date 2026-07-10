@@ -10,8 +10,7 @@
 # DDS 튜닝 + 정적 IP + corecode). 이 스크립트 = 그 위에 cobot2 애플리케이션 올림:
 #
 #   workspace : doosan-robot2 드라이버 clone + DSR 의존성 + 에뮬레이터 → cobot2 소스 확인 → RealSense →
-#               host voice Python(직접 설치) → colcon build. (OPENAI_API_KEY 는 인스톨러가 다루지 않음 —
-#               사용자가 ~/.config/cobot2/.env 를 직접 생성; bringup.sh 가 로드.)
+#               host voice Python(직접 설치) → colcon build.
 #   containers: nvidia-container-toolkit → yolo 앱 컨테이너 이미지(:dev-builder — 소스 live-mount).
 #
 # cobot2 애플리케이션 소스 = 이 레포 미제공. 사용자가 ${DSR_WORKSPACE}/src/cobot2 에 직접 배치
@@ -225,8 +224,8 @@ do_workspace() {
     # colcon 이 voice_processing 을 system python 으로 빌드하면 그 shebang 이 여기서 깐 deps 를 본다.
     run "host voice Python (direct)"      bash "${RESOURCE_DIR}/voice-host-install.sh"
     run "colcon build"                    bash "${RESOURCE_DIR}/colcon-build.sh"
-    # OPENAI_API_KEY 는 인스톨러가 다루지 않음 — host voice 노드(get_keyword)가 os.getenv 로 읽고,
-    # bringup.sh 가 실행 직전 ${COBOT2_ENV}(= ~/.config/cobot2/.env)를 로드해 주입. 사용자가 직접 생성.
+    # OPENAI_API_KEY 는 인스톨러가 다루지 않음 — voice_processing 노드가 자기 패키지 resource/.env
+    # (colcon 빌드 내장)를 직접 읽는다. 사용자가 별도 안내에 따라 그 위치에 직접 배치.
 }
 
 do_containers() {

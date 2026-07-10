@@ -54,6 +54,13 @@ PIP=(sudo python3 -m pip install --break-system-packages --no-cache-dir)
 # 2) 음성/LLM 스택(voice 컨테이너 핀 미러링). scipy 는 1.18 부터 런타임이 numpy>=2 를 요구(np.long)
 #    → 마지막 numpy<2 재핀과 충돌하므로 <1.18 로 상한.
 echo "[voice-host-install] 2/6 langchain / openai / 음성 스택"
+# openai(>=4.14)가 apt 설치본 python3-typing-extensions(4.10)를 업그레이드하려 하지만 dpkg 설치분은
+# RECORD 파일이 없어 pip uninstall 이 실패한다("Cannot uninstall typing_extensions ... RECORD file not
+# found. Hint: installed by debian"). --ignore-installed --no-deps 로 상위본을 /usr/local(sys.path 우선)에
+# 먼저 얹어 apt 본을 shadow → 이후 스텝은 이미 충족으로 보고 uninstall 시도 자체를 안 한다.
+# ponytail: 지금 apt 파이썬 패키지 중 pip 상향이 필요한 건 typing-extensions 뿐. 다른 게 같은 식으로
+#           걸리면(같은 RECORD 에러) 그 패키지도 여기에 한 줄 추가.
+"${PIP[@]}" --ignore-installed --no-deps "typing-extensions>=4.14,<5"
 "${PIP[@]}" \
     "langchain<2" "langchain-openai<2" "openai<3" \
     pyaudio sounddevice "scipy<1.18" python-dotenv
@@ -71,12 +78,35 @@ echo "[voice-host-install] 4/6 openwakeword 의존 + ai-edge-litert"
 # 을 site-packages 에 생성(root 소유 system site-packages 에 쓰므로 sudo. 위치는 ai_edge_litert 에서 동적 해석).
 sudo python3 -c "import os,ai_edge_litert as a; d=os.path.join(os.path.dirname(os.path.dirname(a.__file__)),'tflite_runtime'); os.makedirs(d,exist_ok=True); open(os.path.join(d,'__init__.py'),'w').close(); open(os.path.join(d,'interpreter.py'),'w').write('from ai_edge_litert.interpreter import Interpreter  # noqa: F401\n')"
 
-# 5) feature 모델(melspec/embedding/VAD) 복사 + TFL3 검증. wheel 미동봉이라 동봉본(resources/oww_models)을
-#    openwakeword 설치 경로로 복사. 과거 download_models 는 transient 504 시 에러 HTML 을 .tflite 로 저장해
-#    런타임 크래시 → 복사 후 .tflite 의 'TFL3' 식별자(offset 4)를 검증해 손상본을 설치 시점에 차단.
-echo "[voice-host-install] 5/6 feature 모델 복사 + TFL3 검증"
-# root 소유 openwakeword 설치 경로에 복사하므로 sudo(sudo 는 env 를 지우므로 OWW_SRC 는 `env` 로 전달).
-sudo env "OWW_SRC=${OWW_SRC}" python3 -c "import os,shutil,openwakeword; s=os.environ['OWW_SRC']; d=os.path.join(os.path.dirname(openwakeword.__file__),'resources','models'); os.makedirs(d,exist_ok=True); [shutil.copy(os.path.join(s,f),d) for f in os.listdir(s)]; [open(os.path.join(d,f),'rb').read(8)[4:8]==b'TFL3' or (_ for _ in ()).throw(SystemExit('corrupt tflite: '+f)) for f in os.listdir(d) if f.endswith('.tflite')]; print('  feature models OK:', sorted(os.listdir(d)))"
+# 5) 모델 provisioning: bundled feature 모델 복사 → stock wakeword 모델 다운로드 → 전체 TFL3 검증.
+#    feature(melspec/embedding/VAD)는 wheel 미동봉 → 동봉본(resources/oww_models)을 openwakeword 설치
+#    경로로 복사(네트워크 우회, 동봉본 authoritative). stock 모델(alexa 등)은 corecode 튜토리얼이 런타임에
+#    openwakeword.utils.download_models() 로 받는데, 이 경로가 sudo 설치라 root 소유 → 비-root 런타임이
+#    write 못 함(PermissionError). 설치 때 root 로 미리 받아 채우면 download_models 는 존재-가드라 이미 있는
+#    파일을 skip → 런타임 호출이 no-op 이 되어 권한 오류가 사라진다. 과거 download_models 는 transient 504 시
+#    에러 HTML 을 .tflite 로 저장해 런타임 크래시 → 받은 뒤 'TFL3' 매직(offset 4)을 검증하고 손상본은 삭제 후
+#    중단(fail-loud) → 재실행 시 재다운로드로 자가치유(손상본이 존재-가드에 걸려 영구 캐시되는 poison-pill 차단).
+echo "[voice-host-install] 5/6 feature 복사 + stock 모델 다운로드 + TFL3 검증"
+# root 소유 openwakeword 경로에 쓰므로 sudo. sudo 는 env 를 지우므로 OWW_SRC 는 `env` 로 전달.
+sudo env "OWW_SRC=${OWW_SRC}" python3 - <<'PY'
+import os, shutil, openwakeword, openwakeword.utils
+src = os.environ["OWW_SRC"]
+dst = os.path.join(os.path.dirname(openwakeword.__file__), "resources", "models")
+os.makedirs(dst, exist_ok=True)
+# (a) bundled feature 모델 복사 (네트워크 우회 — 동봉본이 authoritative).
+for f in os.listdir(src):
+    shutil.copy(os.path.join(src, f), dst)
+# (b) stock wakeword 모델 다운로드. feature 는 이미 존재 → 존재-가드로 skip, VAD+stock 만 네트워크에서.
+openwakeword.utils.download_models()
+# (c) 전체 .tflite 'TFL3' 매직 검증. 손상본(504 HTML)은 삭제 후 fail-loud → 재실행 시 재다운로드.
+bad = [f for f in sorted(os.listdir(dst))
+       if f.endswith(".tflite") and open(os.path.join(dst, f), "rb").read(8)[4:8] != b"TFL3"]
+for f in bad:
+    os.remove(os.path.join(dst, f))
+if bad:
+    raise SystemExit("corrupt tflite (deleted, re-run to re-fetch): " + ", ".join(bad))
+print("  models OK:", sorted(f for f in os.listdir(dst) if f.endswith(".tflite")))
+PY
 
 # 6) numpy<2 보장(검증본 규율). 이미 <2(apt python3-numpy 1.26)면 pip 가 no-op → apt 패키지 클로버 안 함.
 #    pip 스텝 중 하나가 numpy>=2 를 끌어왔으면 여기서 다운핀. force-reinstall 은 쓰지 않음(불필요 클로버 방지).
