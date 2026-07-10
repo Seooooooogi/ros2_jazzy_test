@@ -142,8 +142,7 @@ sudo_prime install
 trap 'echo "[install] failed: line $LINENO — see ${LOG_FILE}" >&2' ERR
 
 # --- proceed-confirm 1회 + step 6 reboot 를 건너뛰는 자동 재개 등록 ----------------------------
-# 첫 실행(reboot 전): proceed-confirm 1회 + 복귀 시 자동 재개 등록. 여기 confirm 은 reboot 동의만 의미
-#   (OPENAI_API_KEY 는 인스톨러가 다루지 않음 — 사용자가 ~/.config/cobot2/.env 를 직접 생성).
+# 첫 실행(reboot 전): proceed-confirm 1회 + 복귀 시 자동 재개 등록. 여기 confirm 은 reboot 동의만 의미.
 # 재개(reboot 후): autostart 항목 즉시 제거(일회성 — 매 로그인마다 다시 뜨는 것 방지). sudo 는 위 sudo -v 로
 #   이 터미널에서 한 번 입력됨.
 if step_should_skip a01_reboot; then
@@ -218,5 +217,4 @@ echo "  next:"
 echo "    1) place the cobot2 source at ${DSR_WORKSPACE}/src/cobot2"
 echo "    2) place corecode at ${HOME}/corecode  (unzip corecode.zip -d ${HOME})"
 echo "    3) run 'bash setup-app.sh' (workspace + containers)"
-echo "       OPENAI_API_KEY: create ~/.config/cobot2/.env yourself (the installer no longer prompts)."
 echo "  detailed log: ${LOG_FILE}"

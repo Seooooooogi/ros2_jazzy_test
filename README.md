@@ -23,10 +23,20 @@ cp -a ~/Downloads/cobot2 ~/cobot_ws/src/cobot2
 mv ~/cobot_ws/src/cobot2/pick_and_place_{text,voice} ~/cobot_demo_ws/src/
 rm -f ~/cobot_demo_ws/src/pick_and_place_*/COLCON_IGNORE
 
+# 3-2) voice OPENAI 키 배치 (setup-app.sh 빌드 전!) — voice_processing 노드는 자기 패키지의
+#      resource/.env 를 읽고 colcon 빌드에 내장한다. 빌드 전에 넣어야 한 번의 빌드로 반영된다.
+#      (별도 안내로 받은 실제 키로 sk-... 를 교체)
+echo 'OPENAI_API_KEY=sk-...' \
+  > ~/cobot_ws/src/cobot2/voice_container/voice_processing/resource/.env
+
 # 4) 애플리케이션 셋업 — 워크스페이스(DSR 드라이버 + RealSense + host voice 설치 + cobot2 colcon 빌드)
 #    + 컨테이너(toolkit + yolo :dev-builder 이미지 빌드)
 bash setup-app.sh
 ```
+
+> **참고 — voice `.env` 는 빌드 전에 배치.** 노드가 `resource/.env` 를 빌드에 내장해 읽으므로,
+> 빌드 후에 추가했거나 키를 바꿨으면 그 패키지만 재빌드해야 반영된다:
+> `colcon build --packages-select voice_processing` (이후 `source ~/cobot_ws/install/setup.bash`)
 
 ## 옵션
 

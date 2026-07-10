@@ -6,7 +6,7 @@ ROS2 Humble installer → ROS2 Jazzy installer 마이그레이션. Ubuntu + NVID
 
 **host Python 책임 (ADR-008, 2026-05-27)**: host venv 폐기. application Python 패키지 (PyTorch / ultralytics / langchain / openai 등) 는 모두 Phase 4 컨테이너 안. host 는 system Python (apt, ROS2 bindings) + colcon 워크스페이스만 책임. host 에서 `pip install` 자체 안 함 → PEP 668 우회 불필요.
 
-**cobot2 외부화 (사용자 결정 2026-06-24)**: cobot2 애플리케이션 소스는 이 레포에서 제공하지 않는다(추적 제외). 레포 = **base 환경 인스톨러**(`install.sh`, 10 step) + **애플리케이션 셋업**(`setup-app.sh` — 워크스페이스 + 컨테이너). cobot2 는 사용자가 `~/cobot_ws/src/cobot2` 에 직접 배치(취득 방식은 추후 git clone/fetch 로 교체 예정 — `setup-app.sh::obtain_cobot2` 단일 함수로 격리). corecode 튜토리얼도 레포 미포함 — 사용자가 `~/corecode` 에 배치(install.sh step 10 이 확인, ADR-029). OPENAI key 는 인스톨러가 다루지 않음 — 사용자가 `~/.config/cobot2/.env` 직접 생성(host voice 노드가 os.getenv 로 읽음, ADR-028).
+**cobot2 외부화 (사용자 결정 2026-06-24)**: cobot2 애플리케이션 소스는 이 레포에서 제공하지 않는다(추적 제외). 레포 = **base 환경 인스톨러**(`install.sh`, 10 step) + **애플리케이션 셋업**(`setup-app.sh` — 워크스페이스 + 컨테이너). cobot2 는 사용자가 `~/cobot_ws/src/cobot2` 에 직접 배치(취득 방식은 추후 git clone/fetch 로 교체 예정 — `setup-app.sh::obtain_cobot2` 단일 함수로 격리). corecode 튜토리얼도 레포 미포함 — 사용자가 `~/corecode` 에 배치(install.sh step 10 이 확인, ADR-029). OPENAI key 는 인스톨러가 다루지 않음 — voice_processing 노드가 자기 패키지 `resource/.env`(colcon 빌드 내장)를 load_dotenv 로 읽으므로, 사용자가 별도 안내에 따라 그 위치에 직접 배치(ADR-028 의 `~/.config/cobot2/.env` 이관은 폐기, 2026-07-10).
 
 ## Hard Rules (never bend)
 
@@ -35,10 +35,10 @@ ROS2 Humble installer → ROS2 Jazzy installer 마이그레이션. Ubuntu + NVID
 
 ## Quick Ref
 
-- Entry (권장): `bash install.sh` — **base 환경**만 단일 시퀀스(`[n/10]`)로 실행(kernel/NVIDIA/Docker/ROS2 + reboot + VS Code + DDS + 정적 IP + corecode 확인). 시작 시 confirm 1회, 이후 자동 진행. step 6 에서 1회 자동 reboot → 복귀(로그인) 시 GUI autostart 로 자동 재개(GUI 세션 필요, 복귀 후 sudo 비번 1회). OPENAI 키는 인스톨러가 다루지 않음(사용자가 ~/.config/cobot2/.env 직접 생성). autostart 등록 불가 환경이면 reboot 후 `bash install.sh` 재실행(완료 step 자동 skip). 옵션: `--status`/`--reset`/`--verbose`(`VERBOSE=1`)/`--help`. 콘솔엔 `[n/total]` 진행률만(상세 출력은 레포 루트 `install_log`). 단계 실패 시 `[FAIL]` + 로그 경로, 종료 시 로그 경로 1회.
+- Entry (권장): `bash install.sh` — **base 환경**만 단일 시퀀스(`[n/10]`)로 실행(kernel/NVIDIA/Docker/ROS2 + reboot + VS Code + DDS + 정적 IP + corecode 확인). 시작 시 confirm 1회, 이후 자동 진행. step 6 에서 1회 자동 reboot → 복귀(로그인) 시 GUI autostart 로 자동 재개(GUI 세션 필요, 복귀 후 sudo 비번 1회). OPENAI 키는 인스톨러가 다루지 않음(사용자가 voice_processing 패키지 resource/.env 에 직접 배치 — 별도 안내). autostart 등록 불가 환경이면 reboot 후 `bash install.sh` 재실행(완료 step 자동 skip). 옵션: `--status`/`--reset`/`--verbose`(`VERBOSE=1`)/`--help`. 콘솔엔 `[n/total]` 진행률만(상세 출력은 레포 루트 `install_log`). 단계 실패 시 `[FAIL]` + 로그 경로, 종료 시 로그 경로 1회.
 - 애플리케이션 셋업: `bash setup-app.sh` — 워크스페이스(`obtain_cobot2`(수동 배치 검증) → `dsr-project-install.sh`(DSR 드라이버) → `realsense-install.sh` sdk/ros → `colcon-build.sh`) + 컨테이너(`nvidia-container-toolkit-install.sh` → `containers/build-all.sh`(`:dev-builder` 이미지 빌드 + 검증)). 플래그 `--workspace-only`/`--containers-only`/`--reset`(install.sh `--reset` 와 이름 통일)/`-y`/`--help`. (구 `reinstall-workspace.sh` 흡수·폐기. prebuilt `--fetch` 경로는 dev-builder 단일 모델로 통합하며 폐기.)
 - 단계 재실행: `bash install.sh` 재실행 시 완료 step 은 state 기준 자동 skip 되어 끊긴 지점부터 이어진다. 특정 작업만 강제 재실행은 `--reset`(전체 초기화) 또는 해당 `resources/<step>.sh` 직접 실행.
-- 순차 의미: install.sh = `a01(1-5) → reboot(6) → a03 vscode(7) → dds(8) → network(9) → corecode(10)`. (구 a02=DSR/RealSense/colcon, a04=voice·OPENAI key 는 install.sh 에서 제거 → voice 는 `setup-app.sh`(host 설치), OPENAI key 는 사용자 수동 생성(`~/.config/cobot2/.env`).) `run_step` 은 `resources/orchestrate.sh`(state + run_step + step 정의 통합 엔진)로 중앙화(install.sh 가 `STEPS_TOTAL` 만 설정).
+- 순차 의미: install.sh = `a01(1-5) → reboot(6) → a03 vscode(7) → dds(8) → network(9) → corecode(10)`. (구 a02=DSR/RealSense/colcon, a04=voice·OPENAI key 는 install.sh 에서 제거 → voice 는 `setup-app.sh`(host 설치), OPENAI key 는 사용자 수동 배치(voice_processing 패키지 `resource/.env`).) `run_step` 은 `resources/orchestrate.sh`(state + run_step + step 정의 통합 엔진)로 중앙화(install.sh 가 `STEPS_TOTAL` 만 설정).
 - 정적 검증: `shellcheck *.sh resources/*.sh scripts/*.sh`
 - Compatibility matrix: `docs/COMPATIBILITY.md` (Phase 1 산출물)
 - 트러블슈팅 카탈로그: `docs/TROUBLESHOOTING.md` (Phase 3 산출물)
