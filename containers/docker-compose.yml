@@ -1,4 +1,4 @@
-# Phase 4 application 컨테이너 (yolo / voice) — 서비스 base 정의.
+# Phase 4 application 컨테이너 (yolo) — 서비스 base 정의. voice 는 컨테이너 아님 — host 실행(voice-host-install.sh).
 #
 # 기본 통합 실행은 이 base + dev override 를 머지한 dev-builder 경로다:
 #   bash containers/bringup.sh   (= -f docker-compose.yml -f docker-compose.dev.yml, live-mount + 컨테이너 안 colcon build)
@@ -16,7 +16,7 @@
 # 없으면 mount 실패로 컨테이너가 안 뜬다.
 #
 # 사용 (host 검증 + 카메라 기동 이후):
-#   cp .env.example .env  # OPENAI_API_KEY / DOCKERHUB_USER / *_TAG 채우기
+#   cp .env.example .env  # DOCKERHUB_USER / YOLO_TAG (OPENAI_API_KEY 는 host voice 용 — 이 compose 는 안 읽음)
 #   docker compose -f containers/docker-compose.yml up -d
 # 에뮬레이터까지: docker compose --profile dev up -d
 #
@@ -91,38 +91,6 @@ services:
               capabilities: [gpu]
     # builder 이미지엔 entrypoint 가 없어 mount 한 /root/.bashrc 로 ROS overlay + venv PYTHONPATH 주입 후 실행.
     command: ["bash", "-c", "source /root/.bashrc; exec python3 /opt/viz/live_detection.py"]
-
-  voice-processing:
-    container_name: voice-processing   # 고정 이름 — dev override 도 상속(`docker exec -it voice-processing`). 미설정 시 <project>-<svc>-1.
-                                        # 트레이드오프: 같은 데몬에서 prod/dev 동시 기동·scale 불가(단일 인스턴스 전제).
-    image: docker.io/${DOCKERHUB_USER:-local}/ros2-jazzy-voice:${VOICE_TAG:-dev}
-    build:
-      context: ..
-      dockerfile: containers/voice-processing/Dockerfile
-      args:
-        ROS_DISTRO: ${ROS_DISTRO:-jazzy}
-    network_mode: host          # host net namespace 공유 → cyclonedds NIC whitelist·버퍼 상속
-    restart: unless-stopped
-    env_file: ../.env           # OPENAI_API_KEY 런타임 주입 (이미지에 박지 않음)
-    environment:
-      - ROS_DOMAIN_ID=${ROS_DOMAIN_ID:-0}
-      - RMW_IMPLEMENTATION=${RMW_IMPLEMENTATION:-rmw_cyclonedds_cpp}
-      - CYCLONEDDS_URI=file:///cyclonedds.xml
-      # 음성 파이프라인은 print() 로 wakeword confidence/STT 결과를 stdout 에 찍는다.
-      # 컨테이너 stdout 은 block-buffered 라 미설정 시 docker logs 에 실시간 안 뜬다.
-      - PYTHONUNBUFFERED=1
-    volumes:
-      - ${CYCLONEDDS_XML:-${HOME}/.config/cyclonedds/cyclonedds.xml}:/cyclonedds.xml:ro
-      # ALSA 기본 캡처를 실제 마이크(DMIC)로 고정. 컨테이너 raw 기본값은 마이크 미연결 아날로그
-      # 입력이라 무음만 잡힌다. wakeword/STT 둘 다 sounddevice 기본 장치를 쓰므로 이 매핑이 필요.
-      - ./voice-processing/asound.conf:/etc/asound.conf:ro
-    # host net 은 네트워크 namespace 만 공유 → 오디오 디바이스는 별도 패스스루 필요.
-    # /dev/snd 직결(ALSA) — libportaudio2 의 ALSA 백엔드로 PyAudio(wakeword)+sounddevice(STT) 둘 다 동작.
-    # PipeWire/Pulse 소켓 경유보다 이미지 추가 의존 0(libpulse 불요).
-    devices:
-      - /dev/snd:/dev/snd
-    group_add:
-      - audio                  # /dev/snd 가 root:audio 0660 → audio 그룹 권한 필요
 
   dsr-emulator:                 # 실기 우선 — 개발/테스트 시에만 명시적 활성화
     image: doosanrobot/dsr_emulator:3.0.1

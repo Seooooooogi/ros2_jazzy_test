@@ -9,8 +9,8 @@
 # source 전용 라이브러리 — set -euo 를 여기 두지 않는다(호출 진입점이 셸 옵션을 소유).
 #
 # 한 파일에 세 가지 관심사를 묶음 — 모두 "사람/자격증명과의 상호작용" 이라는 한 축:
-#   1) env-load   — .env 자격증명을 스크립트에 하드코딩하지 않고 안전하게 로드/기록 (수동 파싱, source 안 씀).
-#                   openai-key-setup.sh 가 사용 (컨테이너 셋업 중 setup-app.sh 가 실행) — _set_env_key/_relocate_example_secret.
+#   1) env-load   — .env 자격증명을 스크립트에 하드코딩하지 않고 안전하게 로드 (수동 파싱, source 안 씀).
+#                   bringup.sh 가 사용 — 실행 직전 host voice 자격증명(.env)을 프로세스 env 로 로드(_load_env/_require_env).
 #   2) confirm    — 되돌릴 수 없는 작업 (reboot / purge / 드라이버 교체) 전 명시적 동의.
 #   3) resume     — 일회성 GUI autostart 항목 등록/제거 → step-6 reboot 후 install.sh 가 자동 재개.
 #
@@ -20,7 +20,7 @@
 # 1) env-load — 안전한 .env 로더 (자격증명을 스크립트에 하드코딩하는 대신 .env 에서 로드)
 # ============================================================================
 # 사용법:
-#   _load_env "${HOME}/ros2_jazzy_test/.env"
+#   _load_env "${XDG_CONFIG_HOME:-${HOME}/.config}/cobot2/.env"   # = config.sh 의 COBOT2_ENV
 #   _require_env OPENAI_API_KEY
 #   # 이후 ${OPENAI_API_KEY} 사용 가능. 값을 절대 echo / log 하지 말 것.
 #
@@ -60,78 +60,6 @@ _require_env() {
         echo "env: required variable '$var' is empty (set in .env or environment)" >&2
         return 1
     fi
-}
-
-#######################################
-# .env 안의 KEY 를 VALUE 로 설정 (있으면 교체, 없으면 뒤에 추가). 값은 절대 미출력.
-# 주석 처리된 '# KEY=' 줄도 활성 'KEY=VALUE' 로 교체.
-# 값을 sed/awk 같은 외부 명령의 인자로 안 넘김 (순수 bash) — API 키가 특수문자로 깨지는 것과
-# `ps` 프로세스 목록에 노출되는 것을 둘 다 차단. 임시 파일은 .env 옆(같은 파일시스템)에 mode 600
-# 으로 만들고 atomic rename(원자적 교체)으로 바꿔치기 → /tmp 를 거쳐 secret 이 새지 않게 함.
-# Arguments:
-#   $1 - .env 파일 경로
-#   $2 - 설정할 KEY 이름
-#   $3 - 설정할 값 (출력 금지)
-#######################################
-_set_env_key() {
-    local file="$1" key="$2" value="$3"
-    # 변수 이름 검증 — 임의 key 주입 차단 (_load_env 와 동일 정책). 값은 절대 미출력.
-    [[ "$key" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] || { echo "env-load: invalid key name" >&2; return 1; }
-    local tmp line found=0
-    tmp="$(mktemp "${file}.XXXXXX")" || return 1
-    chmod 600 "$tmp"
-    if [[ -f "$file" ]]; then
-        while IFS= read -r line || [[ -n "$line" ]]; do
-            if [[ "$line" =~ ^[[:space:]]*#?[[:space:]]*"${key}"= ]]; then
-                printf '%s=%s\n' "$key" "$value" >> "$tmp"
-                found=1
-            else
-                printf '%s\n' "$line" >> "$tmp"
-            fi
-        done < "$file"
-    fi
-    [[ "$found" -eq 0 ]] && printf '%s=%s\n' "$key" "$value" >> "$tmp"
-    mv "$tmp" "$file"
-    chmod 600 "$file"
-}
-
-#######################################
-# 추적 대상 파일(.env.example)에 실수로 들어간 진짜 KEY 값을 .env 로 이동 + example 은 다시
-# placeholder 로 복원. .env.example 은 git 추적 대상 → 진짜 값이 남으면 secret 유출.
-# 값은 화면/로그에 절대 미출력. 멱등 — example 에 값 없으면 no-op.
-# Arguments:
-#   $1 - .env 파일 경로 (env_file)
-#   $2 - .env.example 파일 경로 (example)
-#   $3 - 대상 KEY 이름
-#######################################
-_relocate_example_secret() {
-    local env_file="$1" example="$2" key="$3"
-    [[ "$key" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] || { echo "env-load: invalid key name" >&2; return 1; }
-    [[ -f "$example" ]] || return 0
-    # example 에서 값이 있는(= 뒤에 내용이 있는) KEY 줄을 탐색 (주석 여부 무관). 값은 미출력.
-    local line val
-    line="$(grep -E "^[[:space:]]*#?[[:space:]]*${key}=.+" "$example" 2>/dev/null | head -1)" || true
-    [[ -z "$line" ]] && return 0
-    val="${line#*=}"
-    [[ "$val" =~ ^[[:space:]]*$ ]] && return 0   # 빈 값/공백뿐인 placeholder 는 무시
-    echo "env-load: warning — the tracked file ${example} contains a real value for ${key} (secret-leak risk)." >&2
-    echo "          Moving it to ${env_file} and restoring ${example} to a placeholder (value not shown)." >&2
-    # .env 가 있는지 보장한 뒤 키 이동 (_set_env_key 는 값 미출력).
-    [[ -f "$env_file" ]] || { : > "$env_file"; chmod 600 "$env_file"; }
-    _set_env_key "$env_file" "$key" "$val"
-    # 매칭된 example 줄을 빈 placeholder ('# KEY=') 로 되돌려 값 제거.
-    local tmp l
-    tmp="$(mktemp "${example}.XXXXXX")" || return 1
-    chmod 600 "$tmp"
-    while IFS= read -r l || [[ -n "$l" ]]; do
-        if [[ "$l" =~ ^[[:space:]]*#?[[:space:]]*${key}= ]]; then
-            printf '# %s=\n' "$key" >> "$tmp"
-        else
-            printf '%s\n' "$l" >> "$tmp"
-        fi
-    done < "$example"
-    mv "$tmp" "$example"
-    echo "env-load: ${key} moved — rotating the exposed key is recommended." >&2
 }
 
 # ============================================================================
@@ -184,7 +112,7 @@ confirm_or_abort_assumable() {
 # 3) resume — step-6 reboot 를 넘어 설치를 자동 재개
 # ============================================================================
 # 일회성 GUI autostart 항목을 등록/제거 → reboot 후 install.sh 가 자동으로 이어지게 함.
-# (OPENAI_API_KEY 는 더 이상 여기서 미리 안 받음 — install.sh 의 마지막 단계 openai-key-setup.sh 담당.)
+# (OPENAI_API_KEY 는 인스톨러가 다루지 않음 — 사용자가 ~/.config/cobot2/.env 직접 생성, bringup.sh 가 로드.)
 #
 # 동작 방식: GNOME autostart (.desktop) 가 로그인 시 터미널을 열어 install-resume-launcher.sh 실행
 # → install.sh 재실행. install.sh 가 재개로 다시 진입하면 즉시 autostart 제거(일회성)
