@@ -60,9 +60,13 @@ if [[ ! -e "$(git rev-parse --git-dir)/MERGE_HEAD" ]] && git diff --cached --qui
 fi
 
 # remove excluded paths from the index+working tree (this also resolves modify/delete conflicts).
+# `git rm` (not `rm -rf`) so that only TRACKED files go: untracked and gitignored files living under an
+# excluded directory — scratch notes, build output, .ipynb_checkpoints — stay on disk.
+# A plain `rm -rf docs/` here silently destroyed such files, and `git stash -u` does not protect the
+# gitignored ones. `-f` is needed because merged/conflicted paths differ from HEAD in the index.
+# Directories that still hold untracked files simply survive; the committed tree is unaffected.
 for p in "${EXCLUDES[@]}"; do
-    git rm -r --quiet --cached --ignore-unmatch -- "${p}" >/dev/null 2>&1 || true
-    rm -rf -- "${REPO_ROOT:?}/${p}"
+    git rm -r -f --quiet --ignore-unmatch -- "${p}" >/dev/null 2>&1 || true
 done
 
 # Files where main keeps its own version (README, etc.): restore the main version unconditionally,

@@ -77,6 +77,45 @@ run() {
     if [[ ${ok} -eq 1 ]]; then echo "  ✓ ${name}"; else fails=$(( fails + 1 )); fi
 }
 
+#######################################
+# 제외 경로 아래의 미추적 / gitignore 파일이 승격 후에도 살아남는지, 그리고 두 번째 승격에서
+# 생기는 modify/delete 충돌이 자동 해소되는지 확인.
+# Globals:
+#   fails (실패 시 1 증가)
+#######################################
+run_survival() {
+    local repo ok=1
+    repo="$(setup no no)"
+    cd "${repo}"
+
+    printf 'ignored/\n' > .gitignore
+    git add .gitignore && git commit -qm gitignore
+
+    printf 'scratch\n' > docs/scratch.md                       # 미추적
+    mkdir -p docs/ignored && printf 'blob\n' > docs/ignored/keep.bin   # gitignore 대상
+
+    MAIN_BRANCH=main bash "${MERGE_SCRIPT}" dev >/dev/null 2>&1 \
+        || { echo "  ✗ 1차 승격 실패"; fails=$(( fails + 1 )); return; }
+
+    # dev 가 제외 경로의 추적 파일을 고친 뒤 다시 승격 → main 엔 그 파일이 없어 modify/delete 충돌.
+    git checkout -q dev
+    printf 'more\n' >> docs/notes.md
+    git commit -qam dev-doc-edit
+    MAIN_BRANCH=main bash "${MERGE_SCRIPT}" dev >/dev/null 2>&1 \
+        || { echo "  ✗ 2차 승격이 modify/delete 충돌로 중단됨"; fails=$(( fails + 1 )); return; }
+
+    [[ -f docs/scratch.md ]]      || { echo "  ✗ 미추적 파일이 삭제됨 (docs/scratch.md)"; ok=0; }
+    [[ -f docs/ignored/keep.bin ]] || { echo "  ✗ gitignore 파일이 삭제됨 (docs/ignored/keep.bin)"; ok=0; }
+    git ls-tree -r main --name-only | grep -q '^docs/' && { echo "  ✗ docs/ 가 main 트리에 남음"; ok=0; }
+    [[ -f src.sh ]] || { echo "  ✗ dev 의 src.sh 가 전파되지 않음"; ok=0; }
+
+    if [[ ${ok} -eq 1 ]]; then
+        echo "  ✓ 재승격 후에도 미추적·gitignore 파일 생존, main 트리는 깨끗"
+    else
+        fails=$(( fails + 1 ))
+    fi
+}
+
 echo "keep-ours = README.md → 항상 main 버전 유지, dev 의 다른 변경은 전파"
 run "dev 만 README 수정 → main v1 유지"    yes no  'MAIN v1'
 run "둘 다 README 수정 → main v3 유지"     yes yes 'MAIN v3'
@@ -84,8 +123,12 @@ run "main 만 README 수정 → main v3 유지"   no  yes 'MAIN v3'
 run "아무도 README 미수정 → main v1 유지"  no  no  'MAIN v1'
 
 echo
+echo "제외 경로의 미추적·gitignore 파일은 승격이 지우지 않는다"
+run_survival
+
+echo
 if [[ ${fails} -eq 0 ]]; then
-    echo "test-merge-to-main: PASS (4/4)"
+    echo "test-merge-to-main: PASS (5/5)"
 else
     echo "test-merge-to-main: FAIL (${fails}건)" >&2
     exit 1
