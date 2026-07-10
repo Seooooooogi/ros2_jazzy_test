@@ -12,7 +12,7 @@
 # host 빌드는 컨테이너 전용 패키지(object_detection — yolo 이미지 안에서만 실행)를 --packages-skip 로
 # 건너뛴다. voice_processing 은 host 에서 직접 실행(voice-host-install.sh)하므로 여기서 함께 빌드 —
 # console_script 가 system python shebang 을 받아 host 에 깐 langchain/openwakeword 를 본다.
-# pick_and_place_* 는 그 안의 COLCON_IGNORE 파일로 skip.
+# pick_and_place_* (모놀리식 실습본) 는 애초에 이 ws 에 없음 — ~/cobot_demo_ws 로 분리 (README 3-1).
 #   - rosdep init 은 a01 의 ros2-desktop-main.sh 에서 이미 처리 → 여기선 update 만.
 #   - --skip-keys=librealsense2: 이 SDK 는 apt 로 까는 네이티브 패키지 → ROS rosdep 키 아님 (a02 step2).
 #   - 증분(incremental) 빌드 — build/install/log 를 rm -rf 안 함 → 재개(resume) 시 빠름.
@@ -54,7 +54,7 @@ rosdep install --from-paths src --ignore-src --rosdistro "${ROS_DISTRO}" \
 
 # colcon 빌드. object_detection(yolo)은 host 에서 실행 불가(torch 가 yolo 이미지 안에만) → --packages-skip.
 # voice_processing 은 host 직접 실행이라 여기서 빌드(voice-host-install.sh 가 langchain/openwakeword 를
-# host 에 깔아 둠 → console_script 의 system python 이 그대로 봄). pick_and_place_* 는 COLCON_IGNORE 로 자동 skip.
+# host 에 깔아 둠 → console_script 의 system python 이 그대로 봄).
 colcon build --packages-skip object_detection
 
 # wakeword 모델이 설치 트리(install/)에 들어갔는지 확인.
