@@ -283,7 +283,7 @@ run_step() {
 #
 # 번호 규칙: 각 stage 함수는 offset 을 받아 run_step 번호 = offset + 로컬 k 로 계산.
 #   install.sh: run_stage_a01 0 → (reboot=step6, install.sh 안에 인라인) → run_stage_a03 6
-#               → step 8-10(dds / network / corecode, 설치 전용, install.sh 안에 인라인).
+#               → step 8-9(dds / network, 설치 전용, install.sh 안에 인라인).
 # 애플리케이션 계층(DSR 드라이버 + RealSense + cobot2 colcon 빌드 + 컨테이너)은 더 이상 install.sh 에
 # 속하지 않음 — setup-app.sh 에 있음(base 설치 이후 실행).
 # offset 인자는 앞으로 부분 실행/재정렬 유연성을 위해 남겨둠 — 현재 호출자는 install.sh 뿐.
@@ -297,9 +297,9 @@ run_step() {
 # install_steps_total() 의 전체 분모가 따라옴.
 STAGE_A01_COUNT=5
 STAGE_A03_COUNT=1
-INSTALL_EXTRA_COUNT=3   # 설치 전용: dds(8) / network(9) / corecode(10)
+INSTALL_EXTRA_COUNT=2   # 설치 전용: dds(8) / network(9)
 
-# install.sh 전체 분모: a01 5 + reboot 1 + a03 1 + extra 3 = 10.
+# install.sh 전체 분모: a01 5 + reboot 1 + a03 1 + extra 2 = 9.
 install_steps_total() {
     echo $(( STAGE_A01_COUNT + 1 + STAGE_A03_COUNT + INSTALL_EXTRA_COUNT ))
 }

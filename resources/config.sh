@@ -164,7 +164,7 @@ export ROS_DOMAIN_ID="${ROS_DOMAIN_ID:-0}"
 # **권위 있는 소스는 orchestrate.sh** (STAGE_*_COUNT + install_steps_total) — install.sh 는
 # orchestrate.sh 에서 분모를 계산하고, 이 TOTAL_STEPS 는 orchestrate.sh 가 source 안 됐을 때만 폴백으로 쓰임.
 # 그러니 단계를 추가할 때는 orchestrate.sh 의 STAGE 상수만 갱신하고, 이 값은 그 합과 맞춰 두기만 하면 됨.
-: "${TOTAL_STEPS:=10}"
+: "${TOTAL_STEPS:=9}"
 
 # --- 자체 점검 ----------------------------------------------------------
 #######################################

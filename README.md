@@ -10,7 +10,7 @@
 git clone https://github.com/Seooooooogi/ros2_jazzy_test.git
 cd ros2_jazzy_test
 
-# 2) base 환경 설치 (kernel/NVIDIA/Docker/ROS2 + reboot + VS Code + DDS + 정적 IP + corecode 확인, 10 step)
+# 2) base 환경 설치 (kernel/NVIDIA/Docker/ROS2 + reboot + VS Code + DDS + 정적 IP, 9 step)
 bash install.sh
 ```
 
