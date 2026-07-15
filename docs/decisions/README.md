@@ -921,7 +921,7 @@
 
 **Date**: 2026-07-10
 
-**Status**: ADR-026(cobot2 소스 외부화)와 동형 — corecode 도 레포에서 빼고 사용자가 배치. `install.sh` step 10 relocate → verify. dev 직접.
+**Status**: ADR-026(cobot2 소스 외부화)와 동형 — corecode 도 레포에서 빼고 사용자가 배치. `install.sh` step 10 relocate → verify. dev 직접. **⚠️ Amended 2026-07-15 — step 10 verify 제거(아래 Update), install.sh 10→9 step.**
 
 **Context**:
 - corecode(Calibration / DRL / OD / VoiceProcessing 튜토리얼)가 레포 루트에 tracked(29파일)라 `.claude-main-exclude` 에도 없어 **public main 에 그대로 실려나감**(용량 + 설치와 무관한 콘텐츠). ADR-026 이 cobot2 앱 소스를 외부화한 것과 동일 논리.
@@ -938,7 +938,14 @@
 
 **검증**: `corecode-verify.sh` 양쪽 분기(`~/corecode` 없음 → exit 1 + 안내, 있음 → exit 0). `install.sh` 10스텝·"all 10 steps complete" 유지. `corecode.zip` 재생성(39파일, 자산 2개 포함, pycache 0, 노트북 outputs 정리). `git status` = corecode/ 29 deleted.
 
-**Reopen 조건**: corecode 를 다시 레포 동봉하려면 step 10 을 relocate 로 복원 + `corecode/` 재추가.
+**Update (2026-07-15)**: base install 에서 corecode verify(step 10) 제거 — install.sh 10 → 9 step (commit `dc69b2e`).
+- 왜: corecode 는 독립 튜토리얼 아티팩트라 base 인스톨러가 게이팅할 대상이 아님(원래도 기능 의존이 아니라 `exit 0/1` 토글이었음). base 설치 책임을 kernel/NVIDIA/Docker/ROS2 + VS Code + DDS + 네트워크로 한정.
+- 유효(불변): ADR-029 핵심 결정 — corecode git 제거 · 사용자 `~/corecode` 수동 배치 · `corecode.zip` 별도 배포 — 는 그대로. 바뀐 것은 "인스톨러가 배치를 확인" 부분뿐.
+- 제거: `install.sh` step 10(`corecode_verify`) 호출 · `resources/corecode-verify.sh` · next-step 안내(`place corecode …`).
+- 스텝 수 동기화(9): `orchestrate.sh` `INSTALL_EXTRA_COUNT 3→2` · `config.sh` `TOTAL_STEPS 10→9` · install.sh "all 9 steps"·`[n/9]` · README · CLAUDE.md.
+- 검증: `install_steps_total=9` 실측 · `corecode[-_]verify` 잔여 참조 0 · `shellcheck` findings 0.
+
+**Reopen 조건**: corecode 를 다시 레포 동봉하려면 `corecode/` 재추가 + relocate/verify 단계 재도입(현재 step 10 없음 → 재도입 시 스텝 수 재계산). 인스톨러가 배치만 다시 확인하게 하려면 verify 스텝만 복원.
 
 ---
 
