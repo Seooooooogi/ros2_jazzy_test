@@ -8,7 +8,7 @@
 # install.sh — 호스트 워크스테이션의 base 환경을 설치하는 단일 진입점(entry point).
 #
 # base 환경만 설치(커널/NVIDIA/Docker/ROS2 + reboot + VS Code + DDS 튜닝 + 정적
-# 네트워크 IP + corecode 확인). 전부 하나의 연속 시퀀스([n/10])로 실행. cobot2 앱 계층
+# 네트워크 IP). 전부 하나의 연속 시퀀스([n/9])로 실행. cobot2 앱 계층
 # (DSR 드라이버 + RealSense + cobot2 colcon 빌드 + host voice Python + 컨테이너 toolkit/이미지)은
 # 여기 없음 — setup-app.sh 에 있고, base 설치 후 실행. 이 레포는 cobot2 소스·corecode 미포함
 # (둘 다 사용자가 별도로 배치).
@@ -49,7 +49,7 @@ STEPS_TOTAL="$(install_steps_total)"
 
 usage() {
     cat <<'EOF'
-install.sh — single entry point for the BASE host environment (kernel/NVIDIA/Docker/ROS2 + reboot + VS Code + DDS tuning + static network IP + corecode check, 10 steps total)
+install.sh — single entry point for the BASE host environment (kernel/NVIDIA/Docker/ROS2 + reboot + VS Code + DDS tuning + static network IP, 9 steps total)
 
   bash install.sh             run the full sequence (skip already-completed steps)
   bash install.sh --verbose   also show each step's detailed output + warnings/errors on the console
@@ -63,8 +63,8 @@ required; one sudo password after return). If the autostart cannot register, re-
 reboot to continue. Completed steps are auto-skipped on any re-run.
 
 The cobot2 application (DSR driver + RealSense + host voice Python + workspace build + containers) is set up
-separately by setup-app.sh after this base install — this repo ships neither the cobot2 source nor corecode
-(place both yourself; the installer only verifies they are present).
+separately by setup-app.sh after this base install — this repo does not ship the cobot2 source
+(place it yourself; setup-app.sh verifies it is present).
 
 By default the console shows only the [n/total] progress + per-step elapsed time; ALL detailed output and
 any warnings/errors go to install_log in the repo root (not the console). On a step failure a one-line
@@ -203,18 +203,12 @@ run_step 8 dds_tuning bash "${RESOURCE_DIR}/dds-tuning.sh"
 # confirm 없음(되돌릴 수 있고, 실행 시작의 단일 동의가 이걸 포함).
 run_step 9 network_static_ip bash "${RESOURCE_DIR}/network-static-ip.sh"
 
-# --- step 10: corecode 튜토리얼이 ~/corecode 에 배치됐는지 확인 ---
-# 레포는 corecode 를 더는 싣지 않음 — 사용자가 별도 배포본(corecode.zip)을 홈에 풀어 ${HOME}/corecode 를
-# 만든다. 이 단계는 배치를 확인만 함(없으면 받는 방법 안내 후 중단, 배치 후 재실행하면 멱등 통과). 일반 사용자로 실행(sudo 없음).
-run_step 10 corecode_verify bash "${RESOURCE_DIR}/corecode-verify.sh"
-
 # 재개용 autostart 정리(재개 진입 때 이미 제거됐으면 아무 일 안 함 — 멱등).
 remove_resume_autostart 2>/dev/null || true
 
 state_dump
-echo "install: all 10 steps complete — base host environment ready."
+echo "install: all 9 steps complete — base host environment ready."
 echo "  next:"
 echo "    1) place the cobot2 source at ${DSR_WORKSPACE}/src/cobot2"
-echo "    2) place corecode at ${HOME}/corecode  (unzip corecode.zip -d ${HOME})"
-echo "    3) run 'bash setup-app.sh' (workspace + containers)"
+echo "    2) run 'bash setup-app.sh' (workspace + containers)"
 echo "  detailed log: ${LOG_FILE}"

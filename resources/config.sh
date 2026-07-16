@@ -51,11 +51,11 @@ export ROS2_JAZZY_TEST_REPO
 # --- 앱 워크스페이스 경로 (통합 cobot_ws 하위) ------------------------------------
 # YOLO_WS: yolo_container(od_msg + object_detection) — dev 모드(docker-compose.dev.yml)에서
 #   컨테이너 /ws/src 로 bind-mount(live-mount). 별도 src/ 없이 디렉토리 자체가 패키지.
-# VOICE_WS: voice_container(voice_processing) — voice 는 host 직접 실행(컨테이너 아님).
-#   voice-host-install.sh 가 wakeword 모델(${VOICE_WS}/voice_processing/resource/*.tflite)을 이 경로에서 읽어 검증.
+# VOICE_WS: voice_processing 패키지 디렉토리(flat — voice_container wrapper 폐기). voice 는 host 직접 실행(컨테이너 아님).
+#   voice-host-install.sh 가 wakeword 모델(${VOICE_WS}/resource/*.tflite)을 이 경로에서 읽어 검증.
 # 두 경로 모두 dsr-project-install.sh 가 빌드하는 host colcon 워크스페이스의 일부 → 별도 복사 단계 없음. 덮어쓰기 허용.
 : "${YOLO_WS:=${DSR_WORKSPACE}/src/cobot2/yolo_container}"
-: "${VOICE_WS:=${DSR_WORKSPACE}/src/cobot2/voice_container}"
+: "${VOICE_WS:=${DSR_WORKSPACE}/src/cobot2/voice_processing}"
 
 # --- 커널 트랙 (HWE) --------------------------------------------------
 # HWE 커널(Ubuntu 하드웨어 지원 커널) meta 를 명시적으로 설치 → 커널 이미지 + headers + modules-extra 가 항상 함께 묶임.
@@ -164,7 +164,7 @@ export ROS_DOMAIN_ID="${ROS_DOMAIN_ID:-0}"
 # **권위 있는 소스는 orchestrate.sh** (STAGE_*_COUNT + install_steps_total) — install.sh 는
 # orchestrate.sh 에서 분모를 계산하고, 이 TOTAL_STEPS 는 orchestrate.sh 가 source 안 됐을 때만 폴백으로 쓰임.
 # 그러니 단계를 추가할 때는 orchestrate.sh 의 STAGE 상수만 갱신하고, 이 값은 그 합과 맞춰 두기만 하면 됨.
-: "${TOTAL_STEPS:=10}"
+: "${TOTAL_STEPS:=9}"
 
 # --- 자체 점검 ----------------------------------------------------------
 #######################################

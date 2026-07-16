@@ -10,7 +10,7 @@
 git clone https://github.com/Seooooooogi/ros2_jazzy_test.git
 cd ros2_jazzy_test
 
-# 2) base 환경 설치
+# 2) base 환경 설치 (kernel/NVIDIA/Docker/ROS2 + reboot + VS Code + DDS + 정적 IP, 9 step)
 bash install.sh
 ```
 
@@ -25,7 +25,7 @@ rm -f ~/cobot_demo_ws/src/pick_and_place_*/COLCON_IGNORE
 
 # 3-2) voice OPENAI 키 배치
 echo 'OPENAI_API_KEY=sk-...' \
-  > ~/cobot_ws/src/cobot2/voice_container/voice_processing/resource/.env
+  > ~/cobot_ws/src/cobot2/voice_processing/resource/.env
 
 # 4) 애플리케이션 셋업 — 워크스페이스(DSR 드라이버 + RealSense + host voice 설치 + cobot2 colcon 빌드)
 #    + 컨테이너(toolkit + yolo :dev-builder 이미지 빌드)
@@ -103,8 +103,10 @@ bash containers/bringup.sh mode:=real      # real robot
 
 **yolo 컨테이너**
 
+컨테이너 생성 — **최초 1회만**:
+
+
 ```bash
-docker rm -f yolo-detection 2>/dev/null || true
 docker run -d --name yolo-detection \
   --network host -w /ws --gpus all \
   -e ROS_DOMAIN_ID=${ROS_DOMAIN_ID:-0} -e RMW_IMPLEMENTATION=rmw_cyclonedds_cpp \
@@ -117,10 +119,26 @@ docker run -d --name yolo-detection \
   bash -c 'set +u; source /opt/ros/$ROS_DISTRO/setup.bash; find /ws/build /ws/install -mindepth 1 -delete 2>/dev/null || true; colcon build --symlink-install --merge-install; sleep infinity'
 ```
 
+이후에는 재사용 (생성 시 명령이 컨테이너에 박혀 있어 start 때마다 clean build → idle 이 다시 실행됨):
+
+```bash
+docker start yolo-detection
+docker stop yolo-detection
+```
+
+`docker rm -f yolo-detection` 후 재생성이 필요한 경우는 **run 플래그(-v/-e/--network/--gpus)를 바꿀 때뿐** — 컨테이너 설정은 생성 시점에 고정이라 기존 컨테이너에서 변경 불가.
+
 ```bash
 docker logs -f yolo-detection                 # "Summary: N package finished" 뜨면 Ctrl+C
 docker exec -it yolo-detection bash
 ```
+
+**컨테이너 안에서 바꾼 것들은 어떻게 되나**
+
+| 변경 | 보존 | 반영 방법 |
+|------|------|----------|
+| `/ws/src` 코드 수정 (컨테이너 안/host 어디서든) | 영구 — host bind mount 라 같은 파일. `docker rm` 해도 안 사라짐 | `.py` 수정 → `--symlink-install` 덕에 재빌드 불필요, 노드만 재실행. 파일 추가·`setup.py` 변경 → 컨테이너 안에서 `colcon build --symlink-install --merge-install` 재실행 |
+| `apt install` 등 컨테이너 파일시스템 변경 | stop/start 에는 유지, **`docker rm` 시 소실** | 계속 쓸 패키지면 `containers/yolo-detection/Dockerfile` 에 추가 후 이미지 재빌드 (`bash containers/build-all.sh`) — 이미지가 진실 원천 |
 
 컨테이너 안에서 노드 실행:
 
