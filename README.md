@@ -126,11 +126,10 @@ docker start yolo-detection
 docker stop yolo-detection
 ```
 
-'''
 컨테이너 진입
 ```bash
 docker exec -it yolo-detection bash
-'''
+```
 
 컨테이너 안에서 노드 실행:
 
