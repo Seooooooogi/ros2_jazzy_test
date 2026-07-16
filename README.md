@@ -126,6 +126,7 @@ docker start yolo-detection
 docker stop yolo-detection
 ```
 
+'''
 컨테이너 진입
 ```bash
 docker exec -it yolo-detection bash
