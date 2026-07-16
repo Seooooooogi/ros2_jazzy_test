@@ -31,7 +31,8 @@ metadata:
 
 ## 컨테이너 빌드 시 확정/주의 (구현 가능성 검토 결과: GO)
 
-- **RMW + ROS_DOMAIN_ID 완전 일치** (host + 두 컨테이너). Fast-DDS↔CycloneDDS 혼합 시 같은 토픽도 discovery 실패. `network_mode: host` 필수 (Docker bridge 는 DDS multicast forward 안 함).
+- **RMW + ROS_DOMAIN_ID 완전 일치** (host + 컨테이너). RMW 혼합(Fast-DDS↔CycloneDDS) 시 같은 토픽도 discovery 실패. 레포 표준 = **CycloneDDS + `network_mode: host`**. host 가 필수인 **진짜 이유**: dds-tuning 이 렌더한 `cyclonedds.xml` 이 loopback + 물리 NIC 만 whitelist 하고 docker 가상 NIC 는 제외(ADR-020) → 컨테이너가 host netns 를 공유해야 whitelist 된 loopback 으로 붙는다. (구 서술 "bridge 가 DDS multicast forward 안 함"은 **실측상 오류·폐기** — host↔container 기본 bridge 는 host 자신이 docker0 멤버(`172.17.0.1`)라 multicast 왕복 O, discovery·데이터 모두 통과.)
+  - **실측(2026-07-16) — FastDDS 는 정반대**: **FastDDS + `network_mode: host` = 데이터 전달 실패**(같은 netns→같은 호스트 판정→SHM 전송인데 컨테이너 `/dev/shm` 격리→토픽 내용 0. discovery 는 UDP multicast 라 토픽 목록엔 보임. 소형·14MB 무관). **FastDDS + bridge = 정상**(다른 IP→다른 호스트 판정→UDP, 14MB pointcloud 급도 9.9Hz 무손실. `net.core.rmem_max/default` 는 netns 전역값이라 bridge 컨테이너도 host 튜닝 상속). 즉 `network_mode: host` 는 **CycloneDDS 선택의 귀결**이지 DDS 일반 법칙이 아님. `--ipc=host` 단독으론 FastDDS host 모드 미해결(실측).
 - **GPU**: `ros:jazzy-ros-base-noble` + pip torch(cuXXX wheel) 로 충분 — torch wheel 이 CUDA runtime 동봉, CUDA base image 불필요. NVIDIA Container Toolkit 만. **컨테이너 CUDA ≠ host CUDA toolkit** → ADR-006(Noble repo 12-4 부재)은 host(DSR/colcon)용, 컨테이너와 독립.
 - **od_msg**: yolo 컨테이너가 `/get_3d_position` 제공 위해 컨테이너 안에서 od_msg 빌드 필요. voice 는 std_srvs/Trigger 만 → 커스텀 msg 불필요.
 - **Audio**: PulseAudio/PipeWire socket mount + UID 매칭(`user: "1000:1000"`). raw `/dev/snd` 직접 mount 는 host PipeWire 충돌.
