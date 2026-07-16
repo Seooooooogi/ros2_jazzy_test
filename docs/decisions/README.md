@@ -973,3 +973,29 @@
 **검증**: colcon 이 숨김 디렉토리를 건너뛰는지 실측 — `ws/.venv/fakepkg` + `ws/src/realpkg` 로 `colcon list` → `realpkg` 만 출력. LAB.md 전 경로가 `~/cobot_demo_ws` 로 일관됨(`grep cobot2_venv_demo` 0건).
 
 **Reopen 조건**: cobot2 배포본이 두 패키지를 더 이상 포함하지 않게 되면 README 3-1 자체가 불필요 — 그때 이 ADR 을 닫는다.
+
+---
+
+### ADR-031: voice 패키지 레이아웃 flat 표준화 — `voice_container` wrapper 폐기 (2026-07-16)
+
+**Status**: ADR-025 의 `cobot2/voice_ws`→`cobot2/voice_container` rename 중 **voice 부분을 supersede**(yolo_container 는 유지).
+
+**Context**:
+- ADR-025 가 컨테이너 전용 묶음을 `_container` 로 명시하며 `voice_ws`→`voice_container` 로 rename. 당시 voice 는 컨테이너 대상이었음.
+- ADR-027 이 voice 를 host 직접 실행으로 되돌려 voice 는 더 이상 컨테이너가 아님. `voice_container` 는 단일 패키지(`voice_processing`) 하나만 감싸는 빈 wrapper 로 잔존 — yolo_container(od_msg + object_detection 2패키지 묶음, dev compose 가 `/ws/src` 로 bind-mount)와 달리 grouping 의미가 없음.
+- 새 cobot2 배포본(zip)이 voice_processing 을 `cobot2/` 바로 아래 flat 으로 둠 → repo 기대(voice_container)와 불일치.
+
+**Decision**:
+- `cobot2/voice_container/voice_processing` → `cobot2/voice_processing` (flat). wrapper 디렉토리 폐기.
+- 경로 참조 갱신: `config.sh::VOICE_WS`(→ `cobot2/voice_processing`, 패키지 디렉토리 자체), `voice-host-install.sh`(wakeword 경로 `${VOICE_WS}/voice_processing/resource/*` → `${VOICE_WS}/resource/*`), `README.md`(.env 배치 경로), `scripts/venv-demo/LAB.md`(audio_device donor 경로).
+- yolo_container 는 불변 — 2패키지 묶음 + dev compose bind-mount 대상이라 grouping 유지.
+
+**Consequences**:
+- colcon 빌드 무영향(패키지명 `voice_processing` 불변, src 재귀 탐색). 컨테이너 재빌드 불필요(yolo 무관).
+- 기설치 머신: `~/cobot_ws/src/cobot2/voice_container/` 잔존 → `mv .../voice_container/voice_processing .../voice_processing && rmdir .../voice_container` 후 voice_processing 재빌드. 또는 새 배포본으로 재배치.
+- `:=` 단일 소스 패턴상, 옛 `VOICE_WS` 를 export 한 셸은 자동 갱신 안 됨 → 새 터미널 또는 `unset VOICE_WS` 후 재source 필요.
+- 날짜 스냅샷 문서(`docs/specs|plans/2026-06-26-*`)의 voice_container 경로는 과거 기록으로 미수정.
+
+**검증(2026-07-16 실측)**: flat 이동 + `colcon build --packages-select voice_processing` exit 0, install 트리에 wakeword `.tflite` + `.env` 반영. `unset VOICE_WS` 후 config.sh source → `VOICE_WS=.../voice_processing`, wakeword 경로 실파일 해석 OK.
+
+**Reopen 조건**: voice 가 다시 컨테이너화되면(ADR-027 역전) grouping 디렉토리 재도입 검토.

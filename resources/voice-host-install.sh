@@ -28,7 +28,7 @@ source "${SCRIPT_DIR}/config.sh"
 config_assert_set
 
 OWW_SRC="${SCRIPT_DIR}/oww_models"
-WAKEWORD_MODEL="${VOICE_WS}/voice_processing/resource/hello_rokey_8332_32.tflite"
+WAKEWORD_MODEL="${VOICE_WS}/resource/hello_rokey_8332_32.tflite"
 
 # Python 3.12 단언 — ai-edge-litert(openwakeword tflite 대체)의 cp312 wheel 전제. fail-loud.
 PYVER="$(python3 -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')"

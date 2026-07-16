@@ -27,7 +27,7 @@ rm -f ~/cobot_demo_ws/src/pick_and_place_*/COLCON_IGNORE
 #      resource/.env 를 읽고 colcon 빌드에 내장한다. 빌드 전에 넣어야 한 번의 빌드로 반영된다.
 #      (별도 안내로 받은 실제 키로 sk-... 를 교체)
 echo 'OPENAI_API_KEY=sk-...' \
-  > ~/cobot_ws/src/cobot2/voice_container/voice_processing/resource/.env
+  > ~/cobot_ws/src/cobot2/voice_processing/resource/.env
 
 # 4) 애플리케이션 셋업 — 워크스페이스(DSR 드라이버 + RealSense + host voice 설치 + cobot2 colcon 빌드)
 #    + 컨테이너(toolkit + yolo :dev-builder 이미지 빌드)

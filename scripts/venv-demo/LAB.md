@@ -122,7 +122,7 @@ grep -E "ppv_(robot_control|object_detection|voice_processing)\.(robot_control|d
 #### A2-5-1. audio_device.py 복사 (컨테이너 donor → monolithic)
 
 ```bash
-cp ~/cobot_ws/src/cobot2/voice_container/voice_processing/voice_processing/audio_device.py \
+cp ~/cobot_ws/src/cobot2/voice_processing/voice_processing/audio_device.py \
    ~/cobot_demo_ws/src/pick_and_place_voice/ppv_voice_processing/audio_device.py
 ```
 
