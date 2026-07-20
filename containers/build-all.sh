@@ -62,8 +62,9 @@ secret_scan() {
 
 #######################################
 # 컨테이너 안에서 가벼운 import 확인(isolated import smoke) 실행.
-# builder 스테이지는 런타임 ENTRYPOINT 가 없어서, python 실행 전에 여기서 ROS2 + 오버레이(overlay) +
-# venv PYTHONPATH 를 직접 source(containers/entrypoint.sh + dev/bashrc 와 동일한 준비 과정).
+# builder 스테이지는 런타임 ENTRYPOINT 가 없어서, python 실행 전에 여기서 ROS2 + 오버레이(overlay)를
+# 직접 source(containers/entrypoint.sh + dev/bashrc 와 동일한 준비 과정). pip 패키지는
+# /usr/local/lib/python3.X/dist-packages = system python 기본 sys.path 라 경로 주입이 필요 없다.
 # `bash -c 'SCRIPT' "$pyexpr"` 는 pyexpr 를 컨테이너 안 $0 에 묶어 python3 -c "$0" 로 전달
 # (따옴표가 중첩되며 깨지는 escaping 문제를 피함).
 # Arguments:
@@ -76,9 +77,6 @@ smoke() {
         set +u
         source "/opt/ros/${ROS_DISTRO}/setup.bash"
         [ -f /ws/install/setup.bash ] && source /ws/install/setup.bash
-        for sp in /opt/venv/lib/python*/site-packages; do
-            [ -d "$sp" ] && export PYTHONPATH="$sp${PYTHONPATH:+:$PYTHONPATH}" && break
-        done
         exec python3 -c "$0"
     ' "${pyexpr}"
 }

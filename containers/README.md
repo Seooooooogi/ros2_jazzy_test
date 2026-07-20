@@ -33,7 +33,7 @@ docker compose $DEV up -d yolo-detection
 
 ```bash
 docker exec -it yolo-detection bash
-# (컨테이너 안 — ROS overlay·venv 는 자동 source 됨)
+# (컨테이너 안 — ROS overlay 는 자동 source 됨)
 ros2 run object_detection object_detection      # 수정 → Ctrl+C → 재실행 반복
 ```
 

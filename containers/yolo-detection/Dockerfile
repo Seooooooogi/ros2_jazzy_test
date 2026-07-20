@@ -22,7 +22,6 @@ RUN apt-get update \
  && apt-get install -y --no-install-recommends \
       build-essential \
       python3-dev \
-      python3-venv \
       python3-pip \
       python3-colcon-common-extensions \
       python3-rosdep \
@@ -31,36 +30,45 @@ RUN apt-get update \
       ros-${ROS_DISTRO}-sensor-msgs \
  && rm -rf /var/lib/apt/lists/*
 
-# --- pip/venv 레이어를 소스 COPY 보다 앞에 배치 ---
+# --- pip 레이어를 소스 COPY 보다 앞에 배치 ---
 # 노드 소스(object_detection/yolo.py 등)만 고쳐도 torch(가장 무거운 레이어)가 재다운로드되지
-# 않도록, 소스와 무관한 venv/pip 설치를 소스 COPY 앞에 둔다. venv 는 전역 PATH 에 올리지 않고
-# /opt/venv/bin 으로 명시 호출한다 → 뒤따르는 colcon build 가 시스템 python 으로 돌아, ament
-# 콘솔스크립트 shebang 이 시스템 python 으로 굳는 기존 동작을 그대로 유지(entrypoint.sh 가
-# 런타임에 venv site-packages 를 PYTHONPATH 로 주입해 우회).
-# venv: --system-site-packages 로 rclpy/cv_bridge 등 apt/ROS 패키지를 공유.
-RUN python3 -m venv --system-site-packages /opt/venv
-RUN /opt/venv/bin/pip install --no-cache-dir --upgrade pip
+# 않도록, 소스와 무관한 pip 설치를 소스 COPY 앞에 둔다.
+#
+# PEP 668: noble 의 system python 은 /usr/lib/python3.12/EXTERNALLY-MANAGED 로 pip 을 차단한다
+# → --break-system-packages 로 해제. pip 설치본은 /usr/local/lib/python3.X/dist-packages 로 가고
+# apt 영역(/usr/lib/python3/dist-packages)과 디렉토리가 분리된다. 이 경로는 system python 의
+# 기본 sys.path 라 PYTHONPATH 주입 없이 `ros2 run` 의 콘솔스크립트(shebang = system python)가
+# 그대로 import 한다.
+#
+# numpy 선행 설치가 필수다: apt 가 깐 numpy 는 pip RECORD 메타가 없어 pip 이 제거를 거부한다
+# ("Cannot uninstall numpy 1.26.4, RECORD file not found. Hint: installed by debian") → 뒤따르는
+# 패키지가 numpy 버전 변경을 요구하는 순간 설치 전체가 실패. --ignore-installed 로 pip 소유
+# 사본을 /usr/local 에 먼저 만들어 두면, 이후 업/다운그레이드는 그 사본에서만 일어나고
+# apt 사본은 손상 없이 남는다(dpkg 정합 유지).
+RUN pip install --break-system-packages --no-cache-dir --ignore-installed "numpy<2"
 # torch/torchvision (cu128) — 가장 무거운 레이어(CUDA 런타임 번들)라 단독 RUN 으로 캐시 분리.
-RUN /opt/venv/bin/pip install --no-cache-dir \
+RUN pip install --break-system-packages --no-cache-dir \
       --index-url "https://download.pytorch.org/whl/cu${CUDA_VERSION//./}" \
       torch==2.11.0 torchvision==0.26.0
 # ultralytics → opencv-python 을 numpy<2 호환 마지막 버전(<4.10 = 4.9.0.80, numpy>=1.21.2)으로
 # 다운그레이드해 numpy>=2 메타 충돌 제거 → numpy<2 마지막 재핀. 재핀 직후 import 검증.
-# ultralytics 는 메이저 상한 핀 (실측 8.4.56). 메이저 변경 시 API 깨질 수 있어 silent drift 차단.
-RUN /opt/venv/bin/pip install --no-cache-dir "ultralytics<9" \
- && /opt/venv/bin/pip install --no-cache-dir "opencv-python<4.10" \
- && /opt/venv/bin/pip install --no-cache-dir --force-reinstall "numpy<2" \
- && /opt/venv/bin/python3 -c "import numpy, torch, ultralytics, cv2; assert numpy.__version__.startswith('1.'), numpy.__version__"
+# ultralytics 는 메이저 상한 핀 (실측 8.4.102). 메이저 변경 시 API 깨질 수 있어 silent drift 차단.
+# 재핀은 --force-reinstall 없이 — /usr/local 의 pip 소유 numpy 만 갈아끼우면 되고, force 는
+# 탐색이 apt 사본까지 내려가 그 파일을 지우려다 실패/손상시킬 수 있다.
+RUN pip install --break-system-packages --no-cache-dir "ultralytics<9" \
+ && pip install --break-system-packages --no-cache-dir "opencv-python<4.10" \
+ && pip install --break-system-packages --no-cache-dir "numpy<2" \
+ && python3 -c "import numpy, torch, ultralytics, cv2; assert numpy.__version__.startswith('1.'), numpy.__version__; assert '/usr/local/' in numpy.__file__, numpy.__file__"
 # 슬리밍: 추론에 불요한 항목 제거 — triton(torch.compile 전용) / C++ 헤더 / 정적 .a / pycache.
 # 경로의 python 버전은 base 이미지에서 동적으로 구함 (3.13 등으로 올라가도 슬리밍이 silent no-op 되지 않게).
 # import 회귀는 runtime smoke(build-all.sh)가 검증. (nvidia CUDA .so 런타임은 GPU 필수라 유지.)
-RUN PYVER="$(/opt/venv/bin/python3 -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')" \
- && SP="/opt/venv/lib/python${PYVER}/site-packages" \
- && /opt/venv/bin/pip uninstall -y triton 2>/dev/null || true \
+RUN PYVER="$(python3 -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')" \
+ && SP="/usr/local/lib/python${PYVER}/dist-packages" \
+ && pip uninstall --break-system-packages -y triton 2>/dev/null || true \
  && rm -rf "${SP}/torch/include" \
  && find "${SP}/nvidia" -type d -name include -prune -exec rm -rf {} + 2>/dev/null || true \
- && find /opt/venv -name '*.a' -delete 2>/dev/null || true \
- && find /opt/venv -type d -name __pycache__ -prune -exec rm -rf {} + 2>/dev/null || true
+ && find /usr/local/lib -name '*.a' -delete 2>/dev/null || true \
+ && find /usr/local/lib -type d -name __pycache__ -prune -exec rm -rf {} + 2>/dev/null || true
 
 # --- 소스 COPY: 여기부터 캐시가 무효화돼도 위 torch/pip 레이어는 보존된다. ---
 # od_msg 를 먼저 둔다 (object_detection 이 from od_msg.srv import — colcon 이 위상정렬).
@@ -77,7 +85,8 @@ RUN rosdep init 2>/dev/null || true \
  && rm -rf /var/lib/apt/lists/*
 
 # setup.bash 는 unset var(AMENT_TRACE_SETUP_FILES 등)을 참조하므로 source 동안 -u 해제.
-# venv 를 전역 PATH 에 올리지 않았으므로 여기 python3 = 시스템 python (shebang 동작 보존).
+# 콘솔스크립트 shebang = system python 이고 pip 패키지도 그 python 의 sys.path(/usr/local)에 있어
+# 런타임에 별도 경로 주입이 필요 없다.
 RUN set +u \
  && source "/opt/ros/${ROS_DISTRO}/setup.bash" \
  && colcon build --merge-install
@@ -112,9 +121,12 @@ RUN apt-get update \
       ros-${ROS_DISTRO}-rmw-cyclonedds-cpp \
  && rm -rf /var/lib/apt/lists/*
 
-COPY --from=builder /opt/venv   /opt/venv
-COPY --from=builder /ws/install /ws/install
-ENV PATH="/opt/venv/bin:${PATH}"
+# pip 설치본(/usr/local/lib/python3.X/dist-packages)과 콘솔스크립트(/usr/local/bin)를 통째 이관.
+# 버전 디렉토리를 하드코딩하지 않으려 /usr/local/lib 를 그대로 옮긴다(base 이미지의 해당 경로는
+# python3.X 빈 트리뿐이라 덮어쓸 것이 없다). /usr/local/bin 은 base PATH 에 이미 포함.
+COPY --from=builder /usr/local/lib /usr/local/lib
+COPY --from=builder /usr/local/bin /usr/local/bin
+COPY --from=builder /ws/install   /ws/install
 
 COPY containers/entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh

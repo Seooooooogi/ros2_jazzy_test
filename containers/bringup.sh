@@ -129,7 +129,7 @@ wait_build yolo-detection
 
 echo "[bringup] launching yolo node inside the dev container…"
 # docker exec = 비대화(non-interactive) 모드 → ~/.bashrc 자동 source 안 함. 그래서 dev bashrc 를
-# 직접 source(dev override 가 /root/.bashrc 로 mount). ROS + 오버레이 + venv PYTHONPATH 가 잡혀,
+# 직접 source(dev override 가 /root/.bashrc 로 mount). ROS + 오버레이가 잡혀,
 # 대화형 exec 이 받는 것과 같은 환경.
 docker exec -d yolo-detection bash -c 'source /root/.bashrc; exec ros2 run object_detection object_detection'
 
