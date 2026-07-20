@@ -1,0 +1,87 @@
+# 데모 venv 배포/복구용 의존 선언 — scripts/venv-demo/requirements.txt(LAB) 와 수동 동기.
+# 원천은 동일(컨테이너 Dockerfile 미러). 한쪽 갱신 시 다른 쪽 확인.
+# 갱신 절차: 이 파일 수정 → `uv lock` → uv.lock 커밋. 학생 머신은 setup.sh(--frozen) 전용.
+[project]
+name = "cobot-demo-venv"
+version = "1.0.0"
+requires-python = ">=3.12"
+dependencies = [
+    # torch — cu128 인덱스 (아래 tool.uv.sources 로 핀)
+    "torch==2.11.0",
+    "torchvision==0.26.0",
+    # requirements.txt 활성 줄
+    "ultralytics<9",
+    "opencv-python<4.10",
+    "langchain<2",
+    "langchain-openai<2",
+    "openai<3",
+    "pyaudio",
+    "sounddevice",
+    "scipy<1.18",
+    "python-dotenv",
+    "pymodbus<3.7",
+    "onnxruntime<2,>=1.10.0",
+    "tqdm<5,>=4.0",
+    "scikit-learn<2,>=1",
+    "requests<3,>=2.0",
+    "ai-edge-litert>=2.0.2,<3",
+    "typer",
+    "filetype",
+    "pi-heif",
+    "pillow-avif-plugin",
+    # pip 에선 --no-deps 가 필요했던 2종 — dependency-metadata 로 의존 선언 교체
+    "openwakeword==0.6.0",
+    "roboflow<2",
+    # numpy — 아래 override 로 <2 강제 (pip 의 '최후 재핀' 순서 함정 제거)
+    "numpy",
+]
+
+# openwakeword 0.6.0 은 tflite-runtime(py3.12 wheel 없음)을 선언 — 실제 런타임 의존으로 교체.
+# tflite_runtime import 호환은 setup.sh 의 shim 이 담당.
+[[tool.uv.dependency-metadata]]
+name = "openwakeword"
+version = "0.6.0"
+requires-dist = [
+    "onnxruntime>=1.10.0,<2",
+    "tqdm>=4.0,<5",
+    "scikit-learn>=1,<2",
+    "requests>=2.0,<3",
+    "ai-edge-litert>=2.0.2,<3",
+]
+
+# roboflow 기본 의존이 opencv-python-headless 를 끌어와 opencv-python 과 cv2/ 디렉토리 충돌
+# → headless 를 뺀 의존 선언으로 교체 (2026-07-20 실측: 이 목록으로 import roboflow 성공).
+[[tool.uv.dependency-metadata]]
+name = "roboflow"
+requires-dist = [
+    "certifi",
+    "idna",
+    "cycler",
+    "kiwisolver",
+    "matplotlib",
+    "numpy",
+    "pillow",
+    "python-dateutil",
+    "python-dotenv",
+    "requests",
+    "six",
+    "urllib3",
+    "tqdm",
+    "PyYAML",
+    "requests-toolbelt",
+    "filetype",
+]
+
+# ultralytics 등이 numpy>=2 를 요구해도 resolver 수준에서 <2 강제 — 설치 순서 무관.
+[tool.uv]
+override-dependencies = ["numpy<2"]
+
+# torch cu128 — torch/torchvision 만 이 인덱스에서 (explicit: 다른 패키지는 PyPI).
+[[tool.uv.index]]
+name = "pytorch-cu128"
+url = "https://download.pytorch.org/whl/cu128"
+explicit = true
+
+[tool.uv.sources]
+torch = { index = "pytorch-cu128" }
+torchvision = { index = "pytorch-cu128" }
