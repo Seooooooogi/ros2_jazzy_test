@@ -20,8 +20,8 @@ mkdir -p ~/cobot_ws/src ~/cobot_demo_ws/src
 cp -a ~/Downloads/cobot2 ~/cobot_ws/src/cobot2
 
 # 3-1) pick & place 실습 패키지는 별도 워크스페이스로 분리
+#      (mv 를 건너뛰면 정식 colcon 빌드에 딸려 들어가 동명 패키지와 충돌 — 필수)
 mv ~/cobot_ws/src/cobot2/pick_and_place_{text,voice} ~/cobot_demo_ws/src/
-rm -f ~/cobot_demo_ws/src/pick_and_place_*/COLCON_IGNORE
 
 # 3-2) voice OPENAI 키 배치 (setup-app.sh 빌드 전!) — voice_processing 노드는 자기 패키지의
 #      resource/.env 를 읽고 colcon 빌드에 내장한다. 빌드 전에 넣어야 한 번의 빌드로 반영된다.
