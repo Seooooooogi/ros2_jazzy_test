@@ -20,7 +20,7 @@
 #     이러면 egg-link/심링크가 /ws/src 를 가리켜 .py 수정이 노드 재실행만으로 즉시 반영된다.
 #     compose 없는 docker run 도 같은 명령.
 #   - 별도 이미지 태그(dev-builder) — 프로덕션 이미지 tag clobber 방지.
-#   - dev/bashrc 를 /root/.bashrc 로 mount → docker exec 셸이 ROS overlay+venv PYTHONPATH 자동 source.
+#   - dev/bashrc 를 /root/.bashrc 로 mount → docker exec 셸이 ROS overlay 자동 source.
 #     (entrypoint 는 PID1 전용이라 docker exec 로 띄운 셸엔 그 환경이 실리지 않는다.)
 #
 # network_mode host·GPU(yolo)·cyclonedds.xml mount 은 base 에서 상속.

@@ -9,10 +9,11 @@
 # 학생이 `docker run -it ... → 라이브러리 설치 → colcon build → docker commit` 으로 만든 이미지가
 # 자동 빌드본(build-all.sh)과 같은 import 환경인지 대조한다. GPU/카메라/모델 불요 — 모듈 import 만 확인.
 #
-# build-all.sh 의 smoke() 와 동일 로직: fresh 컨테이너(`docker run --rm`)에서 ROS + /ws/install overlay +
-# venv site-packages 를 직접 준비한 뒤 python import smoke 실행. 커밋 이미지엔 ROS overlay·venv 가 자동
-# 활성 안 되므로(인터랙티브 세션의 source/activate 는 commit 에 남지 않음) 여기서 매번 준비한다.
-# venv 를 PYTHONPATH 로 주입하므로 venv 가 PATH 에 있든(--change ENV PATH) 없든 견고하다.
+# build-all.sh 의 smoke() 와 동일 로직: fresh 컨테이너(`docker run --rm`)에서 ROS + /ws/install overlay 를
+# 직접 준비한 뒤 python import smoke 실행. 커밋 이미지엔 ROS overlay 가 자동 활성 안 되므로
+# (인터랙티브 세션의 source 는 commit 에 남지 않음) 여기서 매번 준비한다.
+# pip 패키지는 --break-system-packages 로 /usr/local/lib/python3.X/dist-packages(system python 기본
+# sys.path)에 깔리므로 경로 주입이 필요 없다 — docker commit 이 그 디렉토리를 그대로 담는다.
 #
 # torch.cuda.is_available() / 서비스 왕복 / od_msg 해시 일치 = 하드웨어 e2e(Gate 2) → 여기선 미검증.
 #
@@ -40,9 +41,6 @@ if docker run --rm "${IMAGE}" bash -c '
     set +u
     source "/opt/ros/${ROS_DISTRO}/setup.bash"
     [ -f /ws/install/setup.bash ] && source /ws/install/setup.bash
-    for sp in /opt/venv/lib/python*/site-packages; do
-        [ -d "$sp" ] && export PYTHONPATH="$sp${PYTHONPATH:+:$PYTHONPATH}" && break
-    done
     exec python3 -c "$0"
 ' "import torch, torchvision, ultralytics, cv2, numpy
 from od_msg.srv import SrvDepthPosition

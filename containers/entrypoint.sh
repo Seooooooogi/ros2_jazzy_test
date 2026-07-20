@@ -21,15 +21,8 @@ if [[ -f /ws/install/setup.bash ]]; then
 fi
 set -u
 
-# venv(/opt/venv)의 pip 패키지(torch/ultralytics 등)를 PYTHONPATH 에 노출.
-# colcon build 가 venv 생성보다 먼저 돌기 때문에, ament 콘솔 스크립트의 shebang(첫 줄 인터프리터 지정)이
-# 시스템 python(/usr/bin/python3)으로 고정됨. 이 python 은 venv 의 site-packages 를 못 봐서
-# `ros2 run` 으로 노드를 띄우면 ModuleNotFoundError(예: ultralytics) 발생. venv 의 python 은 시스템
-# python 의 symlink(같은 인터프리터·같은 버전)라, site-packages 경로만 얹어 주면 import 됨.
-for _venv_sp in /opt/venv/lib/python*/site-packages; do
-    [[ -d "${_venv_sp}" ]] || continue
-    export PYTHONPATH="${_venv_sp}${PYTHONPATH:+:${PYTHONPATH}}"
-    break
-done
+# pip 패키지(torch/ultralytics 등)는 --break-system-packages 로 system python 의
+# /usr/local/lib/python3.X/dist-packages 에 설치돼 있다. 이 경로는 기본 sys.path 라
+# ament 콘솔 스크립트(shebang = /usr/bin/python3)가 그대로 import 한다 → PYTHONPATH 주입 불요.
 
 exec "$@"
