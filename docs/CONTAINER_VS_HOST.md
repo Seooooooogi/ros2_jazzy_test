@@ -21,7 +21,7 @@
 
 | 축 | host 단독 (`application-shell`) | 분리 컨테이너 (`application-containers`) |
 |---|---|---|
-| application Python 위치 | **host venv 1곳** (`~/...venv`, `--system-site-packages`) | **이미지별 격리** (yolo / voice 각 `/opt/venv`) |
+| application Python 위치 | **host venv 1곳** (`~/...venv`, `--system-site-packages`) | **이미지별 격리** (이미지 안 system python `/usr/local/lib/.../dist-packages`) |
 | host 상태 | torch·langchain·openwakeword 로 **오염** | **apt-only 로 청결** (system Python + ROS bindings 만) |
 | 실행 단위 | host 프로세스 (`ros2 run ...`) | 컨테이너 서비스 (`docker compose up`) + host `robot_control` |
 | 단일 진실 소스 | `resources/host-python-deps.sh` | `containers/{yolo-detection,voice-processing}/Dockerfile` |

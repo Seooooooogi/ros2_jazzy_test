@@ -1054,3 +1054,32 @@
 **검증(2026-07-20, [문서] 정적)**: 패치 후 `py_compile` 전 파일 통과, 두 zip 트리에서 `48000` 잔존 0건, 재패키징 zip 에서 핵심 라인 실사(rate 16000 · resolve_input_device · langchain_core · audio_device.py 동봉). **live wakeword("Hello Rokey" confidence > 0.3)는 [실측] 게이트로 잔존.**
 
 **Reopen 조건**: 데모 번들이 host 처럼 wakeword 자체 캡처 구조로 재작성되면 MicController 경로 재검토.
+
+---
+
+### ADR-034: yolo 컨테이너 내부 venv 폐기 → `--break-system-packages` + system python (2026-07-20)
+
+**Status**: ADR-004(host venv) 의 논거를 컨테이너에 재사용하던 관행을 종료. 컨테이너 한정 — host 정책(ADR-008/027)은 불변.
+
+**Context**:
+- 컨테이너 안에 `/opt/venv`(`--system-site-packages`)를 두고 pip 을 그쪽으로만 설치해 왔다. 근거는 PEP 668 회피 + apt/ROS python 보호였다.
+- 재검토 결과 그 근거 대부분이 컨테이너에선 약하다. PEP 668 은 `--break-system-packages` 로도 해제되고, pip 은 apt 영역(`/usr/lib/python3/dist-packages`)이 아니라 `/usr/local/lib/python3.X/dist-packages` 에 설치되어 디렉토리가 이미 분리돼 있다(실측). 컨테이너 자체가 폐기 가능한 환경이라 "system python 보호"의 무게도 host 보다 훨씬 가볍다.
+- 반면 venv 는 비용을 만들고 있었다: 콘솔스크립트 shebang 이 system python 으로 굳어 `ros2 run` 이 venv 를 못 보는 문제 → `entrypoint.sh`/`dev/bashrc`/`build-all.sh::smoke`/`lab/verify.sh` **4곳이 각자 PYTHONPATH 주입 로직을 중복 보유**.
+
+**Decision**:
+- builder/runtime 모두 system python + `pip install --break-system-packages`. `python3-venv` apt 의존 제거, `ENV PATH=/opt/venv/bin` 제거.
+- **numpy 를 `--ignore-installed` 로 선행 설치**(핵심). apt 가 깐 numpy 는 pip RECORD 메타가 없어 pip 이 제거를 거부하고(`Cannot uninstall numpy 1.26.4, RECORD file not found. Hint: installed by debian`) **설치 전체가 실패**한다 — 뒤따르는 패키지가 numpy 버전 변경을 요구하는 순간 터진다. 선행 설치로 `/usr/local` 에 pip 소유 사본을 만들어 두면 이후 업/다운그레이드가 그 사본에서만 일어나고 apt 사본은 무손상(dpkg 정합 유지).
+- 마지막 numpy 재핀에서 **`--force-reinstall` 제거**. pip 소유 사본만 갈아끼우면 되고, force 는 탐색이 apt 사본까지 내려가 그 파일을 지우려다 실패/손상시킬 수 있다.
+- runtime COPY = `/usr/local/lib` + `/usr/local/bin`(base 이미지의 두 경로는 각각 빈 `python3.X` 트리와 빈 디렉토리라 덮어쓸 것이 없음, 실측). python 버전 디렉토리 하드코딩 회피.
+- PYTHONPATH 주입 로직 4곳 전부 삭제 — `/usr/local/...` 이 system python 기본 sys.path 라 불필요.
+- 노션 설치 매뉴얼 §17(수동 랩)도 동일 방식으로 갱신 — 자동 빌드본(§16)과 동일 환경이어야 `lab/verify.sh` 의 parity 검증이 성립.
+
+**Consequences**:
+- 중복 로직 4곳 제거 + shebang 우회 개념 자체가 소멸 → 랩에서 학생에게 설명할 것이 줄었다.
+- `--ignore-installed` 가 새 함정. apt 소유 python 패키지와 겹치는 의존이 추가로 생기면 같은 처리가 필요하다(numpy 외 후보: PyYAML/requests 등 — 현재 핀에서는 apt 버전이 요구조건을 만족해 미발생).
+- 격리 손실: 컨테이너 안 system python 이 오염되면 되돌리려면 이미지 재빌드. venv 시절의 `rm -rf /opt/venv` 복구는 사라졌다. 컨테이너가 일회성이라 수용.
+- host 는 무관 — 데모 venv(LAB, 커리큘럼 자산)와 host voice system pip 정책 모두 불변.
+
+**검증(2026-07-20)**: [실측] ① 베이스 이미지에서 실패 모드 재현 — `pip install --break-system-packages "numpy>=2"` → `Cannot uninstall ... RECORD file not found` 로 중단, numpy 1.26.4 유지. ② `--ignore-installed` 경로 성립 — numpy 2.5.1 이 `/usr/local/...` 에 설치, 이어 `pip install "numpy<2"` 가 force 없이 1.26.4 로 다운그레이드, `dpkg -V python3-numpy` 무결, `import rclpy` OK. ③ 전체 이미지 빌드 + `build-all.sh` import smoke.
+
+**Reopen 조건**: 컨테이너가 여러 python 앱을 동시에 담아 의존이 충돌하거나, apt 소유 패키지와의 `--ignore-installed` 목록이 관리 부담이 될 만큼 늘면 venv 재도입 검토.

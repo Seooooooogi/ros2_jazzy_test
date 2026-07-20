@@ -1,7 +1,7 @@
 # Docker YOLO 컨테이너 직접 구축 실습 (Hands-on Lab) — 설계 (Design Spec)
 
 - **날짜**: 2026-07-13
-- **상태**: Draft (사용자 검토 대기)
+- **상태**: Draft (사용자 검토 대기) — **본문의 `/opt/venv` 절차는 2026-07-20 ADR-034 로 superseded**(컨테이너 내부 venv 폐기 → `pip --break-system-packages`). 아래 venv 서술은 당시 스냅샷으로 보존. 현행 절차는 `containers/yolo-detection/Dockerfile` 과 설치 매뉴얼 §17.
 - **관련**: `containers/yolo-detection/Dockerfile` (정답지), `containers/build-all.sh` (자동 빌드·smoke), `resources/dds-tuning.sh` (cyclonedds — 유지), `resources/config.sh` (`ROS_DISTRO`/`YOLO_WS`/`CUDA_VERSION` 단일 소스), `docs/TRAINEE_PRACTICE_PATH.md`, ADR-016/ADR-020 (DDS/RMW)
 
 ---

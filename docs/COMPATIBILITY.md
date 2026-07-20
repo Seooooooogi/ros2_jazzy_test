@@ -126,7 +126,7 @@
 ## Phase 4 application Python 의존 (실측 빌드 2026-05-30, build gate)
 
 두 애플리케이션 스택의 실측 버전. **yolo 는 컨테이너 안**, **voice 는 host system Python** — voice 는 마이크 하드웨어 종속 때문에 컨테이너를 폐기하고 host 직접 실행으로 이관했다 (ADR-027, 2026-07-08).
-yolo 빌드 검증 = `containers/build-all.sh` (builder 스테이지 = `:dev-builder` 이미지 빌드 + 컨테이너 내부 import smoke). builder 엔 runtime entrypoint 가 없어 smoke 는 ROS + overlay + venv PYTHONPATH 를 명시 source 후 import. 메이저 상한 핀은 Dockerfile 에 명시 (silent major drift 차단).
+yolo 빌드 검증 = `containers/build-all.sh` (builder 스테이지 = `:dev-builder` 이미지 빌드 + 컨테이너 내부 import smoke). builder 엔 runtime entrypoint 가 없어 smoke 는 ROS + overlay 를 명시 source 후 import(pip 패키지는 system python 기본 sys.path 라 경로 주입 불요, ADR-034). 메이저 상한 핀은 Dockerfile 에 명시 (silent major drift 차단).
 voice 설치 검증 = `resources/voice-host-install.sh` 마지막의 `Model(.tflite)` 인스턴스화 + `predict` 1회 (import 만으론 모델 누락을 못 잡는다).
 
 ### yolo-detection (base `ros:jazzy-ros-base-noble`, Python 3.12)
@@ -135,9 +135,9 @@ voice 설치 검증 = `resources/voice-host-install.sh` 마지막의 `Model(.tfl
 |--------|----------|---------------|------|
 | torch | 2.11.0+cu128 | cu128 index | CUDA 런타임 자체 번들 → host CUDA toolkit 불요 |
 | torchvision | 0.26.0+cu128 | cu128 index | |
-| ultralytics | 8.4.56 | `<9` | 메이저 상한 |
+| ultralytics | 8.4.102 | `<9` | 메이저 상한 (2026-07-20 재빌드 실측 — 이전 8.4.56) |
 | opencv-python | 4.9.0.80 | `<4.10` | 4.10+ 은 numpy>=2 메타 요구 → numpy<2 와 충돌. `<4.10` 으로 회피 (위 충돌표 1행 해소) |
-| numpy | 1.26.4 | `<2` (마지막 재핀) | ultralytics 호환 |
+| numpy | 1.26.4 | `<2` (선행 `--ignore-installed` + 마지막 재핀) | ultralytics 호환. apt numpy 는 pip RECORD 가 없어 제거 불가 → pip 소유 사본을 먼저 만들고 그 사본만 재핀 (ADR-034) |
 | polars | 1.41.2 | (ultralytics 의존) | |
 
 > 카메라는 **host 소유**(ADR-015, 2026-06-02): 이 컨테이너엔 realsense2_camera 드라이버를 두지 않는다. apt 런타임 ROS 의존은 `cv-bridge`/`sensor-msgs` 만(이미지 슬림화). host 가 `/camera/camera/*` 를 publish 하고 `object_detection` 노드는 subscribe — host 카메라 패키지는 위 시스템 표의 `ros-jazzy-realsense2-camera`(4.57.7) 행.
