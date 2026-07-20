@@ -193,6 +193,17 @@ voice 설치 검증 = `resources/voice-host-install.sh` 마지막의 `Model(.tfl
 
 ---
 
+## 데모 venv — uv 배포/복구 경로 (2026-07-20)
+
+학생 배포/복구용 원커맨드 경로(`scripts/venv-demo/uv/setup.sh`)의 도구 핀. 스택 핀 자체는 위 Phase 4 절과 `scripts/venv-demo/requirements.txt` 의 검증본을 그대로 미러(원천 동일). 설계·실측 근거 = `docs/specs/2026-07-20-venv-uv-student-setup-design.md`.
+
+| Layer | Version | Source citation | Notes |
+|-------|---------|-----------------|-------|
+| uv | 0.11.2 | `scripts/venv-demo/uv/setup.sh` (`UV_VERSION`, astral.sh 버전 핀 installer) | `dependency-metadata`(openwakeword·roboflow 의존 교체) + `override-dependencies`(numpy<2) + explicit index(torch cu128) 동작을 실측한 버전. 학생 머신은 `uv sync --frozen` 전용 |
+| 스택 lock | `scripts/venv-demo/uv/uv.lock` | `uv lock` 산출물 (갱신: pyproject 수정 → `uv lock` → 커밋) | requirements.txt(LAB)와 수동 동기 — 한쪽 갱신 시 다른 쪽 확인 |
+
+---
+
 ## 실측 vs 스크립트 의도 — drift 패턴 (`apt upgrade -y` 부작용)
 
 노션 검증본의 핵심 발견: 스크립트가 명시한 핀 버전을 `sudo apt upgrade -y` 가 풀어버려 실제 설치 버전이 의도와 다름.

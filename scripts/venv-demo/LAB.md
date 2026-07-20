@@ -332,6 +332,7 @@ print('wakeword gate OK — Model(.tflite) load + predict')
 > 이미 A4 를 한 번 해 본 사람이 venv 를 다시 만들 때만. 처음이면 위 A4 를 한 줄씩(학습).
 > 완전 원샷은 불가 — `--no-deps`(openwakeword/roboflow)·별도 index(torch)·numpy 최후 재핀은 `-r` 로 못 묶는다.
 > 그래서 **`-r` 일괄 1콜 + 특수 3콜 + shim/모델 블록**으로 정리한다. 각 단계 의미는 위 A4 참조.
+> 완전 원커맨드가 필요하면(복구/배포) → `bash ~/ros2_jazzy_test/scripts/venv-demo/uv/setup.sh` — lock 기반 동일 환경·순서 무관. 학습용이 아니라 재구성용.
 
 ```bash
 # venv 활성화 상태에서(A3 완료). 실행 순서 고정 — numpy<2 재핀은 반드시 최후.
