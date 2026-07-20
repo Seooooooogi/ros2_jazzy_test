@@ -6,6 +6,32 @@
 
 ## 다음 세션 — 무엇보다 먼저
 
+**(2026-07-20 세션 2 — venv LAB 2차 정리 + 배포 zip 마이크 16kHz 선반영, push 완료)**
+- **LAB 전면 개편**(`scripts/venv-demo/LAB.md`, §1-10): Notion 설치 매뉴얼 양식·사족 제거. `ppv_` rename 폐기(ADR-032), dsr 2패키지(`dsr_common2`/`dsr_msgs2`)는 **ROKEY-SPARK fork 직접 `git clone --depth 1`**(§2 — 커리큘럼상 venv 가 host 설치보다 선행 가능, fork = 호환 패치 반영본 실사됨), od_msg 는 cobot2 소스에서 복사. 실행 터미널은 `~/cobot_ws/install` source 제거(§8-9 터미널 1 bringup 만 host 필요). OPENAI 키 = `resource/.env` 빌드 내장(셸 export 폐기).
+- **코드 수정 단계 폐지 원칙**(ADR-033): 학생이 sed/diff 로 소스를 고치는 절차 금지 — 배포본 선반영. `~/ros2_jazzy_test/cobot2.zip`·`corecode.zip`(미추적) 마이크 코드 **16kHz 하드코딩 + `resolve_input_device()`** + langchain_core import + `audio_device.py` 동봉으로 재패키징(py_compile 전건·`48000` 잔존 0건·zip 실사 완료). LAB §5 = 장치 확인만(`VOICE_MIC_DEVICE` override 안내).
+- **⚠ [실측] 머신**: 기배치 `~/cobot_ws/src/cobot2` 는 구본 — **새 cobot2.zip 으로 재배치 필요**(README 3-1 은 mv 만, COLCON_IGNORE 절차 소멸).
+- **[실측] 게이트(미완)**: ① LAB §7 `interface imports OK`(dsr 2패키지 단독 빌드 검증) ② live wakeword "Hello Rokey" confidence>0.3(§9, 16kHz 선반영본 첫 실측) ③ 아래 uv setup.sh 3건(불변).
+
+**(2026-07-20 세션 — 데모 venv 학생 배포/복구용 uv 경로 구현 완료, 타깃 실측만 남음)**
+- **[실측] 최우선**: `bash ~/ros2_jazzy_test/scripts/venv-demo/uv/setup.sh` 전체 실행 + 배포 게이트 3건 — ① `readlink -f ~/cobot_demo_ws/.venv/bin/python` = system 3.12(uv-managed 경로 아님) + 재실행 멱등 ② torch `2.11.0+cu128` + `cuda.is_available()==True` ③ ROS 소스 후 venv python 에서 `import rclpy`. 절차 상세 = `docs/plans/2026-07-20-venv-uv-student-setup.md` Task 4. **3건 통과 전 학생 배포 금지**(spec 게이트) — 통과 시 spec(`docs/specs/2026-07-20-venv-uv-student-setup-design.md`) 게이트 절에 일자 기록.
+- 배경: 2026-07-10 "uv 불가" 기각 근거 3건이 실측으로 무효화(`dependency-metadata` 의존 교체 + `override-dependencies` numpy<2 + explicit index cu128). LAB one-by-one 은 커리큘럼 자산으로 불변, uv 는 복구/배포 병행 경로. 커밋 4건(8e0e9f5~5f0ae3f) 완료.
+
+**(2026-07-16 세션 — Notion `sonmiran.oopy.io` Isaac Sim 강의 백업 = installer 무관 side-task, 사실상 완료) — git repo 코드/문서 무변경. installer forward-looking 항목 전부 불변.**
+- **작업**: 소스 `https://sonmiran.oopy.io/`(Isaac Sim 로보틱스 강의, ~20p, 2295 block) → 타깃 `teamsparkx › … › 8기 강의자료 백업`(page `39e563918e598029aa8cea786188cda2`). 요구 = **원본 양식과 완전히 동일**. 첨부는 타깃 재업로드로 소스 링크 절단.
+- **완료**: root 본문 + 인라인 DB(19행, 순서보존) + nested 서브페이지 19개 + **이미지 251개 전부 타깃 S3(`4ae7593c…`) 재업로드**. 검증 = 페이지별 write remaining=0 게이트 + spot-check(nested-142 21img·da1 line-14 클린).
+- **⚠ 함정(재사용)**: (1) `create-attachment` 업로드는 **1시간 내 미첨부 시 만료** → per-page atomic(업로드↔write 수초내). (2) workflow upload agent 는 StructuredOutput 미호출 ~40% → 최종 5페이지(115img)는 **메인루프 업로드**(100% 안정)로 전환. (3) 세션한도는 subagent spawn 만 차단·메인루프 MCP 는 동작. (4) 이미지 fresh URL 재해석 = `www.notion.so/image` proxy 302(`resolve_r5.py`, curl). (5) 산출물 = `/tmp/claude-1000/…/scratchpad/sonmiran/`(세션 스크래치, 비영구).
+- **GIF 삽입(완료·종료)**: 사용자가 페이지 `9c5cf6499f9d44e7bcf1c9f559d1af75`("STA—Pick & Place + ROS 색상 감지") 터미널2 아래에 수동 드래그 완료 — 타깃 S3(`4ae7593c…`) 서빙, "…미포함" 노트 제거. 삽입본 = 14MB 압축 `peek_hi.gif`(700px/10fps). **사용자가 화질 tradeoff 고지 후 "압축본 유지"로 명시 종료**(원본 1776×962/106MB 미교체 = 사용자 선택). 원본은 API 자동삽입 불가(URL-import 50MiB 캡·public repo 금지)라 수동 드래그만 가능했고, 사용자가 압축본으로 확정. `~/peek_original_1776x962_106MB.gif`(홈 복사본) = rm 가능.
+- **상태**: **완료·종료. 후속 없음.** GIF 화질 1점만 압축(사용자 수용), 그 외 구조·이미지·DB뷰 전부 원본 정합.
+- **DB 뷰 정합(완료)**: 타깃 인라인 DB 뷰(`view://7bfabc6c-51be-44dc-97a0-7f53c17166c6`)를 소스 "강의안" 뷰와 동일하게 = 이름 "강의안", 표시 컬럼 `차시/이름/status` 순, 나머지 4개(주제/순서/환경/키워드) 숨김. 소스 그라운드-트루스 = `collection_views.json`(강의안 view, 차시/이름/status True).
+- **상태**: 산출물 = 타깃 Notion 워크스페이스만(git repo·설치 스크립트 무영향).
+
+**(2026-07-14 세션 — Notion 강의자료 마이그레이션 = installer 무관 side-task, 완료) — git repo 코드/문서 무변경. 아래 installer forward-looking 항목 전부 불변.**
+- **작업**: 소스 Notion `Doosan-Rokey-5기`(indecisive-freedom) 강의 대시보드 → 타깃 `teamsparkx › 운영 2팀 › 수업별 강의자료 › 지능1 › 지능1 강의자료`(page `39d563918e5980ec9950fb5148606030`) 전면 이관. 스코프 = 강의 콘텐츠 전용(root 본문 + DAY 1~10 강의안 40 서브페이지).
+- **첨부 처리**: 176개(이미지/zip/pdf 등)를 타깃 워크스페이스로 다운로드→재업로드 → **소스 링크 절단**(`prod-files-secure … 4ae7593c…` 서빙 확인). `.sh` 확장자 미지원 → `.txt` content 로 우회.
+- **DB 재생성**(사용자 추가 요청): 일정 타임라인(**148행**, data_source `7aa9a6b2-3ee6-425e-b4c1-42de9866229e`) + Daily 일정/과제(1행, `a2dc64b2-4fa8-4b04-bb21-4bc406601eef`) = 실제 Notion DB 로 재생성. root 최하단 child DB 로 배치(move-pages 는 parent 만 변경·페이지 내 위치 이동 불가 → "# 일정" 섹션엔 물리 배치 불가, note 로 하단 참조 안내). **148행 = create-pages 응답 배열 카운트(50+50+48) + batch 재구성 정합(order-preserving)으로 확정**. (구 타임라인 DB 는 workflow agent 자가보고 카운트가 검증 불가(145 vs 147)라 trash 후 메인루프로 재삽입.)
+- **⚠ 함정 메모(재사용 시)**: (1) Notion 비공식 API 는 urllib 403 → curl. (2) `loadPageChunk` 는 깊은 nested block 을 누락 → container 를 pageId 로 재fetch 해 closure 까지 복구(이번에 269 block·code 370·image 58 복구). (3) `queryCollection` blockIds = `result.reducerResults.collection_group_results.blockIds`. (4) `query-data-sources`/`syncRecordValues` = Business plan/Cloudflare 로 막힘. (5) datetime naive 입력 = 워크스페이스 TZ(KST) 해석 후 UTC 저장. (6) 스크립트·산출물 = `/tmp/claude-1000/…/scratchpad/rokey5/`(세션 스크래치, 비영구).
+- **상태**: **완료. 후속 없음.** 산출물 = 타깃 Notion 워크스페이스만(git repo·설치 스크립트 무영향).
+
 **(2026-07-10 [문서] 세션 — 인스톨러 디커플링 + ADR-027 잔재 문서 정리) — 코드 커밋·push 완료(`966a78b`, origin/feat 동기). 문서 정리는 uncommitted(커밋 미요청). main 미머지.**
 - **인스톨러 디커플링(`966a78b` = 현 HEAD, ADR-028+029, 이미 push)**: ① OPENAI 키 셋업 단계 **완전 폐기** — `resources/openai-key-setup.sh` 삭제, `.env` 를 레포 밖 **`~/.config/cobot2/.env`**(`COBOT2_ENV` = config.sh 단일소스, XDG 존중)로 이관, 사용자가 수동 생성(인스톨러 자동생성 없음). `bringup.sh` 가 `${COBOT2_ENV}` 로드(없으면 비-fatal 경고). ② corecode **git 제거**(29파일) → 사용자가 corecode.zip 을 `~` 에 풀어 `~/corecode` 배치, `install.sh` step 10 = `corecode-verify.sh`(verify+안내+exit, `obtain_cobot2` 미러). `corecode.zip`(untracked, 재생성본 = fix 반영·39파일) = **배포 산출물, 유지**. setup-app workspace 스텝 +7→+6.
 - **[실측] 검증 대기**: 클린설치로 (a) `~/.config/cobot2/.env` 미생성 시 bringup 비-fatal 경고, (b) `~/corecode` 미배치 시 step 10 안내+exit·배치 시 통과(멱등), (c) host voice 노드가 `${COBOT2_ENV}` 에서 키 로드 e2e.
