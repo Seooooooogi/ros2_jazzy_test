@@ -22,7 +22,7 @@ uv 로도 안 되는 것(도구 무관): tflite shim 생성, oww 모델 복사+T
 
 ## 결정
 
-- LAB.md one-by-one(학습)과 A4-fast 는 불변. **병행 경로**로 `scripts/venv-demo/uv/` 신설.
+- LAB.md one-by-one(학습)과 빠른 경로(§4 하단 blockquote, 구 A4-fast)는 불변. **병행 경로**로 `scripts/venv-demo/uv/` 신설.
 - 산출 venv 는 LAB 와 동일 사양: `~/cobot_demo_ws/.venv`, `--system-site-packages`, system python 3.12 기반.
 - 접근 대안 비교: bash+pip 자동화(A안)는 범위 핀이라 학생별 설치 시점에 transitive drift → 배포용 재현성 미달로 기각. `uv pip compile` lock 배포(C안)는 `--emit-index-url` 이 cu128 인덱스를 못 실어(실측) 기각.
 
@@ -38,7 +38,7 @@ scripts/venv-demo/uv/
 └── setup.sh         # 학생이 실행하는 유일한 명령
 ```
 
-LAB.md 는 A4-fast 절에 포인터 1줄만 추가: 복구/배포용 원커맨드 = `bash uv/setup.sh` (학습용 아님).
+LAB.md 는 §4 하단 빠른 경로 blockquote 에 포인터 1줄만 추가(구 A4-fast 절): 복구/배포용 원커맨드 = `bash uv/setup.sh` (학습용 아님).
 
 ## setup.sh 동작
 
@@ -48,8 +48,8 @@ LAB.md 는 A4-fast 절에 포인터 1줄만 추가: 복구/배포용 원커맨�
 2. `[2/6]` apt 헤더 — `portaudio19-dev libsndfile1 python3.12-venv` (기설치 시 skip).
 3. `[3/6]` venv — `uv venv --python /usr/bin/python3.12 --system-site-packages ~/cobot_demo_ws/.venv` (존재 시 재사용).
 4. `[4/6]` `uv sync --frozen --active` — venv 가 프로젝트 디렉토리 밖(`~/cobot_demo_ws/.venv`)이므로 VIRTUAL_ENV 설정 + `--active` 로 대상 지정, lock 그대로 전체 스택 설치.
-5. `[5/6]` post-install — tflite_runtime shim 생성 + `resources/oww_models/` → openwakeword 설치 경로 복사 + TFL3 매직바이트 검증 (LAB A4 (5) 와 동일 내용, 기존재 시 skip).
-6. `[6/6]` self-check — LAB A4 검증 블록과 동일 import 세트(numpy 1.x assert, cv2, torch, openwakeword, tflite_runtime shim, roboflow, pymodbus 등).
+5. `[5/6]` post-install — tflite_runtime shim 생성 + `resources/oww_models/` → openwakeword 설치 경로 복사 + TFL3 매직바이트 검증 (LAB §4 7)·8) 과 동일 내용, 기존재 시 skip).
+6. `[6/6]` self-check — LAB §4 "검증 1" 과 동일 import 세트(numpy 1.x assert, cv2, torch, openwakeword, tflite_runtime shim, roboflow, pymodbus 등).
 
 에러 처리: 단계 실패 시 `[FAIL] [n/6] <이유>` 출력 후 즉시 중단. 재실행하면 완료 단계는 자연 skip.
 
@@ -66,4 +66,4 @@ LAB.md 는 A4-fast 절에 포인터 1줄만 추가: 복구/배포용 원커맨�
 
 ## Scope 제외
 
-A2(ws 구성·voice 번들 rename·마이크 fix), LAB Part B/C(실행·teardown), corecode/cobot2 소스 배치 — 기존 절차 그대로.
+uv 경로가 대체하는 것은 LAB §3(venv)+§4(의존성)뿐. §1-2(점검·인터페이스 복사), §5(마이크 확인)·§6(에셋·키), §7-10(빌드·실행·teardown), corecode/cobot2 소스 배치는 uv 와 무관 — LAB 절차를 따른다. (구 voice 번들 rename 은 ADR-032 로 폐기.)

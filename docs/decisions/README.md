@@ -951,6 +951,8 @@
 
 ### ADR-030: 모놀리식 실습 패키지를 `~/cobot_demo_ws` 로 분리 (COLCON_IGNORE 의존 폐기) (2026-07-10)
 
+**Status (2026-07-20, 신규 zip 실측)**: 배포본이 `COLCON_IGNORE` 를 더 이상 동봉하지 않음 — README 3-1 은 `mv` 한 줄만 남고 `rm COLCON_IGNORE` 절차 소멸. 단 두 패키지는 여전히 zip 의 `cobot2/` 안에 포함되므로(Reopen 조건 미충족 — ADR 유지) 배치 시 `mv` 가 필수: 건너뛰면 정식 빌드에 노출된다는 본 ADR 의 Context 가 그대로 유효. rename 관련 항목은 ADR-032 참조.
+
 **Context**:
 - `pick_and_place_text` / `pick_and_place_voice` 는 컨테이너화 이전의 모놀리식 원본. 정식 실행 경로가 아니라 "컨테이너 있고 없고"를 대비시키는 교육 아티팩트(`scripts/venv-demo/LAB.md`).
 - 지금까지 두 패키지는 `~/cobot_ws/src/cobot2/` 안에 있고 `COLCON_IGNORE` 파일로만 host 빌드에서 빠졌다.
@@ -966,7 +968,7 @@
 **Consequences**:
 - teardown 이 `rm -rf ~/cobot_demo_ws` 한 줄. rename(`ppv_*`) · import 패치 · langchain 패치 · MicController/stt 수정이 전부 그 안이라 함께 사라진다. 기존의 "rename 역수행 + COLCON_IGNORE 재생성 + git checkout" 원복 절차 폐기.
 - 재실습에는 원본 사본(`~/Downloads/cobot2`)이 필요하다 — teardown 이 소스까지 지우므로.
-- 실행 시에는 여전히 `~/cobot_ws/install` overlay 를 함께 source 한다(DSR + od_msg). 따라서 `robot_control` 등 python import 네임스페이스 충돌은 그대로 존재 → `ppv_*` rename 단계는 유지.
+- 실행 시에는 여전히 `~/cobot_ws/install` overlay 를 함께 source 한다(DSR + od_msg). 따라서 `robot_control` 등 python import 네임스페이스 충돌은 그대로 존재 → `ppv_*` rename 단계는 유지. *(이 항목은 ADR-032 로 superseded — 데모 ws 가 인터페이스 패키지를 자체 빌드해 overlay source 자체를 제거, rename 폐기.)*
 - `resources/colcon-build.sh` 의 `COLCON_IGNORE` 전제 주석 갱신. `--packages-skip object_detection` 은 불변.
 - `docs/specs/2026-06-26-venv-pickplace-demo-design.md` 의 §4 레이아웃은 superseded(문서 상단에 표기).
 
@@ -999,3 +1001,56 @@
 **검증(2026-07-16 실측)**: flat 이동 + `colcon build --packages-select voice_processing` exit 0, install 트리에 wakeword `.tflite` + `.env` 반영. `unset VOICE_WS` 후 config.sh source → `VOICE_WS=.../voice_processing`, wakeword 경로 실파일 해석 OK.
 
 **Reopen 조건**: voice 가 다시 컨테이너화되면(ADR-027 역전) grouping 디렉토리 재도입 검토.
+
+---
+
+### ADR-032: 데모 ws 가 인터페이스 패키지를 자체 빌드 — `~/cobot_ws` overlay 의존 + `ppv_` rename 폐기 (2026-07-20)
+
+**Status**: ADR-030 Consequences 중 "overlay source 유지 → `ppv_*` rename 단계 유지" 항목을 supersede. ADR-030 의 워크스페이스 분리 결정 자체는 불변.
+
+**Status 갱신 (2026-07-20 후속)**: dsr 2패키지 소스 취득을 `~/cobot_ws/src/doosan-robot2` 복사 → **ROKEY-SPARK fork 직접 `git clone --depth 1`** 로 변경(LAB §2). 이유 = 커리큘럼 순서상 venv 실습이 host 설치(setup-app.sh)보다 먼저일 수 있어 정식 ws 사본을 전제할 수 없음. 아래 Decision 의 "fresh clone 금지(패치 소실)" 는 fork 실사로 해소 — fork 가 두 호환 패치 반영본임을 확인(`SetSingularHandlingForce` 4건·미패치형 0건, `_srv_name_prefix = 'dsr_controller2/'`). od_msg 는 cobot2 소스 배치본에서 복사(빌드 불요, 순서 무관).
+
+**Context**:
+- venv 데모 노드가 정식 ws 에서 실제로 쓰는 것은 3개 패키지뿐 — `dsr_common2`(`DR_init`/`DSR_ROBOT2`), `dsr_msgs2`(DSR_ROBOT2 transitive), `od_msg`(`SrvDepthPosition`). import 실사: `robot_control.py:8,10,38` / `detection.py:7`.
+- 이 3개 때문에 실행 터미널마다 `~/cobot_ws/install/setup.bash` 전체를 source → `robot_control`·`voice_processing`·`object_detection` 동명 python 패키지가 딸려와 충돌 → `ppv_` rename 절차(구 LAB A2: mv 3 + import/setup.py sed 8 + 검증)가 존재했다.
+- 데모 ws 는 teardown 이 `rm -rf ~/cobot_demo_ws` 한 줄인 일회성 학습 공간 — rename 으로 지킬 영구 자산이 없고, 절차만 길어진다.
+
+**Decision**:
+- LAB 복사 단계 신설(현행 §2): `~/cobot_ws/src/doosan-robot2/{dsr_common2,dsr_msgs2}` + `~/cobot_ws/src/cobot2/yolo_container/od_msg` 를 `~/cobot_demo_ws/src/` 로 복사, colcon build 단계(현행 §7)가 함께 빌드(2→5 패키지).
+- 복사 원본 = `setup-app.sh` 가 clone + 호환 패치(DSR_ROBOT2.py)를 끝낸 사본. fresh clone 금지 — 패치 소실.
+- 실행 터미널(venv 노드 5곳)과 A5 검증에서 `source ~/cobot_ws/install/setup.bash` 제거 — underlay 는 `/opt/ros/jazzy` 만. 터미널 1(bringup)은 정식 ws 그대로.
+- `ppv_` rename 절차 전체 폐기(디렉토리 mv · import sed 6줄 · setup.py sed · rename 검증). 마이크 fix 경로도 원명 `voice_processing/` 복귀.
+
+**Consequences**:
+- LAB 단축: rename 4단계 삭제 vs 복사 1단계 추가. 비교표의 학습 포인트는 "동명 패키지 rename" → "인터페이스 패키지 사본 빌드"(컨테이너 FS 격리와 대비)로 교체.
+- 같은 `.msg`/`.srv` 소스의 이중 빌드 — 타입 정의 동일이라 정식 ws 에뮬레이터와의 DDS 상호운용 문제 없음. doosan-robot2 fork 갱신 시 데모 사본과 drift 가능하나, 재실습 = teardown 후 재복사라 자연 해소.
+- `dsr_msgs2` C++ 타입 생성으로 A5 첫 빌드가 수 분 증가.
+- `dsr_common2` 단독 빌드 근거(fork 소스 실사): CMakeLists 는 `ament_cmake` 만 find_package — package.xml 의 `ros_gz` build_depend 는 CMake 미사용 선언. DSR_ROBOT2 import closure = 동일 디렉토리 모듈(DR_common2/DRFC/DR_init) + dsr_msgs2 + system ROS.
+- 역사 문서(2026-06-26 venv-demo spec/plan, ADR-030 본문)의 `ppv_` 서술은 과거 기록으로 보존.
+
+**검증**: [문서] 정적 — ROKEY-SPARK fork 의 `dsr_common2/CMakeLists.txt`·`imp/DSR_ROBOT2.py` import 실사(위 근거). [실측] 게이트(2026-07-20 기준 미완): LAB 빌드 검증(현행 §7)의 `python3 -c "import DR_init; from DSR_ROBOT2 import movej; from od_msg.srv import SrvDepthPosition"` → `interface imports OK`. 실패 시 에러의 모듈명이 가리키는 패키지를 복사 단계(현행 §2) 방식으로 추가 복사.
+
+**Reopen 조건**: DSR python API 가 `dsr_common2`/`dsr_msgs2` 밖 패키지를 import 하도록 바뀌거나, 데모가 정식 ws 의 다른 패키지를 쓰게 되면 복사 목록 재검토.
+
+---
+
+### ADR-033: 실습 코드 수정은 배포본(zip)에 선반영 — LAB 의 코드 편집 단계 폐지 (2026-07-20)
+
+**Context**:
+- venv LAB 이 학생에게 소스 수정(langchain import 교체, 마이크 16kHz 전환, wakeword resample 제거)을 sed/diff 로 시키고 있었다 — 실수 여지가 크고 절차가 길다.
+- 학습 목표는 환경 구성(의존성 핀·모델·키)을 손으로 경험하는 것이지 코드 편집이 아니다 — 사용자 원칙 확정(2026-07-20): **코드 수정은 배포본에 선반영, LAB 은 명령어(환경 구성·검증)만**.
+
+**Decision** — `cobot2.zip`/`corecode.zip`(레포 루트, git 미추적) 마이크 관련 코드 전부 16kHz 하드코딩:
+- 데모 번들 `pick_and_place_voice`: `MicController`(rate 16000 + `input_device_index=resolve_input_device()`), `stt`(`device=resolve_input_device()`), `wakeup_word`(48k→16k resample 줄 제거 — 16kHz 네이티브 입력에 남기면 1/3 압축 왜곡), `get_keyword`(MicConfig `rate=16000`, `langchain_core.prompts` import), `audio_device.py` 동봉.
+- host `voice_processing`: `MicController` rate 16000 (wakeup/stt 가 자체 캡처라 미사용 경로지만 일관성).
+- `corecode/VoiceProcessing`: `MicController` rate 16000, `wakeup_word` resample 제거, `mic_test` RATE 16000 (STT 는 기존 16kHz).
+- 장치 **인덱스**는 하드코딩하지 않는다 — `resolve_input_device()` 자동탐색 + `VOICE_MIC_DEVICE` env override(하드웨어 의존 값).
+- LAB: langchain·마이크 코드 편집 절 삭제 → "§5 마이크 장치 확인"(open/read sanity + override 안내)으로 대체, 이후 절 §6-10 renumber.
+
+**Consequences**:
+- zip 이 코드의 진실 원천 — zip 은 git 미추적이라 이 ADR 이 변경 기록. 이 머신의 기배치 `~/cobot_ws/src/cobot2` 사본은 zip 과 달라짐(다음 재배치 시 해소).
+- 데모 번들과 host 패키지의 마이크 처리 방식이 정합(둘 다 16kHz 네이티브 + resolve). 컨테이너 실습에서 같은 코드를 옮겨 검증하는 커리큘럼 흐름 유지.
+
+**검증(2026-07-20, [문서] 정적)**: 패치 후 `py_compile` 전 파일 통과, 두 zip 트리에서 `48000` 잔존 0건, 재패키징 zip 에서 핵심 라인 실사(rate 16000 · resolve_input_device · langchain_core · audio_device.py 동봉). **live wakeword("Hello Rokey" confidence > 0.3)는 [실측] 게이트로 잔존.**
+
+**Reopen 조건**: 데모 번들이 host 처럼 wakeword 자체 캡처 구조로 재작성되면 MicController 경로 재검토.
