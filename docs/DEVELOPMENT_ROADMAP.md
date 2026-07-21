@@ -204,6 +204,7 @@ ROS2 Humble installer → ROS2 Jazzy installer 마이그레이션. 1–4주, sol
   - 실행 전제: 셸에 config.sh + `/opt/ros/jazzy` + `~/cobot2_ws/install` overlay 3개 source(`activate.sh` 는 overlay 미source). `containers:=true` 는 이미지 빌드·`.env`·`cyclonedds.xml` 렌더 선행 — 미빌드 점검은 `containers:=false`.
   - 미충족(연기): host 소유 카메라 전제로 yolo 이미지 재빌드(realsense 드라이버 제거 반영), service 왕복 E2E, 카메라 토픽 컨테이너 가시성, `activate.sh` overlay source 편의.
   - **Update (2026-06-09)**: launch 패키지화 완료 — 전용 `cobot2_bringup` 패키지(`launch/` + `setup.py data_files`) → `ros2 launch cobot2_bringup bringup_all.launch.py`(절대경로 불요). (처음엔 robot_control 에 뒀다가, bringup 이 robot_control 을 제외하는 설계와의 정합 + ROS 관례를 위해 전용 패키지로 분리.) 레포 경로는 `config.sh` 의 `ROS2_JAZZY_TEST_REPO` export 로 해결(install 후 `__file__` 무력). robot_control 은 launch 에서 제거(`start_robot_control` 옵트인 삭제) — 인프라만, pick 모션은 `ros2 run robot_control robot_control` 분리. `dsr-project-install.sh` HOST_PKGS 에 cobot2_bringup 등록.
+  - **Update (2026-07-21)**: 통합 bringup 진입점이 `m0609_rg2_bringup/bringup.launch.py`(별도 레포 `M0609_RG2_Integration` 의 패키지)로 이관. `containers/bringup.sh` 가 이 launch 를 호출한다. 로봇 드라이버·카메라에 더해 RG2 그리퍼와 RealSense 마운트 브라켓이 한 URDF 에 들어가고, virtual 모드에는 실 드라이버와 같은 `/onrobot/sendCommand` 서비스를 내는 가상 그리퍼 노드가 붙는다. 패키지는 `setup-app.sh::obtain_m0609` 가 `~/cobot_ws/src` 로 심볼릭 링크한다. 카메라 토픽 계약(`/camera/camera/*`)은 무변경. 상세 = ADR-035.
 
 **Phase 4 산출물**:
 - `containers/yolo-detection/Dockerfile` + 부속 (entrypoint, requirements, `.dockerignore`)
@@ -213,7 +214,7 @@ ROS2 Humble installer → ROS2 Jazzy installer 마이그레이션. 1–4주, sol
 - `containers/entrypoint.sh` (공유 — ROS2 + `/ws/install` overlay source) — *완료 2026-05-30*
 - 루트 `.dockerignore` (build context 화이트리스트 + secret/모델가중치 제외) — *완료 2026-05-30*
 - `containers/up.sh` (pull-first 분기 wrapper — ADR-007 § 5) — *미작성(런타임 단계)*
-- `cobot2_ws/cobot2_bringup/launch/bringup_all.launch.py` (통합 bringup — 로봇 드라이버 + host 카메라 + 컨테이너 한 번에, 전용 cobot2_bringup 패키지) — *골격 2026-06-05, 전용 패키지화 2026-06-09*
+- `cobot2_ws/cobot2_bringup/launch/bringup_all.launch.py` (통합 bringup — 로봇 드라이버 + host 카메라 + 컨테이너 한 번에, 전용 cobot2_bringup 패키지) — *골격 2026-06-05, 전용 패키지화 2026-06-09, 진입점 이관 2026-07-21 → `m0609_rg2_bringup/bringup.launch.py`(ADR-035)*
 - **ADR-009** — Phase 4 base image(`ros:jazzy-ros-base-noble` 단일) / 네트워크 모드(`host`) / 소스 수정 정책 / 빌드 게이트 경계 — *완료 2026-05-30* (install.sh 통합은 4-6 의 수동 분리로 결정)
 - Docker Hub publish 된 두 image (ADR-007): `docker.io/${DOCKERHUB_USER}/ros2-jazzy-yolo:<tag>`, `docker.io/${DOCKERHUB_USER}/ros2-jazzy-voice:<tag>`
 - `.env.example` 갱신: `DOCKERHUB_USER`, `DOCKERHUB_TOKEN`, `YOLO_TAG`, `VOICE_TAG` placeholder 추가

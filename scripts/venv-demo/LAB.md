@@ -189,8 +189,10 @@ python3 -c "import DR_init; from DSR_ROBOT2 import movej; from od_msg.srv import
 set -a; source ~/ros2_jazzy_test/resources/config.sh; set +a
 source /opt/ros/jazzy/setup.bash
 source ~/cobot_ws/install/setup.bash
-ros2 launch cobot2_bringup bringup_all.launch.py mode:=virtual
-# 실로봇: ros2 launch cobot2_bringup bringup_all.launch.py mode:=real host:=192.168.1.100
+ros2 launch m0609_rg2_bringup bringup.launch.py mode:=virtual camera:=true
+# 실로봇: ros2 launch m0609_rg2_bringup bringup.launch.py mode:=real host:=192.168.1.100
+# camera:=true 를 붙이는 이유 — 이 launch 의 camera 기본값은 false 다(standalone 개발 시 USB 카메라
+# 를 잡지 않기 위함). virtual 에서도 YOLO depth 서비스가 카메라 토픽을 필요로 하므로 명시한다.
 ```
 
 ```bash
@@ -221,7 +223,7 @@ ros2 run pick_and_place_text robot_move
 set -a; source ~/ros2_jazzy_test/resources/config.sh; set +a
 source /opt/ros/jazzy/setup.bash
 source ~/cobot_ws/install/setup.bash
-ros2 launch cobot2_bringup bringup_all.launch.py mode:=virtual
+ros2 launch m0609_rg2_bringup bringup.launch.py mode:=virtual camera:=true
 ```
 
 ```bash

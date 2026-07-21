@@ -604,6 +604,7 @@
 - **Update (2026-06-09)**: 위 후속 패키지화 완료 — **전용 `cobot2_bringup` 패키지** 신설(launch/ + setup.py data_files, dsr-project-install.sh HOST_PKGS 등록) → `ros2 launch cobot2_bringup bringup_all.launch.py`(절대경로 불요). (당초 robot_control 에 넣었으나, bringup 이 robot_control 을 의도적으로 제외하는 설계와 ROS 관례(`*_bringup`, 예: dsr_bringup2)에 맞춰 전용 패키지로 분리.) 설치 후 `__file__` 이 레포를 못 가리키므로 compose/config 경로는 `config.sh` 가 export 하는 `ROS2_JAZZY_TEST_REPO`(자기 위치에서 계산)로 해결. robot_control 의 launch 내장(`start_robot_control` 옵트인)도 제거 — bringup 은 인프라(드라이버+카메라+컨테이너)만, 실제 pick 모션은 `ros2 run robot_control robot_control` 분리 실행.
 - `containers:=true` 는 이미지 빌드·`.env`·`cyclonedds.xml` 렌더 선행 필요. 미빌드 상태 점검은 `containers:=false`.
 - 실기 E2E(이미지 재빌드 후 service 왕복 + 카메라 토픽 컨테이너 가시성)는 후속 단계로 연기.
+- **부분 supersede (2026-07-21, ADR-035)**: bringup 진입점은 `m0609_rg2_bringup bringup.launch.py` 로 이관됐다 — `cobot2_bringup bringup_all.launch.py` 와 `containers` 인자는 더 이상 유효하지 않다. 통신 토폴로지(star) 결정은 불변.
 
 **Reopen 조건**:
 - yolo·voice 가 중앙 오케스트레이터 없이 event-driven 자율 동작해야 할 요구가 생기면 → topic/action 기반 재설계 재검토.
@@ -1083,3 +1084,51 @@
 **검증(2026-07-20)**: [실측] ① 베이스 이미지에서 실패 모드 재현 — `pip install --break-system-packages "numpy>=2"` → `Cannot uninstall ... RECORD file not found` 로 중단, numpy 1.26.4 유지. ② `--ignore-installed` 경로 성립 — numpy 2.5.1 이 `/usr/local/...` 에 설치, 이어 `pip install "numpy<2"` 가 force 없이 1.26.4 로 다운그레이드, `dpkg -V python3-numpy` 무결, `import rclpy` OK. ③ 전체 이미지 빌드 + `build-all.sh` import smoke.
 
 **Reopen 조건**: 컨테이너가 여러 python 앱을 동시에 담아 의존이 충돌하거나, apt 소유 패키지와의 `--ignore-installed` 목록이 관리 부담이 될 만큼 늘면 venv 재도입 검토.
+
+---
+
+### ADR-035: 통합 bringup 진입점 = 외부 레포 `m0609_rg2_bringup` — ADR-017 의 `cobot2_bringup` supersede (2026-07-21)
+
+**Status**: ADR-017 의 **bringup 진입점 결정만** supersede — 구체적으로 "통합 bringup launch 도입"(`cobot2_ws/launch/bringup_all.launch.py`)과 그 Consequences 의 2026-06-09 갱신("전용 `cobot2_bringup` 패키지 → `ros2 launch cobot2_bringup bringup_all.launch.py`")이 대상. ADR-017 의 **통신 토폴로지 결정(robot_control 중심 star, ROS2 service 계약)은 불변**이며 본 ADR 이 건드리지 않는다. ADR-015(카메라 소유권 host 이전 — host 가 `/camera/camera/*` publish, yolo 컨테이너는 subscribe)도 **대체가 아니라 유지** — 새 launch 가 같은 토픽 계약을 그대로 만족한다. ADR-017 본문은 과거 기록으로 미수정.
+
+**Context**:
+- M0609 + RG2 그리퍼 + RealSense 마운트를 하나의 URDF/launch 로 묶은 통합 bringup 패키지가 별도 레포(`https://github.com/Seooooooogi/M0609_RG2_Integration`, 패키지 `src/m0609_rg2_bringup`)에서 개발됐다. 이 레포는 본 레포가 추적하지 않는 독립 산출물이다.
+- `cobot2_bringup` 은 로봇 드라이버 + host RealSense + 컨테이너 기동만 담당했고 그리퍼·마운트 브라켓·카메라를 URDF 로 표현하지 않았다. 그리퍼를 쓰는 이상 하나의 robot_description 에 통합돼야 RViz/TF 와 controller_manager 가 일관된다.
+- 같은 레포의 `m0609_rg2_moveit` 은 moveit 스택 전체를 의존으로 끌어와, 본 배포에 불필요한 빌드 비용이 된다.
+
+**Decision**:
+- **진입점 교체**: `containers/bringup.sh` 마지막 줄 `ros2 launch cobot2_bringup bringup_all.launch.py "$@"` → `ros2 launch m0609_rg2_bringup bringup.launch.py "${LAUNCH_ARGS[@]}"`.
+  - 새 launch 인자: `mode`(virtual|real, 기본 virtual) / `host`(기본 192.168.1.100, virtual 이면 127.0.0.1 강제) / `port`(12345) / `rt_host`(192.168.137.50) / `camera`(기본 false) / `rviz`(기본 true). 구 `cobot2_bringup` 의 `gui`(upstream 에서 무효였음)와 `containers` 인자는 없다 — 컨테이너 생명주기는 `containers/bringup.sh` 래퍼가 단독으로 소유한다.
+  - `rt_host` 는 이번에 추가. 안 넘기면 `dsr_description2` xacro 기본값인 빈 문자열이 하드웨어 파라미터로 들어가고, DRCF 3.0 이상에서 `dsr_hardware2` 가 그 값으로 RT control 채널을 연다.
+- **워크스페이스 취득 = clone + 패키지 단위 심볼릭 링크**: `setup-app.sh` workspace 단계 6→7 개, 새 단계 "m0609 bringup + onrobot-ros2"(`obtain_m0609`) 를 cobot2 확인 직후 · doosan-robot2 설치 직전에 삽입.
+  - `${M0609_REPO_DIR}` 에 `.git` 이 없으면 `${M0609_REF}` 브랜치로 clone, 있으면 건드리지 않는다(개발 중인 작업본 보호 — cobot2 와 같은 원칙, 이때 `M0609_REF` 는 무시).
+  - 레포 전체가 아니라 **`src/m0609_rg2_bringup` 패키지 하나만** `${DSR_WORKSPACE}/src` 로 심볼릭 링크 — `m0609_rg2_moveit` 은 moveit 스택을 통째로 끌어와 제외. colcon 이 심볼릭 링크된 패키지를 인식하는 것은 실측 확인.
+  - `onrobot-ros2` 는 `${DSR_WORKSPACE}/src` 로 clone 후 커밋 SHA 핀 고정.
+  - `resources/config.sh` 신규 변수: `M0609_REPO_URL` / `M0609_REF`(main) / `M0609_REPO_DIR`(`${HOME}/M0609_RG2_Integration`) / `ONROBOT_REPO_URL` / `ONROBOT_COMMIT`(`c6e390313e831a2e54a0ad5894b2911cc360a16a`).
+  - `--reset` 은 doosan-robot2 외에 onrobot-ros2 clone 과 m0609 심볼릭 링크도 지운다. `${M0609_REPO_DIR}` 원본과 cobot2 는 보존.
+- **camera 기본값을 래퍼에서 뒤집는다**: 사용자가 `camera:=` 를 안 주면 `bringup.sh` 가 `camera:=true` 를 덧붙인다. launch 자체의 기본값은 false(standalone 개발 시 USB 카메라를 잡지 않기 위함)지만, 이 래퍼는 yolo 컨테이너를 함께 띄우고 그 노드는 카메라 토픽이 없으면 조용히 대기만 한다. 즉 **기본값 소유자는 용도별로 다르다** — launch = standalone 개발, 래퍼 = 통합 데모.
+- **카메라 namespace 계약 유지**: 토픽은 그대로 `/camera/camera/*`. 새 launch 가 `realsense2_camera_node` 를 `namespace='camera'` + `name='camera'` 로 띄워 `rs_launch.py` 기본값(`camera_namespace`/`camera_name` 둘 다 `camera`)과 같은 결과를 낸다. 프로파일도 `cobot2_bringup` 이 쓰던 실측 검증값을 그대로 이관: color 1280x720x30, depth 848x480x30, `initial_reset`, `align_depth.enable`, `enable_rgbd`, `enable_sync`, `pointcloud.enable`.
+- **rosdep skip-keys 확장**: `resources/colcon-build.sh` 의 skip-keys 를 `librealsense2` → `"librealsense2 message_generation message_runtime"`. 뒤 두 개는 `onrobot_rg_control/package.xml` 의 ROS1 잔재 키로 jazzy rosdep 규칙이 없다 — 안 막으면 `set -e` 인 이 스크립트가 통째로 실패한다. `-r`(모든 해결 실패 무시)은 쓰지 않았다.
+
+**Consequences**:
+- 기능 델타(구 `cobot2_bringup` 대비 새로 생기는 것):
+  - URDF 에 RG2 그리퍼 + RealSense 마운트 브라켓 + D435 포함 → RViz/TF 에 전부 보인다.
+  - virtual 모드에서 가상 그리퍼 노드 기동. 실 OnRobot 드라이버와 같은 서비스 `/onrobot/sendCommand` 제공 + `/onrobot_joint_states` publish.
+  - `robot_state_publisher` 와 `controller_manager` 가 같은 robot_description 한 장을 공유(Jazzy 의 controller_manager 는 이 값을 파라미터가 아니라 토픽에서 읽는다).
+  - `world→base_link` 고정 조인트가 URDF 안에 있어 별도 `static_transform_publisher` 가 없다.
+- 안 바뀐 것: DSR 서비스 경로(`/dsr01/dsr_controller2/...`), `/dsr01/joint_states`, TF 프레임 이름 — `robot_control.py` / `robot_move.py` 의 모션 인터페이스 그대로 동작. yolo 컨테이너, host voice 노드, docker compose 구성, CycloneDDS 설정도 무변경. 카메라 토픽 경로가 동일하므로 yolo `object_detection` 및 `pick_and_place_text` 의 구독 경로도 무변경.
+- **외부 레포 의존이 새로 생겼다** — bringup 진입점의 진실 원천이 본 레포 밖(`M0609_REPO_DIR`)에 있다. 링크는 소스 트리에만 걸리므로 원본 수정이 `${DSR_WORKSPACE}/src` 에는 즉시 보이지만, 실제로 실행되는 launch/URDF 는 `ament_cmake` 가 `install/share` 로 **복사**한 사본이다(`colcon-build.sh` 는 `--symlink-install` 미사용) — 원본을 고쳤으면 `colcon build` 를 다시 돌려야 반영된다. 반대로 원본이 사라져도 기존 빌드는 계속 뜨고, 다음 빌드 시점에 깨진다. 기존 clone 은 갱신하지 않는 정책이라, 이미 레포가 있는 머신의 리비전은 `M0609_REF` 가 아니라 그 작업본 상태가 결정한다(신규 clone 에만 `M0609_REF` 적용).
+- `onrobot-ros2` 는 SHA 핀 고정이라 upstream 이동과 무관하게 재현된다. 대신 upstream 수정(ROS1 잔재 키 정리 등)을 받으려면 SHA 를 손으로 올려야 한다.
+- skip-keys 확장은 해당 두 키의 의존 해결을 영구히 건너뛴다 — 만약 나중에 그 패키지가 실제 의존을 요구하게 되면 rosdep 이 아니라 colcon 빌드 실패로 드러난다(현재는 미사용 키임을 확인).
+
+**검증(2026-07-21)**:
+- [실측] 심볼릭 링크 워크스페이스 colcon 빌드 5개 패키지 성공.
+- [실측] virtual 기동: DRCF 에뮬레이터 연결, `joint_state_broadcaster` + `dsr_controller2` 활성화, 가상 그리퍼 노드 기동, realsense 노드가 로거 이름 `camera.camera` 로 기동(카메라 하드웨어 없어 재시도 상태).
+- [실측] `obtain_m0609` 멱등성(2회 실행 동일 결과) + 링크 자리에 실제 디렉토리가 있을 때 중단 가드.
+- [실측] `rt_host` 가 렌더된 URDF 의 `ros2_control` 파라미터에 실제로 들어감.
+- [미검증] 실 로봇(`mode:=real`), 실 RealSense 카메라, 실 RG2 그리퍼 — 하드웨어 필요.
+
+**Reopen 조건**:
+- `m0609_rg2_bringup` 이 본 레포로 흡수되거나 릴리스 태그로 배포되면 → clone + 심볼릭 링크 대신 vendoring 또는 태그 핀 고정으로 재검토.
+- moveit 기반 모션이 필요해지면 → `m0609_rg2_moveit` 제외 결정 재검토(의존 비용 재산정).
+- `onrobot-ros2` upstream 이 jazzy rosdep 키를 정리하면 → skip-keys 축소.

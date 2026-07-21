@@ -88,13 +88,31 @@
 
 **원인**: 카메라는 **host 소유**다(2026-06-02 토폴로지 변경). yolo 컨테이너 안엔 realsense2_camera 드라이버가 없고, `object_detection` 노드는 host 가 publish 하는 `/camera/camera/*` 토픽을 DDS 로 subscribe 만 한다. host 에서 카메라 노드를 안 띄웠거나, `align_depth` 없이 띄워 `aligned_depth_to_color` 토픽이 없으면 노드의 `depth_frame` 이 채워지지 않아 좌표 계산이 실패한다.
 
+카메라 노드 기동 주체는 통합 bringup 이다 — 진입점이 `m0609_rg2_bringup` 의 `bringup.launch.py` 로 바뀌었고, 이 launch 가 로봇 드라이버·그리퍼와 함께 realsense 노드도 띄운다. 따라서 예전 절차였던 `ros2 launch realsense2_camera rs_launch.py align_depth.enable:=true` 수동 기동은 더 이상 쓰지 않는다(같은 장치를 두 노드가 동시에 여는 상태는 검증한 적 없음).
+
 **복구 / 예방**:
-- yolo 컨테이너를 올리기 **전에** host 에서 카메라 노드 기동(align_depth 필수):
+- host 에서 카메라 노드가 떠 있어야 한다(`object_detection` 은 그 토픽을 subscribe 만 한다). 래퍼를 쓰면 자동 — 래퍼는 yolo 컨테이너를 먼저 올리고 카메라를 마지막에 띄우지만, 구독자가 먼저 떠 있어도 DDS discovery 로 붙는다:
   ```bash
-  ros2 launch realsense2_camera rs_launch.py align_depth.enable:=true
+  bash containers/bringup.sh
   ```
-- 토픽 확인: `ros2 topic list | grep /camera/camera` → `color/image_raw`, `aligned_depth_to_color/image_raw`, `color/camera_info` 3개가 보여야 한다. (노드 구독 경로가 `/camera/camera/*` 이중 namespace 라 `camera_name`/namespace 를 바꿔 띄우면 토픽이 안 맞는다 — 기본 launch 사용.)
+  래퍼는 사용자가 `camera:=` 를 명시하지 않은 경우에만 `camera:=true` 를 덧붙인다(launch 의 camera 기본값은 false).
+- launch 를 직접 쓸 때는 `camera:=true` 를 반드시 준다:
+  ```bash
+  ros2 launch m0609_rg2_bringup bringup.launch.py camera:=true
+  ```
+  `align_depth.enable` 을 비롯한 프로파일(color 1280x720x30, depth 848x480x30, `initial_reset`, `enable_rgbd`, `enable_sync`, `pointcloud.enable`)은 launch 안에 이미 박혀 있어 따로 넘기지 않는다.
+- 토픽 확인: `ros2 topic list | grep /camera/camera` → `color/image_raw`, `aligned_depth_to_color/image_raw`, `color/camera_info` 3개가 보여야 한다. (이 검증 명령이 진입점 교체 후에도 그대로 유효한 이유: 새 launch 가 `realsense2_camera_node` 를 namespace `camera` + name `camera` 로 띄워 `rs_launch.py` 기본값과 동일한 `/camera/camera/*` 이중 namespace 를 낸다 — 실측으로 노드 로거 이름이 `camera.camera` 로 확인됨. 노드 구독 경로가 이 이중 namespace 에 묶여 있으므로 namespace/name 을 바꿔 띄우면 토픽이 안 맞는다.)
 - host 와 컨테이너가 서로의 토픽을 보는지: 같은 `ROS_DOMAIN_ID` + 같은 `RMW_IMPLEMENTATION`(둘 다 `resources/config.sh` 가 host 에 싣고 compose 가 컨테이너에 주입, 현행 표준 `rmw_cyclonedds_cpp`) + compose `network_mode: host`. 하나라도 어긋나면 같은 topic 도 discovery 안 됨. 상세 = ADR-015 / ADR-016.
+
+**변형 — 카메라 노드가 아예 안 뜸(`camera:=false` / launch 를 인자 없이 직접 실행)**
+
+**증상**: 위와 달리 `/camera/camera/*` 가 **하나도** 없다(`aligned_depth_to_color` 만 빠진 게 아니라 `color/image_raw` 도 없음). 로봇 드라이버·그리퍼·RViz 는 정상이고 yolo 컨테이너도 살아 있지만 아무 로그도 안 남기며 조용하다. `ros2 node list` 에 `/camera/camera` 가 없다.
+
+**원인**: 새 launch 의 `camera` 인자 기본값이 **false** 다(그리퍼/URDF standalone 개발 시 USB 카메라를 잡지 않기 위함). `ros2 launch m0609_rg2_bringup bringup.launch.py` 를 인자 없이 실행하거나 `camera:=false` 를 명시하면 realsense 노드 자체가 생성되지 않는다. `object_detection` 노드는 토픽이 없으면 에러 없이 대기만 하므로 "노드는 살아 있는데 조용함" 으로 보인다 — 카메라 하드웨어 고장/USB 문제와 헷갈리기 쉽다.
+
+**구분법**: 노드 부재(`ros2 node list | grep camera` 가 빈 결과) = launch 인자 문제. 노드는 있는데 로그에 재시도/장치 못 찾음 = 하드웨어·USB 문제.
+
+**복구**: `camera:=true` 로 다시 띄운다(또는 `bash containers/bringup.sh` 사용 — 명시 안 하면 자동으로 붙는다).
 
 ## CycloneDDS 로 RealSense raw 토픽이 0Hz / `SocketSendBufferSize` 지정 후 노드가 SIGABRT 로 죽음
 

@@ -4,6 +4,9 @@
 
 - base 서비스 정의: `docker-compose.yml` — network/GPU/env. 단독 `up` 은 runtime(최종) 이미지·노드 자동 기동 경로(학습 기본 흐름은 이걸 빌드 안 함, 수동/publish 용 보존).
 - 기본 통합 실행: `bash containers/bringup.sh` = base + `docker-compose.dev.yml`(dev-builder) 머지 — live-mount + 컨테이너 안 colcon build 후 노드 자동 기동. 이미지 빌드/검증은 `containers/build-all.sh`(builder 스테이지 = `:dev-builder`). 최상위 `README.md` 참조.
+  - 컨테이너·host voice 를 띄운 뒤 마지막에 `ros2 launch m0609_rg2_bringup bringup.launch.py` 로 로봇 드라이버 + RG2 그리퍼 + RealSense 를 한 번에 올린다(별도 레포 `M0609_RG2_Integration` 의 패키지, `setup-app.sh` 가 `~/cobot_ws/src` 로 심볼릭 링크).
+  - launch 인자: `mode`(virtual|real, 기본 virtual) / `host`(기본 192.168.1.100, virtual 이면 127.0.0.1 강제) / `port`(12345) / `rt_host`(192.168.137.50) / `camera`(기본 false) / `rviz`(기본 true). `bringup.sh` 에 넘긴 인자는 그대로 전달된다.
+  - `camera` 는 launch 기본이 false(standalone 개발 시 USB 카메라 미점유)지만, `bringup.sh` 는 사용자가 `camera:=` 를 명시하지 않으면 `camera:=true` 를 덧붙인다 — 이 래퍼는 yolo 컨테이너를 함께 띄우고 그 노드는 카메라 토픽이 없으면 조용히 대기만 하기 때문.
 - 개발 모드(개별 수동): `docker-compose.dev.yml` — 코드 수정 live-mount + 노드 수동 기동(디버깅). 아래 설명.
 
 ## 개발 모드 (코드 수정 → 즉시 테스트)
@@ -48,4 +51,4 @@ voice 는 컨테이너가 아니다 — host 에서 `source resources/activate.s
 
 - `~/.config/cyclonedds/cyclonedds.xml` 렌더 완료(dds-tuning) — base compose 가 read-only mount.
 - host voice: `.env` 의 `OPENAI_API_KEY`(bringup.sh 가 로드) + 데스크톱 마이크(PipeWire 기본).
-- yolo: host 가 RealSense 토픽(`/camera/camera/*`)을 publish 중이어야 추론 입력 존재.
+- yolo: host 가 RealSense 토픽(`/camera/camera/*`)을 publish 중이어야 추론 입력 존재. 그 publish 는 이제 통합 bringup 이 맡는다 — `bash containers/bringup.sh`(= `camera:=true` 자동 부여) 또는 `ros2 launch m0609_rg2_bringup bringup.launch.py camera:=true`. **토픽 이름 계약은 무변경**: 새 launch 도 realsense2_camera_node 를 namespace `camera` + name `camera` 로 띄워 `rs_launch.py` 기본값과 같은 `/camera/camera/*` 를 낸다(align_depth·enable_rgbd·enable_sync·pointcloud 포함). 컨테이너를 개별 수동 기동할 때는 카메라가 먼저 떠 있어야 한다.
