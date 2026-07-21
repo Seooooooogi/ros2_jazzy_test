@@ -48,6 +48,20 @@ export ROS2_JAZZY_TEST_REPO
 : "${DSR_EMULATOR_VERSION:=3.0.1}"
 : "${DSR_WORKSPACE:=${HOME}/cobot_ws}"
 
+# --- M0609 + RG2 통합 bringup ------------------------------------------
+# 로봇 드라이버 · 그리퍼 · RealSense 브라켓을 한 URDF / 한 launch 로 올리는 패키지.
+# containers/bringup.sh 의 진입점이 이 launch 다 (구 cobot2_bringup 대체).
+# M0609_REPO_DIR 이 이미 있으면 clone 을 건너뛴다 — 사용자가 개발 중인 작업본을 덮어쓰지 않기
+# 위함(cobot2 와 같은 원칙). 그 경우 M0609_REF 는 무시된다.
+: "${M0609_REPO_URL:=https://github.com/Seooooooogi/M0609_RG2_Integration}"
+: "${M0609_REF:=main}"
+: "${M0609_REPO_DIR:=${HOME}/M0609_RG2_Integration}"
+
+# OnRobot RG2 ROS2 패키지(description + msgs + Modbus 드라이버). M0609 레포가 추적하지 않는
+# 외부 의존이라 여기서 따로 가져온다. 브랜치가 아니라 커밋으로 핀 — upstream 이 push 해도 안 흔들림.
+: "${ONROBOT_REPO_URL:=https://github.com/ABC-iRobotics/onrobot-ros2}"
+: "${ONROBOT_COMMIT:=c6e390313e831a2e54a0ad5894b2911cc360a16a}"
+
 # --- 앱 워크스페이스 경로 (통합 cobot_ws 하위) ------------------------------------
 # YOLO_WS: yolo_container(od_msg + object_detection) — dev 모드(docker-compose.dev.yml)에서
 #   컨테이너 /ws/src 로 bind-mount(live-mount). 별도 src/ 없이 디렉토리 자체가 패키지.

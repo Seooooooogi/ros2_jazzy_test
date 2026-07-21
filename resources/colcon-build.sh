@@ -49,8 +49,14 @@ cd "${DSR_WORKSPACE}"
 
 # rosdep: 워크스페이스 패키지들이 선언해 둔 의존성을 자동 설치 (init 은 a01 에서 이미 끝냄).
 rosdep update
+# skip-keys 사유:
+#   librealsense2                      — apt 로 까는 네이티브 SDK. ROS rosdep 키가 아니다.
+#   message_generation/message_runtime — onrobot_rg_control/package.xml 의 ROS1 잔재. jazzy 에 해당
+#                                        rosdep 규칙이 없어 그대로 두면 이 단계가 통째로 실패한다
+#                                        (이 스크립트는 set -e). 실제 빌드에는 쓰이지 않는 키다.
+# `-r`(오류 무시하고 계속)은 쓰지 않는다 — 모든 해결 실패를 삼켜 진짜 누락 의존까지 가린다.
 rosdep install --from-paths src --ignore-src --rosdistro "${ROS_DISTRO}" \
-    --skip-keys=librealsense2 -y
+    --skip-keys="librealsense2 message_generation message_runtime" -y
 
 # colcon 빌드. object_detection(yolo)은 host 에서 실행 불가(torch 가 yolo 이미지 안에만) → --packages-skip.
 # voice_processing 은 host 직접 실행이라 여기서 빌드(voice-host-install.sh 가 langchain/openwakeword 를
