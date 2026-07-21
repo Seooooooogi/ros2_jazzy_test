@@ -31,7 +31,11 @@ from sensor_msgs.msg import Image
 from std_msgs.msg import Bool, String
 
 
-COLOR_TOPIC = "/camera/camera/color/image_raw"
+# 카메라 토픽은 상대 이름이다 — 절대 경로를 박으면 카메라 이름/네임스페이스가 바뀔 때마다
+# 이 파일을 고쳐야 한다. 배선은 기동 명령의 remap 이 정한다:
+#   --ros-args -r color/image_raw:=/camera/color/image_raw
+# 이 노드는 카메라 외의 토픽도 다루므로 __ns 통째 이동이 아니라 토픽 단위 remap 을 쓴다.
+COLOR_TOPIC = "color/image_raw"
 DETECTIONS_TOPIC = "/yolo/detections"
 WAKEWORD_TOPIC = "/wakeword_detected"
 TASK_TOPIC = "/ui/current_task"
@@ -58,7 +62,7 @@ class YoloViewer(Node):
     """카메라·detection·음성 상태를 구독해 cv2 창에 합성하는 노드.
 
     Subscribes:
-        /camera/camera/color/image_raw (sensor_msgs/Image): 원본 프레임(bgr8).
+        /camera/color/image_raw (sensor_msgs/Image): 원본 프레임(bgr8).
         /yolo/detections (std_msgs/String): JSON 박스+클래스(yolo-viz 컨테이너).
         /wakeword_detected (std_msgs/Bool): voice 의 wakeword 감지 pulse.
         /ui/current_task (std_msgs/String): robot_control 의 현재 target/pos(JSON).

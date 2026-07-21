@@ -134,7 +134,10 @@ echo "[bringup] launching yolo node inside the dev container…"
 # docker exec = 비대화(non-interactive) 모드 → ~/.bashrc 자동 source 안 함. 그래서 dev bashrc 를
 # 직접 source(dev override 가 /root/.bashrc 로 mount). ROS + 오버레이가 잡혀,
 # 대화형 exec 이 받는 것과 같은 환경.
-docker exec -d yolo-detection bash -c 'source /root/.bashrc; exec ros2 run object_detection object_detection'
+# ImgNode 는 카메라 토픽만 구독하므로 노드 스코프 네임스페이스 remap 한 줄로 붙인다.
+# 'img_node:' 접두사 필수 — 프로세스 전역 __ns 는 같은 프로세스의 object_detection_node 까지
+# 옮겨 robot_control 이 부르는 /get_3d_position 경로를 끊는다.
+docker exec -d yolo-detection bash -c 'source /root/.bashrc; exec ros2 run object_detection object_detection --ros-args -r img_node:__ns:=/camera'
 
 # host voice 노드 — 컨테이너 아님. 위에서 ROS underlay + cobot_ws 오버레이 이미 source(get_keyword
 # console_script shebang = system python → voice-host-install.sh 가 host 에 깐 langchain/openwakeword 를 봄).
@@ -168,7 +171,7 @@ echo "[bringup] host voice node up (pgid ${VOICE_PID})"
 echo "[bringup] launching robot driver + gripper + camera — Ctrl+C tears everything down."
 # camera 기본값 뒤집기: m0609_rg2_bringup 의 launch 는 camera 기본이 false 다(standalone 개발 시
 # USB 카메라를 잡지 않기 위함). 하지만 이 스크립트는 yolo 컨테이너를 함께 띄우고, 그 노드는
-# /camera/camera/* 토픽이 없으면 조용히 대기만 한다. 그래서 사용자가 camera 를 명시하지 않은
+# /camera/* 토픽이 없으면 조용히 대기만 한다. 그래서 사용자가 camera 를 명시하지 않은
 # 경우에만 camera:=true 를 덧붙인다. launch 의 중복 인자 우선순위에 기대지 않고 직접 검사한다.
 LAUNCH_ARGS=("$@")
 camera_set=0
