@@ -53,6 +53,10 @@ install.sh — single entry point for the BASE host environment (kernel/NVIDIA/D
 
   bash install.sh             run the full sequence (skip already-completed steps)
   bash install.sh --verbose   also show each step's detailed output + warnings/errors on the console
+  bash install.sh --no-nvidia-driver
+                              skip the NVIDIA driver step (assumes the driver is already installed by
+                              other means — for non-target machines). Recorded as SKIPPED in the state,
+                              so it stays skipped across the mid-install reboot. Combine with any subcommand.
   bash install.sh --status    print the current progress (state)
   bash install.sh --reset     reset the state (after confirm — re-run all steps)
   bash install.sh --help      this help
@@ -88,10 +92,14 @@ EOF
 # --verbose/-v 는 서브커맨드와 직교(independent — 서로 영향 없음) → 먼저 VERBOSE 로 분리, 나머지 인자만 남김.
 # orchestrate.sh 의 run_step 은 같은 셸에서 VERBOSE 를 읽음(export 는 하위 resource 스크립트용).
 VERBOSE="${VERBOSE:-0}"
+# --no-nvidia-driver 도 서브커맨드와 직교하는 modifier → 여기서 분리(스트립 후 --status/--reset/빈
+# 서브커맨드 판정 그대로). 드라이버가 이미 별도 설치됐다고 상정하고 nvidia 단계만 건너뜀(비타깃 머신).
+NO_NVIDIA_DRIVER=0
 __args=()
 for __a in "$@"; do
     case "$__a" in
         -v|--verbose) VERBOSE=1 ;;
+        --no-nvidia-driver) NO_NVIDIA_DRIVER=1 ;;
         *) __args+=("$__a") ;;
     esac
 done
@@ -159,7 +167,7 @@ fi
 # --- step 1~5: 사전 준비물(a01: 커널 기준선 / NVIDIA / Docker / ROS2 jazzy / 추가 도구) ---
 # nvidia 보다 커널 기준선을 먼저: HWE 커널(Ubuntu 하드웨어 지원 커널) 메타 + 헤더 + modules-extra 를 먼저
 # 보장 필요. 그래야 벽돌화(nvidia 모듈이 반쪽짜리 커널을 끌어오는 것)와 DKMS 헤더 누락을 둘 다 방지.
-run_stage_a01 0
+run_stage_a01 0 "$NO_NVIDIA_DRIVER"
 
 # --- step 6: reboot 경계(a01) ---
 # run_step 으로 감쌀 수 없음: reboot 는 프로세스를 끝내버리고, 이후 단계(7 이후)는 모두 reboot 뒤에
