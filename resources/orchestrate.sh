@@ -60,18 +60,33 @@ _state_set() {
 }
 
 #######################################
-# 이 단계가 이미 DONE 으로 기록됐는지 확인.
+# state 파일에서 step_<name> 의 현재 status 를 출력(없으면 빈 문자열).
+# Globals:
+#   STATE_FILE (읽기)
+# Arguments:
+#   $1 - 단계 이름 name
+#######################################
+_state_get() {
+    local name="$1"
+    _state_ensure_file
+    sed -n "s|^step_${name}=||p" "$STATE_FILE" | tail -n1
+}
+
+#######################################
+# 이 단계를 건너뛰어도 되는지 확인(DONE = 완료, SKIPPED = 의도적 opt-out).
+# SKIPPED 도 인정해야 하는 이유: --no-nvidia-driver 로 SKIPPED 기록된 단계가
+# step 6 reboot 후 인자 없는 재실행에서도 다시 돌지 않게 함(결정은 state 에만 남음).
 # Globals:
 #   STATE_FILE (읽기)
 # Arguments:
 #   $1 - 단계 이름 name
 # Returns:
-#   0 = 이미 DONE(건너뛰어도 안전), 1 = 아직 완료 안 됨
+#   0 = 건너뛰어도 안전(DONE 또는 SKIPPED), 1 = 아직 미완료
 #######################################
 step_should_skip() {
     local name="$1"
     _state_ensure_file
-    grep -qE "^step_${name}=DONE$" "$STATE_FILE"
+    grep -qE "^step_${name}=(DONE|SKIPPED)$" "$STATE_FILE"
 }
 
 #######################################
@@ -225,7 +240,7 @@ run_step() {
     fi
     local total="${STEPS_TOTAL:-${TOTAL_STEPS:?run-step: STEPS_TOTAL/TOTAL_STEPS not set}}"
     if step_should_skip "${name}"; then
-        echo "[${n}/${total}] skip: ${name} (already DONE)"
+        echo "[${n}/${total}] skip: ${name} (already $(_state_get "${name}" | tr '[:upper:]' '[:lower:]'))"
         return 0
     fi
     # 상세 설치 로그(config.sh 의 LOG_FILE)에 단계 구분 배너를 덧붙임. LOG_FILE 가 정의되지 않은
@@ -276,6 +291,28 @@ run_step() {
     fi
 }
 
+#######################################
+# 명령을 실행하지 않고 단계를 SKIPPED 로 기록(사용자 opt-out 등 조건부 건너뛰기).
+# run_step 과 달리 실행할 명령을 받지 않음. SKIPPED 를 state 에 남겨, 이후 재개
+# (step 6 reboot 후 인자 없는 재실행 포함)에서 step_should_skip 이 계속 건너뛰게 함.
+# Globals:
+#   STEPS_TOTAL / TOTAL_STEPS (읽기), STATE_FILE (쓰기)
+# Arguments:
+#   $1 - 단계 번호 n
+#   $2 - 단계 이름 name
+#   $3 - 건너뛴 이유 reason (콘솔 표시용, 선택)
+#######################################
+run_step_skip() {
+    local n="$1" name="$2" reason="${3:-}"
+    local total="${STEPS_TOTAL:-${TOTAL_STEPS:?run-step-skip: STEPS_TOTAL/TOTAL_STEPS not set}}"
+    if step_should_skip "${name}"; then
+        echo "[${n}/${total}] skip: ${name} (already $(_state_get "${name}" | tr '[:upper:]' '[:lower:]'))"
+        return 0
+    fi
+    echo "[${n}/${total}] skip: ${name}${reason:+ (${reason})}"
+    _state_set "${name}" SKIPPED
+}
+
 # ============================================================================
 # 3) steps — 설치 단계 정의(install.sh 전체 시퀀스에서 호출)
 # ============================================================================
@@ -311,11 +348,17 @@ install_steps_total() {
 #   RESOURCE_DIR (읽기)
 # Arguments:
 #   $1 - 단계 번호 offset off (run_step 번호 = off + 로컬 k)
+#   $2 - skip_nvidia (1 = nvidia 드라이버 단계 건너뜀, --no-nvidia-driver). 드라이버가
+#        이미 별도 설치됐다고 상정 — 존재 여부 검증 안 함. 기본 0.
 #######################################
 run_stage_a01() {
-    local off="$1"
+    local off="$1" skip_nvidia="${2:-0}"
     run_step $((off + 1)) a01_kernel_baseline bash "${RESOURCE_DIR}/kernel-baseline.sh"
-    run_step $((off + 2)) a01_nvidia_driver   bash "${RESOURCE_DIR}/nvidia-driver-install.sh"
+    if [[ "$skip_nvidia" == 1 ]]; then
+        run_step_skip $((off + 2)) a01_nvidia_driver "nvidia driver assumed pre-installed (--no-nvidia-driver)"
+    else
+        run_step $((off + 2)) a01_nvidia_driver bash "${RESOURCE_DIR}/nvidia-driver-install.sh"
+    fi
     run_step $((off + 3)) a01_docker          bash "${RESOURCE_DIR}/docker-install.sh"
     run_step $((off + 4)) a01_ros2_desktop    bash "${RESOURCE_DIR}/ros2-packages.sh" desktop
     run_step $((off + 5)) a01_ros2_extras     bash "${RESOURCE_DIR}/ros2-packages.sh" extras
