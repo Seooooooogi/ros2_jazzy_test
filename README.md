@@ -40,6 +40,7 @@ base 설치 (`install.sh`):
 bash install.sh --status    # 어느 단계까지 끝났는지 상태 출력
 bash install.sh --reset     # 설치 상태 초기화 (처음부터 다시)
 bash install.sh --verbose   # 각 step 상세 출력을 콘솔에도 표시
+bash install.sh --no-nvidia-driver  # NVIDIA 드라이버 설치 단계 건너뜀 (드라이버를 이미 별도 설치한 머신용)
 bash install.sh --help      # 도움말
 ```
 
