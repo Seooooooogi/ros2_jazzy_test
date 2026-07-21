@@ -1161,7 +1161,9 @@
 
 **Consequences**:
 - 토픽 경로가 한 단계 짧아지고, 소비자 소스가 프로듀서의 네임스페이스 선택으로부터 분리된다 — 다음에 경로가 바뀌면 기동 인자만 고치면 된다.
-- **전달 위험(가장 큰 잔존 리스크)**: 소비자 소스 `~/cobot_ws/src/cobot2` 는 어떤 git 레포에도 추적되지 않고 본 레포도 `.gitignore` 로 배제한다. 프로듀서(외부 레포)만 갱신되고 소비자 패치가 학생/타 머신에 전달되지 않으면 파이프라인이 통째로 죽는다. 전달 경로는 zip 재배포 등 수동 절차에 의존한다.
+- **전달 위험(가장 큰 잔존 리스크)**: 소비자 소스 `~/cobot_ws/src/cobot2` 는 어떤 git 레포에도 추적되지 않고 본 레포도 `.gitignore` 로 배제한다. 프로듀서(외부 레포)만 갱신되고 소비자 패치가 학생/타 머신에 전달되지 않으면 파이프라인이 통째로 죽는다.
+  - **완화(2026-07-21)**: 실습 코드 수정을 배포본에 선반영하는 기존 방식대로 `cobot2.zip` 안의 `realsense.py` 3벌을 패치본으로 교체했다(`yolo_container/object_detection`, `pick_and_place_text`, `pick_and_place_voice/object_detection`). 배포본에서 다시 꺼낸 파일로 이름 해석까지 확인. zip 은 `*.gitignore` 대상이라 버전 관리되지 않으므로 이 교체 자체는 커밋으로 남지 않는다 — **zip 을 새로 만들 때마다 재적용해야 한다**.
+  - 아직 남은 것: 같은 zip 안 `onrobot.py` 3벌(가상 그리퍼 우회)과 `cobot2_bringup/launch/bringup_all.launch.py`(대체됨 표기)는 워크스페이스에만 적용돼 있고 배포본에는 미반영.
 - **remap 누락 = 조용한 실패**: remap 을 빠뜨리면 노드는 정상 기동하고 에러도 없이 `/color/image_raw` 를 구독하며 영원히 빈 채로 대기한다. 로그만 보면 정상으로 보인다.
 - 구 `cobot2_bringup/bringup_all.launch.py` 는 upstream `examples/align_depth/rs_align_depth_launch.py` 를 include 하므로 여전히 `/camera/camera/*` 를 낸다. 그 진입점을 쓰려면 remap 을 `-r img_node:__ns:=/camera/camera` 로 맞춰야 한다(해당 파일 docstring 에 명시해 둠).
 - TF·URDF·스트림 프로파일이 불변이라 `robot_control.py` 의 좌표 변환 경로와 RViz 로봇 표시는 영향 없다.
