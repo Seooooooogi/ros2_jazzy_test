@@ -521,6 +521,8 @@
 
 ### ADR-015: 카메라 소유권 host 이전 — yolo 컨테이너는 토픽 subscribe (2026-06-02)
 
+> **표기 갱신 (2026-07-21, ADR-036)**: 카메라 host 소유 + yolo 컨테이너 subscribe 라는 결정 자체는 유효. 다만 아래 본문의 토픽 경로 `/camera/camera/*` 는 `/camera/*` 로 바뀌었고, 소비자는 절대 경로 대신 상대 이름 + remap 으로 붙는다.
+
 **Date**: 2026-06-02
 
 **Context**:
@@ -1089,6 +1091,8 @@
 
 ### ADR-035: 통합 bringup 진입점 = 외부 레포 `m0609_rg2_bringup` — ADR-017 의 `cobot2_bringup` supersede (2026-07-21)
 
+> **부분 supersede (2026-07-21, ADR-036)**: Decision 의 "카메라 namespace 계약 유지"(`/camera/camera/*` 유지, `namespace='camera'` + `name='camera'`) 항목 폐기 — 네임스페이스를 루트(`/`)로 바꿔 토픽이 `/camera/*` 가 됐다. **Status 의 "새 launch 가 ADR-015 와 같은 토픽 계약을 그대로 만족한다" 와 Consequences 의 "카메라 토픽 경로가 동일하므로 … 구독 경로도 무변경" 서술도 함께 폐기** — 경로가 바뀌었고 소비자도 상대 이름으로 바뀌었다. 진입점 교체·워크스페이스 취득·camera 기본값 뒤집기·skip-keys 결정은 유효.
+
 **Status**: ADR-017 의 **bringup 진입점 결정만** supersede — 구체적으로 "통합 bringup launch 도입"(`cobot2_ws/launch/bringup_all.launch.py`)과 그 Consequences 의 2026-06-09 갱신("전용 `cobot2_bringup` 패키지 → `ros2 launch cobot2_bringup bringup_all.launch.py`")이 대상. ADR-017 의 **통신 토폴로지 결정(robot_control 중심 star, ROS2 service 계약)은 불변**이며 본 ADR 이 건드리지 않는다. ADR-015(카메라 소유권 host 이전 — host 가 `/camera/camera/*` publish, yolo 컨테이너는 subscribe)도 **대체가 아니라 유지** — 새 launch 가 같은 토픽 계약을 그대로 만족한다. ADR-017 본문은 과거 기록으로 미수정.
 
 **Context**:
@@ -1132,3 +1136,53 @@
 - `m0609_rg2_bringup` 이 본 레포로 흡수되거나 릴리스 태그로 배포되면 → clone + 심볼릭 링크 대신 vendoring 또는 태그 핀 고정으로 재검토.
 - moveit 기반 모션이 필요해지면 → `m0609_rg2_moveit` 제외 결정 재검토(의존 비용 재산정).
 - `onrobot-ros2` upstream 이 jazzy rosdep 키를 정리하면 → skip-keys 축소.
+
+---
+
+### ADR-036: 카메라 토픽 네임스페이스 축소 `/camera/camera/*` → `/camera/*` + 소비자 상대 이름 + 노드 스코프 remap (2026-07-21)
+
+**Status**: ADR-035 의 Decision 항목 **"카메라 namespace 계약 유지"만** supersede — 그 항목이 못박은 `/camera/camera/*` 유지와 `realsense2_camera_node` 의 `namespace='camera'` + `name='camera'` 이중 지정이 대상. ADR-035 의 나머지(진입점 교체, clone + 심볼릭 링크 워크스페이스 취득, 래퍼의 `camera:=true` 기본값 뒤집기, rosdep skip-keys 확장)는 불변. ADR-015 의 **카메라 소유권 host 이전 결정(host 가 publish, yolo 컨테이너는 subscribe)도 대체가 아니라 유지** — 소유 주체는 그대로고 토픽 경로 표기와 소비자 배선 방식만 갱신된다. ADR-015 / ADR-035 본문은 과거 기록으로 미수정, 각 헤더에 인라인 포인터만 달았다.
+
+**Context**:
+- `realsense2_camera` 4.58.1 은 스트림 토픽을 private(`~/`)으로 만든다 → 최종 이름 = `/<node_namespace>/<node_name>/<stream>/...`. 근거: `src/rs_node_setup.cpp:277` 주석("adding \"~/\" to the topic name will add node namespace and node name to the topic"), 같은 파일 `:279` 의 `image_raw << "~/" << stream_name << ...`.
+- upstream `rs_launch.py` 는 `camera_namespace` 와 `camera_name` 을 **둘 다 `camera`** 로 둔다 → `/camera/camera/...` 라는 중복 한 단계가 생긴다. 그런데 이건 `rs_launch.py` 전용 문제가 아니다 — 노드를 직접 띄워도 생성자 기본 네임스페이스(`src/realsense_node_factory.cpp:34`)가 `/camera` 라 같은 결과가 나온다. 그래서 루트 네임스페이스를 **명시**해야만 한 단계로 줄어든다. 그 단계는 아무 정보도 담지 않는다. multi-camera 예제(`rs_multi_camera_launch.py`)도 `camera_namespace1='camera1'` + `camera_name1='camera1'` 로 또 중복시킨다 — 의미 있는 2단 구분이 아니다.
+- TF frame_id 는 토픽 이름과 **별개 knob** 이다. ROS 파라미터 `camera_name`(기본 `"camera"`)에서 나온다(근거: `src/parameters.cpp:24-28`, `include/base_realsense_node.h:86-90`). 즉 토픽 네임스페이스를 줄여도 프레임 이름은 움직이지 않는다.
+- 소비자(`realsense.py` 의 `ImgNode`, viz 스크립트)가 토픽을 **절대 경로로 하드코딩**하고 있어, 프로듀서가 이름을 바꾸면 소스를 다시 고쳐야 하는 구조였다.
+
+**Decision**:
+- **프로듀서 — 네임스페이스 한 단계 제거**: `m0609_rg2_bringup/launch/bringup.launch.py` 의 `realsense2_camera_node` 를 노드를 `namespace='/'` + `name='camera'` 로 띄운다. **namespace 인자를 지우는 것으로는 안 된다** — 드라이버 생성자에 기본 네임스페이스가 `/camera` 로 박혀 있어(`src/realsense_node_factory.cpp:34` `RosNodeBase("camera", "/camera", node_options)`) 그대로 살아난다. → 토픽 `/camera/color/image_raw`, `/camera/aligned_depth_to_color/image_raw`, `/camera/color/camera_info`. 근거는 위의 private 토픽 규칙 + upstream 기본값이 만든 무의미한 중복.
+- **TF 프레임 무변경**: `camera_name` 파라미터는 기본값 `camera` 그대로 → `camera_link` / `camera_color_optical_frame` 등 전부 불변. **URDF 무변경**.
+- **스트림 프로파일 무변경**: color 1280x720x30, depth 848x480x30, `initial_reset`, `align_depth.enable`, `enable_rgbd`, `enable_sync`, `pointcloud.enable` — ADR-035 가 이관한 실측 검증값 그대로.
+- **소비자 — 절대 경로 폐기, 상대 이름 + remap**: `realsense.py` 3벌(`yolo_container/object_detection`, `pick_and_place_text`, `pick_and_place_voice`)의 `ImgNode` 가 `'color/image_raw'` / `'aligned_depth_to_color/image_raw'` / `'color/camera_info'` 를 구독한다. 노드 이름은 `img_node` 유지 — 이것이 remap 키가 된다.
+- **노드 스코프 네임스페이스 remap 을 쓴다**: `containers/bringup.sh` 의 yolo 노드 기동에 `--ros-args -r img_node:__ns:=/camera` 를 붙인다. `img_node:` 접두사를 빼고 프로세스 전역 `-r __ns:=/camera` 를 쓰면 같은 프로세스의 `object_detection_node` 까지 옮겨져, `robot_control.py` 가 절대 경로로 부르는 `/get_3d_position` 서비스가 `/camera/get_3d_position` 으로 이동하며 끊긴다.
+- **와일드카드 접두사 일괄 치환은 불가**: rcl 의 `**` remap 은 미구현이다(Jazzy 실측: `Wildcard '**' is not implemented`). 그래서 선택지는 네임스페이스 remap 또는 토픽 단위 remap 둘뿐이다.
+- **viz 는 토픽 단위 remap**: `viz/live_detection.py` / `viz/viewer.py` 의 `COLOR_TOPIC` 을 상대 이름 `"color/image_raw"` 로 바꾸고, `docker-compose.yml` 의 `yolo-viz` command 에 `--ros-args -r color/image_raw:=/camera/color/image_raw` 를 준다. 두 스크립트는 카메라 외 토픽(`/yolo/detections` 등)도 다루므로 `__ns` 통째 이동을 쓰면 안 된다.
+- **rviz 설정 갱신**: `m0609_rg2_bringup` 의 `rviz/default.rviz` 토픽 3개를 `/camera/*` 로. `containers/README.md` 와 `containers/yolo-detection/Dockerfile` 주석의 토픽 경로도 함께 갱신.
+
+**Consequences**:
+- 토픽 경로가 한 단계 짧아지고, 소비자 소스가 프로듀서의 네임스페이스 선택으로부터 분리된다 — 다음에 경로가 바뀌면 기동 인자만 고치면 된다.
+- **전달 위험(가장 큰 잔존 리스크)**: 소비자 소스 `~/cobot_ws/src/cobot2` 는 어떤 git 레포에도 추적되지 않고 본 레포도 `.gitignore` 로 배제한다. 프로듀서(외부 레포)만 갱신되고 소비자 패치가 학생/타 머신에 전달되지 않으면 파이프라인이 통째로 죽는다. 전달 경로는 zip 재배포 등 수동 절차에 의존한다.
+- **remap 누락 = 조용한 실패**: remap 을 빠뜨리면 노드는 정상 기동하고 에러도 없이 `/color/image_raw` 를 구독하며 영원히 빈 채로 대기한다. 로그만 보면 정상으로 보인다.
+- 구 `cobot2_bringup/bringup_all.launch.py` 는 upstream `examples/align_depth/rs_align_depth_launch.py` 를 include 하므로 여전히 `/camera/camera/*` 를 낸다. 그 진입점을 쓰려면 remap 을 `-r img_node:__ns:=/camera/camera` 로 맞춰야 한다(해당 파일 docstring 에 명시해 둠).
+- TF·URDF·스트림 프로파일이 불변이라 `robot_control.py` 의 좌표 변환 경로와 RViz 로봇 표시는 영향 없다.
+
+**검증(2026-07-21)**:
+- [실측] Jazzy 컨테이너에서 remap 배선 3종의 이름 해석 결과:
+
+  | remap | ImgNode 구독 | `/get_3d_position` 서비스 |
+  |---|---|---|
+  | 없음 | `/color/image_raw`(무수신) | `/get_3d_position` |
+  | `-r img_node:__ns:=/camera` (채택) | `/camera/color/image_raw` | `/get_3d_position` 유지 |
+  | 전역 `-r __ns:=/camera` (금지) | `/camera/color/image_raw` | `/camera/get_3d_position` 으로 이동 |
+
+- [실측] rcl 와일드카드 remap 미구현 — `**` 사용 시 `Wildcard '**' is not implemented`.
+- [미검증] 실 RealSense 하드웨어가 없어 **실제 영상 수신은 확인하지 못했다**. 위 검증은 이름 해석 범위에 한정된다.
+- [미검증] cobot2 3벌 `realsense.py` 패치가 실제 로봇 데모에서 end-to-end 로 동작하는지.
+
+- 프로듀서 변경은 `M0609_RG2_Integration` 레포에 있고, 이미 clone 된 머신은 그 레포를 자동 갱신하지 않는다(설치 정책상 기존 clone 은 건드리지 않는다) — 소비자와 마찬가지로 전달이 자동이 아니다.
+- 본 레포 안에도 gitignore 된 구 cobot2 사본(`cobot_ws/src/cobot2`)이 있고 그쪽 `realsense.py` 는 패치되지 않았다. 런타임에 쓰이지 않는 스냅샷이지만 읽는 사람이 헷갈릴 수 있다.
+
+**Reopen 조건**:
+- rcl 이 `**` 와일드카드 remap 을 구현하면 → 접두사 일괄 치환으로 배선 단순화 재검토.
+- 다중 카메라가 필요해지면 → 카메라별 구분이 노드 이름 하나로 충분한지(`/cam_left/*` vs 2단 네임스페이스) 재설계.
+- cobot2 가 git 추적 대상이 되거나 패키지로 배포되면 → 소비자 패치 전달 위험이 해소되므로 본 ADR 의 Consequences 첫 항목을 닫는다.

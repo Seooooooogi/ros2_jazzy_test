@@ -201,8 +201,14 @@ set -a; source ~/ros2_jazzy_test/resources/config.sh; set +a
 source /opt/ros/jazzy/setup.bash
 source ~/cobot_demo_ws/install/setup.bash
 export PYTHONPATH="$(ls -d ~/cobot_demo_ws/.venv/lib/python*/site-packages):$PYTHONPATH"
-ros2 run pick_and_place_text detection
+ros2 run pick_and_place_text detection --ros-args -r img_node:__ns:=/camera
+# remap 이 필요한 이유 — 이 노드 안의 img_node 는 카메라 토픽을 절대 경로가 아니라 상대 이름
+# ('color/image_raw' 등)으로 구독한다. 상대 이름은 노드 네임스페이스가 붙어 최종 이름이 되므로
+# img_node 를 /camera 네임스페이스로 옮겨야 bringup 이 내는 /camera/color/image_raw 와 맞는다.
+# 'img_node:' 접두사를 빼고 -r __ns:=/camera 로 쓰면 같은 프로세스의 detection 노드까지 옮겨져
+# robot_move 가 부르는 /get_3d_position 서비스 경로가 끊긴다.
 # → YOLO 로드 → "Waiting for client's call..." (에뮬레이터 없으면 카메라 토픽 대기 = 정상)
+# remap 을 빠뜨려도 노드는 에러 없이 그냥 뜬다 — 토픽만 조용히 비어 있다.
 ```
 
 ```bash
@@ -232,7 +238,10 @@ set -a; source ~/ros2_jazzy_test/resources/config.sh; set +a
 source /opt/ros/jazzy/setup.bash
 source ~/cobot_demo_ws/install/setup.bash
 export PYTHONPATH="$(ls -d ~/cobot_demo_ws/.venv/lib/python*/site-packages):$PYTHONPATH"
-ros2 run pick_and_place_voice object_detection
+ros2 run pick_and_place_voice object_detection --ros-args -r img_node:__ns:=/camera
+# remap 이 필요한 이유는 §8 터미널 2 와 동일 — img_node 만 /camera 네임스페이스로 옮겨
+# 상대 이름 'color/image_raw' 를 /camera/color/image_raw 로 해석시킨다.
+# robot_control 이 부르는 /get_3d_position 은 접두사 'img_node:' 덕에 루트에 그대로 남는다.
 # → YOLO 로드 → "[img_node]: Waiting for client's call..." (카메라 토픽 대기 = 정상)
 ```
 

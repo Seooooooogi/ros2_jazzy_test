@@ -84,9 +84,9 @@
 
 ## yolo 컨테이너가 카메라를 못 봄 / `/get_3d_position` 좌표가 비거나 depth 가 None
 
-**증상**: yolo 컨테이너(`object_detection`)는 떠 있는데 `/get_3d_position` 서비스 호출이 응답을 안 주거나, 응답 좌표의 depth(z)가 0/None. `ros2 topic list` 에 `/camera/camera/aligned_depth_to_color/image_raw` 가 없다.
+**증상**: yolo 컨테이너(`object_detection`)는 떠 있는데 `/get_3d_position` 서비스 호출이 응답을 안 주거나, 응답 좌표의 depth(z)가 0/None. `ros2 topic list` 에 `/camera/aligned_depth_to_color/image_raw` 가 없다.
 
-**원인**: 카메라는 **host 소유**다(2026-06-02 토폴로지 변경). yolo 컨테이너 안엔 realsense2_camera 드라이버가 없고, `object_detection` 노드는 host 가 publish 하는 `/camera/camera/*` 토픽을 DDS 로 subscribe 만 한다. host 에서 카메라 노드를 안 띄웠거나, `align_depth` 없이 띄워 `aligned_depth_to_color` 토픽이 없으면 노드의 `depth_frame` 이 채워지지 않아 좌표 계산이 실패한다.
+**원인**: 카메라는 **host 소유**다(2026-06-02 토폴로지 변경). yolo 컨테이너 안엔 realsense2_camera 드라이버가 없고, `object_detection` 노드는 host 가 publish 하는 `/camera/*` 토픽을 DDS 로 subscribe 만 한다. host 에서 카메라 노드를 안 띄웠거나, `align_depth` 없이 띄워 `aligned_depth_to_color` 토픽이 없으면 노드의 `depth_frame` 이 채워지지 않아 좌표 계산이 실패한다.
 
 카메라 노드 기동 주체는 통합 bringup 이다 — 진입점이 `m0609_rg2_bringup` 의 `bringup.launch.py` 로 바뀌었고, 이 launch 가 로봇 드라이버·그리퍼와 함께 realsense 노드도 띄운다. 따라서 예전 절차였던 `ros2 launch realsense2_camera rs_launch.py align_depth.enable:=true` 수동 기동은 더 이상 쓰지 않는다(같은 장치를 두 노드가 동시에 여는 상태는 검증한 적 없음).
 
@@ -101,18 +101,67 @@
   ros2 launch m0609_rg2_bringup bringup.launch.py camera:=true
   ```
   `align_depth.enable` 을 비롯한 프로파일(color 1280x720x30, depth 848x480x30, `initial_reset`, `enable_rgbd`, `enable_sync`, `pointcloud.enable`)은 launch 안에 이미 박혀 있어 따로 넘기지 않는다.
-- 토픽 확인: `ros2 topic list | grep /camera/camera` → `color/image_raw`, `aligned_depth_to_color/image_raw`, `color/camera_info` 3개가 보여야 한다. (이 검증 명령이 진입점 교체 후에도 그대로 유효한 이유: 새 launch 가 `realsense2_camera_node` 를 namespace `camera` + name `camera` 로 띄워 `rs_launch.py` 기본값과 동일한 `/camera/camera/*` 이중 namespace 를 낸다 — 실측으로 노드 로거 이름이 `camera.camera` 로 확인됨. 노드 구독 경로가 이 이중 namespace 에 묶여 있으므로 namespace/name 을 바꿔 띄우면 토픽이 안 맞는다.)
+- 토픽 확인: `ros2 topic list | grep '^/camera/'` → `/camera/color/image_raw`, `/camera/aligned_depth_to_color/image_raw`, `/camera/color/camera_info` 3개가 보여야 한다. (**경로가 바뀌었다** — 예전 문서의 `/camera/camera/*` 이중 namespace 는 더 이상 나오지 않는다. realsense2_camera 4.58.1 은 스트림 토픽을 private(`~/`)으로 만들어 최종 이름이 `/<node_namespace>/<node_name>/<stream>` 이 되는데, upstream `rs_launch.py` 가 `camera_namespace` 와 `camera_name` 을 **둘 다 `camera`** 로 두는 바람에 아무 정보도 없는 한 단계가 더 붙었던 것이다. 새 `bringup.launch.py` 는 realsense 노드를 `namespace='/'` + `name='camera'` 로 띄워 `/camera/*` 한 단계로 낸다(인자를 지우기만 하면 드라이버 생성자 기본값 `/camera` 가 살아나 그대로다 — `src/realsense_node_factory.cpp:34`).)
+  - TF 프레임은 **무변경**이다(`camera_link`, `camera_color_optical_frame`, …). frame_id 는 토픽 이름과 별개로 ROS 파라미터 `camera_name`(기본 `camera`)에서 나오고, 그 파라미터는 건드리지 않았다. URDF 도 그대로. 즉 "토픽이 안 보인다"와 "TF 가 안 붙는다"는 서로 다른 문제다.
+  - 소비자(`ImgNode`)는 이제 절대 경로가 아니라 **상대 이름**(`color/image_raw`, `aligned_depth_to_color/image_raw`, `color/camera_info`)을 구독하고, 실행 시 remap 으로 `/camera` 아래에 붙인다. 이 배선이 빠졌을 때의 증상은 아래 "카메라 토픽 구독자가 0" 항목 참조.
 - host 와 컨테이너가 서로의 토픽을 보는지: 같은 `ROS_DOMAIN_ID` + 같은 `RMW_IMPLEMENTATION`(둘 다 `resources/config.sh` 가 host 에 싣고 compose 가 컨테이너에 주입, 현행 표준 `rmw_cyclonedds_cpp`) + compose `network_mode: host`. 하나라도 어긋나면 같은 topic 도 discovery 안 됨. 상세 = ADR-015 / ADR-016.
 
 **변형 — 카메라 노드가 아예 안 뜸(`camera:=false` / launch 를 인자 없이 직접 실행)**
 
-**증상**: 위와 달리 `/camera/camera/*` 가 **하나도** 없다(`aligned_depth_to_color` 만 빠진 게 아니라 `color/image_raw` 도 없음). 로봇 드라이버·그리퍼·RViz 는 정상이고 yolo 컨테이너도 살아 있지만 아무 로그도 안 남기며 조용하다. `ros2 node list` 에 `/camera/camera` 가 없다.
+**증상**: 위와 달리 `/camera/*` 가 **하나도** 없다(`aligned_depth_to_color` 만 빠진 게 아니라 `color/image_raw` 도 없음). 로봇 드라이버·그리퍼·RViz 는 정상이고 yolo 컨테이너도 살아 있지만 아무 로그도 안 남기며 조용하다. `ros2 node list` 에 카메라 노드(`/camera`)가 없다. — 이것은 **publisher 부재**다. 토픽 이름이 어긋난 게 아니라 토픽을 내는 노드 자체가 없는 상태이며, 이름 불일치 쪽은 아래 별도 항목이다.
 
 **원인**: 새 launch 의 `camera` 인자 기본값이 **false** 다(그리퍼/URDF standalone 개발 시 USB 카메라를 잡지 않기 위함). `ros2 launch m0609_rg2_bringup bringup.launch.py` 를 인자 없이 실행하거나 `camera:=false` 를 명시하면 realsense 노드 자체가 생성되지 않는다. `object_detection` 노드는 토픽이 없으면 에러 없이 대기만 하므로 "노드는 살아 있는데 조용함" 으로 보인다 — 카메라 하드웨어 고장/USB 문제와 헷갈리기 쉽다.
 
 **구분법**: 노드 부재(`ros2 node list | grep camera` 가 빈 결과) = launch 인자 문제. 노드는 있는데 로그에 재시도/장치 못 찾음 = 하드웨어·USB 문제.
 
 **복구**: `camera:=true` 로 다시 띄운다(또는 `bash containers/bringup.sh` 사용 — 명시 안 하면 자동으로 붙는다).
+
+---
+
+## 카메라 토픽 구독자가 0 — remap 배선 누락(노드는 정상, 이름만 어긋남)
+
+**증상**: 앞 항목과 정반대로 **publisher 는 멀쩡하다**. `/camera/color/image_raw` 가 topic list 에 있고 hz 도 나오는데, 소비자만 아무것도 못 받는다. 노드는 에러 없이 정상 기동하고 로그도 깨끗하다.
+- `ros2 topic info /camera/color/image_raw` → `Publisher count: 1`, **`Subscription count: 0`**.
+- 대신 `/color/image_raw`, `/aligned_depth_to_color/image_raw`, `/color/camera_info` 같은 **루트 토픽**이 topic list 에 나타나고, 거기엔 구독자만 있고 publisher 가 없다.
+
+**원인**: 소비자 `ImgNode`(cobot2 의 `realsense.py` 3벌 — `yolo_container/object_detection`, `pick_and_place_text`, `pick_and_place_voice`)가 절대 경로 대신 **상대 이름**을 구독하도록 바뀌었다. 상대 이름은 그 노드의 네임스페이스 아래로 해석되므로, remap 없이 띄우면 네임스페이스가 `/` 라 `/color/image_raw` 로 붙는다. 이름이 존재하지 않는 게 아니라 **다른 이름에 정상적으로 붙은 것**이라 ROS 는 경고조차 내지 않는다 — 조용히 빈 토픽을 구독한다.
+
+**진단**:
+```bash
+ros2 topic info /camera/color/image_raw          # Subscription count 가 0 이면 배선 누락
+ros2 topic list | grep -E '^/(color|aligned_depth_to_color)/'   # 루트에 새 토픽이 생겼는지
+ros2 node info /camera/img_node                  # remap 이 먹었으면 이 이름으로 존재
+ros2 node info /img_node                         # 배선 누락 시 여기로 뜨고, 구독 목록이 루트 경로
+```
+`ros2 node info` 의 Subscribers 섹션에 찍힌 경로가 `/camera/...` 인지 `/...` 인지가 결정적 단서다.
+
+**복구** — 소비자 실행줄에 remap 인자를 넣는다.
+- yolo 노드(`containers/bringup.sh`): 카메라 토픽만 다루므로 노드 스코프 네임스페이스 remap 한 줄.
+  ```bash
+  ros2 run object_detection object_detection --ros-args -r img_node:__ns:=/camera
+  ```
+- viz 스크립트(`viz/live_detection.py`, `viz/viewer.py`, compose 의 `yolo-viz`): `/yolo/detections` 등 카메라 밖 토픽도 함께 쓰므로 네임스페이스 통째 이동 대신 **토픽 단위 remap**.
+  ```bash
+  python3 /opt/viz/live_detection.py --ros-args -r color/image_raw:=/camera/color/image_raw
+  ```
+
+**전역 `__ns` 를 쓰면 안 되는 이유** (Jazzy 실측):
+
+| remap | ImgNode 구독 | `/get_3d_position` 서비스 |
+|---|---|---|
+| 없음 | `/color/image_raw` (무수신) | `/get_3d_position` |
+| `-r img_node:__ns:=/camera` (채택) | `/camera/color/image_raw` | `/get_3d_position` 유지 |
+| 전역 `-r __ns:=/camera` (금지) | `/camera/color/image_raw` | `/camera/get_3d_position` 으로 이동 |
+
+`img_node:` 접두사를 빼면 같은 프로세스의 `object_detection_node` 까지 함께 옮겨져, `robot_control.py` 가 절대 경로로 부르는 `/get_3d_position` 이 끊긴다 — 카메라는 고쳐지고 서비스가 죽는 교환이라 더 나쁘다. 접두사 일괄 치환으로 우회할 수도 없다: rcl 의 `**` 와일드카드 remap 은 **미구현**이다(Jazzy 실측 시 `Wildcard '**' is not implemented`). 네임스페이스 remap 또는 토픽 단위 remap 둘 중 하나만 쓸 수 있다.
+
+**구 launch 를 쓰는 경우**: cobot2 의 예전 `cobot2_bringup/bringup_all.launch.py` 는 upstream `examples/align_depth/rs_align_depth_launch.py` 를 include 해 여전히 `/camera/camera/*` 를 낸다. 그걸 띄웠다면 remap 대상도 맞춰야 한다 — `-r img_node:__ns:=/camera/camera`.
+
+**남은 위험 / 미검증**:
+- 소비자 소스(`~/cobot_ws/src/cobot2`)는 **어떤 git 저장소에도 추적되지 않는다**(이 레포도 `.gitignore` 로 배제). 프로듀서만 새 이름으로 바뀌고 소비자 패치가 다른 머신에 전달되지 않으면 파이프라인이 통째로 죽는다 — 새 머신 세팅 시 위 진단 명령을 먼저 돌릴 것.
+- 실 RealSense 하드웨어가 없어 **실제 영상 수신은 미검증**이다. 위 표는 이름 해석(어떤 토픽/서비스 이름으로 붙는지)만 Jazzy 컨테이너에서 실측한 결과다.
+
+---
 
 ## CycloneDDS 로 RealSense raw 토픽이 0Hz / `SocketSendBufferSize` 지정 후 노드가 SIGABRT 로 죽음
 
