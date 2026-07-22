@@ -1224,3 +1224,46 @@
 **Reopen 조건**:
 - 다중 카메라가 필요해져 소비자가 카메라를 골라야 하면 → 절대 경로로는 부족하므로 파라미터 기반 토픽 이름 주입으로 재설계.
 - cobot2 가 git 추적 대상이 되면 → 전달 위험이 사라지므로 상대 이름 + remap 의 유연성을 다시 저울질할 수 있다.
+
+---
+
+### ADR-038: wakeword 캡처 백엔드를 sounddevice 로 통일 (2026-07-22)
+
+**Status**: 신규. ADR-014(openwakeword / tflite 백엔드 대체)와 ADR-037(카메라 소비자 절대 경로)에 이어지는 배포본 선반영 건. 기존 결정 폐기 없음.
+
+**Context**:
+- 이 워크스테이션(Raptor Lake cAVS, SOF 드라이버)의 디지털 마이크(DMIC)는 **PyAudio 로 캡처되지 않는다 — 무음이 나온다**(실측). 또 48kHz 로 받아 16kHz 로 resample 하면 풀스케일 근처 입력에서 anti-aliasing 필터가 int16 을 넘겨 openwakeword feature 가 왜곡된다.
+- 그래서 host `voice_processing` 은 wakeword 캡처를 **sounddevice `sd.InputStream`(16kHz 네이티브 직접 캡처)** 으로 옮기고, 장치 선택을 `audio_device.resolve_input_device()` 로 분리했다. 이 조합에서 wakeword confidence 0.7+ 로 정상 탐지된다.
+- 그런데 실습 패키지 `pick_and_place_voice` 는 **PyAudio 경로(`MicController` 의 stream 을 `WakeupWord.set_stream()` 으로 주입)를 그대로 유지**하고 있었다. 여기에 `MicController` 의 `input_device_index=resolve_input_device()` 한 줄만 부분 적용돼 있어 상태가 더 나빴다 — 그 함수는 sounddevice 인덱스 또는 ALSA 이름 **문자열**을 돌려주는데 PyAudio 는 자기 열거 기준 정수만 받는다.
+- 증상: `get_keyword` 노드가 예외 없이 뜨고 `confidence: 0.00...` 만 무한히 찍힌다(2026-07-22 실측 확인). 로그만으로는 원인을 알 수 없다.
+
+**Decision**:
+- **wakeword 캡처는 두 패키지 모두 sounddevice 로 통일한다.** `pick_and_place_voice/voice_processing/wakeup_word.py` 를 host 판으로 교체하고 `PACKAGE_NAME` 만 `pick_and_place_voice` 로 둔다(모델이 그 패키지 share 에 설치되므로).
+- **`WakeupWord` 가 스트림을 소유한다** — `open()` / `close()`. 외부에서 stream 을 주입하는 `set_stream()` 방식은 폐기. 호출부(`get_keyword.py`)는 `MicConfig` / `MicController` 를 쓰지 않는다.
+- **`close()` 는 `try/finally` 로 보장한다.** wakeword 스트림과 STT 의 `sd.rec` 가 같은 입력 장치를 쓰므로 닫지 않으면 STT 가 장치를 열지 못한다. 기존 실습 코드에는 닫는 지점이 아예 없었다.
+- **`MicController` 는 host 판으로 되돌린다**(`input_device_index` 주석 상태). wakeword 가 더는 이 경로를 쓰지 않으므로, PyAudio 에 sounddevice 인덱스를 넣는 줄은 위험만 남는다. 파일 자체는 두 패키지에 남겨 둔다 — 지금은 어느 쪽도 쓰지 않는다.
+- **장치 선택 로직은 `audio_device.py` 한 곳**이며 두 패키지가 바이트 동일하게 유지한다. 다른 사운드 칩은 `VOICE_MIC_DEVICE` 환경변수로 override 한다(ALSA 이름 또는 인덱스 — sounddevice 는 둘 다 받는다).
+
+**Consequences**:
+- 실습(`pick_and_place_voice`)과 host(`voice_processing`)의 wakeword 경로가 같아져, 한쪽에서 검증한 것이 다른 쪽에 그대로 통한다.
+- `pyaudio` 는 두 패키지의 실행 경로에서 빠진다(`MicController` 파일 안에만 남음).
+- **전달 위험은 그대로다** — cobot2 는 어떤 git 레포도 추적하지 않는다. 본 변경도 `cobot2.zip` 선반영으로만 전달되며, **zip 을 새로 만들 때마다 재적용해야 한다**.
+
+**zip 재적용 체크리스트** (2026-07-22 기준 — 새 `cobot2.zip` 을 만들 때 반드시 다시 넣을 것):
+
+| 대상 | 내용 | 근거 |
+|---|---|---|
+| `realsense.py` 3벌 | 카메라 토픽을 `/camera/*` **절대 경로**로 구독 | ADR-037 |
+| `pick_and_place_voice/voice_processing/{wakeup_word,MicController,get_keyword}.py` | wakeword 캡처 sounddevice 통일 | 본 ADR |
+| `cobot2_bringup/` | 패키지 자체를 **넣지 않음**(진입점이 m0609 로 이관) | ADR-035 |
+| `onrobot.py` 3벌 | 가상 그리퍼 우회 | ADR-036 |
+| 마이크 16kHz 하드코딩 | `MicConfig.rate=16000` | 2026-07-20 |
+
+**검증(2026-07-22)**:
+- [실측] 증상 재현 — 이식 전 `pick_and_place_voice` 의 `get_keyword` 가 `confidence: 0` 만 반복(사용자 확인).
+- [실측] 이식 후 정적 검증 — `py_compile` 51개 파일 전건 통과. `get_keyword.py` 에 `MicController` / `mic_config` / `set_stream` / `open_stream` / `device_index` / `pyaudio` 잔존 각 0건. `MicController.py` 는 두 패키지 바이트 동일. 모델 경로 성립 확인(`resource/hello_rokey_8332_32.tflite` + `setup.py` 의 `share/<pkg>/resource` 설치).
+- [미검증] **live wakeword 탐지**. 이식본으로 "Hello Rokey" 발화 시 confidence > 0.3 이 나오는지, 그리고 감지 후 STT 녹음이 장치 점유 충돌 없이 시작되는지. 실측 머신에서 확인해야 한다.
+
+**Reopen 조건**:
+- 다른 사운드 칩(PyAudio 로 정상 캡처되는 하드웨어)이 표준 실습 환경이 되면 → 백엔드 선택을 다시 저울질.
+- cobot2 가 git 추적 대상이 되면 → 위 재적용 체크리스트가 불필요해지므로 폐기.
