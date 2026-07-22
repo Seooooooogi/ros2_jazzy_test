@@ -20,7 +20,8 @@
 # launch 인자(mode / host / port / camera / rviz / rt_host) = 그대로 전달:
 #   bash containers/bringup.sh                       # 가상(emulator) + 카메라 + yolo 컨테이너 + host voice
 #   bash containers/bringup.sh mode:=real            # 실제 로봇
-#   bash containers/bringup.sh mode:=virtual camera:=false   # 카메라 없이 (yolo 는 대기 상태가 된다)
+#   bash containers/bringup.sh camera:=false          # 카메라 없이 (yolo 는 대기 상태가 된다)
+#                                                     # mode 와 무관하게 유효 — real 에서도 꺼진다
 # camera 를 지정하지 않으면 이 스크립트가 camera:=true 를 붙인다 — yolo 파이프라인이 카메라 토픽에
 # 의존하므로, launch 자체의 기본값(false, standalone 개발용)을 여기서 뒤집는다.
 set -euo pipefail
@@ -173,6 +174,8 @@ echo "[bringup] launching robot driver + gripper + camera — Ctrl+C tears every
 # USB 카메라를 잡지 않기 위함). 하지만 이 스크립트는 yolo 컨테이너를 함께 띄우고, 그 노드는
 # /camera/* 토픽이 없으면 조용히 대기만 한다. 그래서 사용자가 camera 를 명시하지 않은
 # 경우에만 camera:=true 를 덧붙인다. launch 의 중복 인자 우선순위에 기대지 않고 직접 검사한다.
+# 사용자가 camera:=false 를 명시하면 mode 와 무관하게 그대로 존중된다(예전에는 mode:=real 이
+# 그 값을 무시하고 카메라를 강제 기동했으나, launch 쪽에서 그 강제를 제거했다).
 LAUNCH_ARGS=("$@")
 camera_set=0
 for arg in "$@"; do
