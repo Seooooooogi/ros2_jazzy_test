@@ -10,9 +10,12 @@
 # /camera/* 토픽을 publish 하고 있어야 한다 (align_depth 필수). 그 역할은 통합 bringup 이 맡는다:
 #   ros2 launch m0609_rg2_bringup bringup.launch.py camera:=true
 # (`bash containers/bringup.sh` 는 사용자가 camera:= 를 안 주면 camera:=true 를 자동으로 덧붙인다.
-#  기존 `rs_launch.py align_depth.enable:=true` 를 이 진입점이 대체한다 — 토픽 이름은 그대로다.
-#  새 launch 도 realsense2_camera_node 를 namespace/name 둘 다 'camera' 로 띄워 rs_launch.py
-#  기본값과 같은 /camera/* 를 내고, align_depth·enable_rgbd·enable_sync·pointcloud 를 켠다.)
+#  기존 `rs_launch.py align_depth.enable:=true` 를 이 진입점이 대체한다 — 이때 토픽 경로가 바뀐다.
+#  rs_launch.py 기본값은 /camera/camera/* 였다(드라이버가 스트림을 private 토픽으로 만드는데
+#  노드 기본 네임스페이스가 upstream 소스에 /camera 로 박혀 있어 한 단계 중복된다). 새 launch 는
+#  realsense2_camera_node 를 namespace='/' + name='camera' 로 띄워 그 중복을 없앤 /camera/* 를
+#  내고, align_depth·enable_rgbd·enable_sync·pointcloud 를 켠다. 소비자는 절대 경로 대신 상대
+#  이름을 구독하고 `-r img_node:__ns:=/camera` 로 붙는다.)
 # 누락 시 aligned_depth_to_color 가 안 떠 object_detection 의 depth 계산이 실패한다.
 #
 # 전제: dds-tuning.sh(install.sh 마지막 step 또는 단독 실행)가 먼저 끝나 있어야 한다.
