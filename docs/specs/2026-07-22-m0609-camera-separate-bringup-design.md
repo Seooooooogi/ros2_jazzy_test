@@ -41,9 +41,10 @@ camera_enabled = PythonExpression([
 (`realsense_node_factory.cpp:34` `RosNodeBase("camera", "/camera", ...)`) 중복 한 단계가 생긴다.
 m0609 launch 는 이를 **실행 시점 인자로만** 덮어쓴다 — realsense 패키지 소스는 무패치.
 
-소비자(`object_detection`, `pick_and_place_*` 의 `realsense.py::ImgNode`)는 상대 이름을
-구독하고 `--ros-args -r img_node:__ns:=/camera` 로 붙는다. 따라서 학습자가 개별 기동으로
-갈아타는 순간 경로가 어긋나 **에러 없이 토픽만 빈다**.
+소비자(`object_detection`, `pick_and_place_*` 의 `realsense.py::ImgNode`)는 이 경로를 구독한다.
+따라서 학습자가 개별 기동으로 갈아타는 순간 경로가 어긋나 **에러 없이 토픽만 빈다**.
+(설계 시점에는 소비자가 상대 이름 + `-r img_node:__ns:=/camera` remap 이었다. 그 remap 누락이
+실제 사고로 이어져 2026-07-22 에 절대 경로로 되돌렸다 — ADR-037. 아래 4번 항목도 그에 맞춰 갱신.)
 
 ## 설계
 
@@ -73,8 +74,8 @@ README §기동을 네 군데 고친다.
    `/camera/camera/*` 로 나온다는 대조용.
 
 4. **학습용 3터미널 흐름 추가** — 터미널1 `bringup.launch.py`(카메라 없이) /
-   터미널2 위 `ros2 run` realsense / 터미널3 소비자 노드 + `-r img_node:__ns:=/camera`.
-   통합 기동과 토픽이 동일하다는 점을 명시.
+   터미널2 위 `ros2 run` realsense / 터미널3 소비자 노드.
+   통합 기동과 토픽이 동일하다는 점을 명시. (소비자가 절대 경로로 바뀌어 remap 인자는 불필요 — ADR-037)
 
 5. **`containers/docker-compose.yml:13-15` 주석 정정** — 소스와 어긋난 서술 2건을 고친다.
    `:14` 는 launch 가 "namespace/name 둘 다 `camera`" 로 띄운다고 적었으나 실제는

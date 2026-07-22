@@ -170,8 +170,9 @@ ros2 run realsense2_camera realsense2_camera_node --ros-args \
 - `initial_reset:=true` : 기동 전 카메라 하드웨어 리셋(USB 재연결 꼬임 방지).
 
 > 다른 자료에서 흔히 보이는 `ros2 launch realsense2_camera rs_align_depth_launch.py ...` 는
-> upstream 기본값이라 토픽이 `/camera/camera/*` 로 나온다. 그쪽으로 띄웠다면 소비자 remap 을
-> `-r img_node:__ns:=/camera/camera` 로 맞춰야 한다.
+> upstream 기본값이라 토픽이 `/camera/camera/*` 로 나온다. 소비자는 `/camera/*` 를 절대 경로로
+> 구독하므로 그쪽으로 띄우면 붙지 않는다 — 네임스페이스 remap 으로는 해결되지 않고(절대 이름은
+> 영향을 안 받는다) 토픽 단위 remap 이 필요하다. 위 `ros2 run` 방식을 쓰는 편이 간단하다.
 
 **학습용 — 카메라를 따로 붙여 보기**
 
@@ -186,12 +187,13 @@ ros2 run realsense2_camera realsense2_camera_node --ros-args -r __ns:=/ -r __nod
 
 # 터미널 3 — 소비자 노드
 ros2 topic list | grep '^/camera/'      # /camera/camera/ 가 보이면 터미널 2 의 remap 누락
-ros2 run object_detection object_detection --ros-args -r img_node:__ns:=/camera
+ros2 run object_detection object_detection
 ```
 
-소비자는 절대 경로가 아니라 상대 이름(`color/image_raw` 등)을 구독한다. `img_node:` 접두어 없이
-`-r __ns:=/camera` 만 주면 같은 프로세스의 `object_detection_node` 까지 옮겨져 `robot_control` 이
-부르는 `/get_3d_position` 이 끊긴다. remap 을 빠뜨리면 에러 없이 토픽만 조용히 빈다.
+소비자(`ImgNode`)는 `/camera/color/image_raw` 등 절대 경로를 구독하므로 기동 인자가 따로 필요 없다.
+예전 자료에 보이는 `--ros-args -r img_node:__ns:=/camera` 를 그대로 붙여도 결과는 같다 — 절대 이름은
+네임스페이스 remap 의 영향을 받지 않는다. 다만 카메라 소스가 아직 구본인 머신에서는 그 인자가 있어야
+동작하므로, `containers/bringup.sh` 는 전환기 동안 인자를 유지한다.
 
 **통합 실행 (권장)**
 
