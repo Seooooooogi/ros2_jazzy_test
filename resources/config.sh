@@ -51,10 +51,12 @@ export ROS2_JAZZY_TEST_REPO
 # --- M0609 + RG2 통합 bringup ------------------------------------------
 # 로봇 드라이버 · 그리퍼 · RealSense 브라켓을 한 URDF / 한 launch 로 올리는 패키지.
 # containers/bringup.sh 의 진입점이 이 launch 다 (구 cobot2_bringup 대체).
+# M0609 레포는 distro 별로 브랜치가 갈린다 — `humble` 이 구버전, `jazzy` 가 이 설치가 쓰는 쪽이다.
+# 기본 브랜치(main)는 humble 이라 그대로 clone 하면 안 된다.
 # M0609_REPO_DIR 이 이미 있으면 clone 을 건너뛴다 — 사용자가 개발 중인 작업본을 덮어쓰지 않기
 # 위함(cobot2 와 같은 원칙). 그 경우 M0609_REF 는 무시된다.
 : "${M0609_REPO_URL:=https://github.com/Seooooooogi/M0609_RG2_Integration}"
-: "${M0609_REF:=main}"
+: "${M0609_REF:=jazzy}"
 : "${M0609_REPO_DIR:=${HOME}/M0609_RG2_Integration}"
 
 # OnRobot RG2 ROS2 패키지(description + msgs + Modbus 드라이버). M0609 레포가 추적하지 않는
