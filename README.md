@@ -82,7 +82,46 @@ set -a; source ~/ros2_jazzy_test/resources/config.sh; set +a
 
 ### 기동
 
-**DSR 드라이버**
+기동 방식은 두 가지다. 둘 다 같은 launch(`m0609_rg2_bringup`)를 쓴다.
+
+| 방식 | 명령 | 올라오는 것 |
+|------|------|------------|
+| 개별 기동 | `ros2 launch m0609_rg2_bringup bringup.launch.py` | 로봇 + 그리퍼 + 브라켓/카메라 모델 + RViz |
+| 통합 실행 | `bash containers/bringup.sh` | 위 + RealSense 드라이버 + yolo 컨테이너 + host voice |
+
+**개별 기동 (m0609_rg2_bringup)**
+
+로봇·그리퍼만 확인하거나 컨테이너 없이 RViz 를 보고 싶을 때 쓴다.
+
+```bash
+# 에뮬레이터 (기본)
+ros2 launch m0609_rg2_bringup bringup.launch.py
+# 실기
+ros2 launch m0609_rg2_bringup bringup.launch.py mode:=real host:=192.168.1.100
+# 카메라 드라이버까지
+ros2 launch m0609_rg2_bringup bringup.launch.py camera:=true
+```
+
+이 패키지는 `setup-app.sh` 가 `${DSR_WORKSPACE}/src` 로 링크해 둔다. **doosan-robot2 가 같은
+워크스페이스에 빌드돼 있어야 한다** — 없으면 launch 가 무엇이 빠졌는지 알려주며 멈춘다.
+별도 워크스페이스에 이 패키지만 빌드했다면 DSR 이 있는 쪽을 먼저 source 한다:
+
+```bash
+source ~/cobot_ws/install/setup.bash        # DSR 제공
+source <m0609 워크스페이스>/install/setup.bash
+```
+
+**launch 인자**
+
+- `mode:=virtual|real` : 에뮬레이터(기본) vs 실기 컨트롤러.
+- `host:=` / `port:=` : 실기 IP·포트. `virtual` 이면 무시되고 `127.0.0.1` 로 강제된다.
+- `rt_host:=` : 실기 RT control 채널 IP (기본 `192.168.137.50`).
+- `camera:=true|false` : RealSense 드라이버 기동. 기본 `false`, `mode:=real` 이면 항상 기동.
+- `rviz:=true|false` : RViz 기동 (기본 `true`).
+
+**DSR 드라이버만 따로 (그리퍼·브라켓 없음)**
+
+드라이버 자체를 격리해서 볼 때만 쓴다. 그리퍼와 브라켓/카메라가 URDF 에 없다.
 
 ```bash
 # 실기
@@ -100,7 +139,11 @@ ros2 launch dsr_bringup2 dsr_bringup2_rviz.launch.py \
 - `model:=m0609` : 로봇 모델명 (Doosan M0609).
 - `name:=dsr01` : ROS 네임스페이스 접두어 (토픽·노드 이름 앞에 붙음).
 
-**RealSense 카메라**
+**RealSense 카메라만 따로**
+
+> 이 명령은 upstream 기본값이라 토픽이 `/camera/camera/*` 로 나온다. 소비자(`object_detection` 등)는
+> `/camera/*` 를 보도록 배선돼 있으므로 이 방식으로 띄웠다면 remap 을 그 경로에 맞춰야 한다
+> (`-r img_node:__ns:=/camera/camera`). 통상 경로는 위 `camera:=true` 다.
 
 ```bash
 ros2 launch realsense2_camera rs_align_depth_launch.py \
