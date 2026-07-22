@@ -1258,6 +1258,13 @@
 | `cobot2_bringup/` | 패키지 자체를 **넣지 않음**(진입점이 m0609 로 이관) | ADR-035 |
 | `onrobot.py` 3벌 | 가상 그리퍼 우회 | ADR-036 |
 | 마이크 16kHz 하드코딩 | `MicConfig.rate=16000` | 2026-07-20 |
+| `detection.py` 3벌 | `_get_depth` 윈도우 중앙값(반사 표면 depth 드롭아웃 대응) | 아래 부록 |
+| `DEPTH_OFFSET` 3곳 | `-35.0` 으로 통일 + 이름 있는 상수 | 아래 부록 |
+
+**부록 — 실습 패키지 드리프트 정리(2026-07-22)**: cobot_ws 패키지군과 `pick_and_place_*` 의 동일 이름 `.py` 11종을 전수 대조한 결과, 한쪽에만 반영된 개선 두 건을 실습 쪽으로 이식했다.
+- `_get_depth` — 실습판은 중심 단일 픽셀(`frame[y, x]`)을 읽어 반사 표면(금속)·모서리의 depth 드롭아웃(0)에서 객체가 보여도 위치 계산이 실패했다. 컨테이너판의 `win=5` 윈도우 유효값 중앙값 + 경계 검사로 통일.
+- `DEPTH_OFFSET` — 값이 세 갈래였다(`robot_control` `-35.0` / `pick_and_place_voice` `-5.0` / `pick_and_place_text` 는 상수도 아닌 인라인 `-25`). **`-35.0` 으로 통일**하되, 이 값은 카메라 장착 위치·그리퍼 길이·대상 높이에 좌우되어 **설치마다 직접 튜닝해야 하는 knob** 이다(사용자 판단 2026-07-22). 그래서 `pick_and_place_text` 의 인라인 숫자를 이름 있는 상수로 승격해 찾을 수 있게 했다.
+- 나머지 차이는 의도된 것으로 확인해 그대로 뒀다: `realsense.py`/`yolo.py`/`detection.py` 의 `SingleThreadedExecutor` + `spin_once()` 대 전역 `rclpy.spin_once()`(컨테이너는 서비스 콜백 안에서 구독을 펌프해야 한다), `robot_control.py` 의 목적지(pos1/2/3) 배치·viz 토픽 기능, 각 파일의 `PACKAGE_NAME`.
 
 **검증(2026-07-22)**:
 - [실측] 증상 재현 — 이식 전 `pick_and_place_voice` 의 `get_keyword` 가 `confidence: 0` 만 반복(사용자 확인).
