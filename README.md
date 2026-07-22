@@ -86,12 +86,14 @@ set -a; source ~/ros2_jazzy_test/resources/config.sh; set +a
 
 | 방식 | 명령 | 올라오는 것 |
 |------|------|------------|
-| 개별 기동 | `ros2 launch m0609_rg2_bringup bringup.launch.py` | 로봇 + 그리퍼 + 브라켓/카메라 모델 + RViz |
+| 개별 기동 | `ros2 launch m0609_rg2_bringup bringup.launch.py` | 로봇 + 그리퍼 + RViz (URDF 에 브라켓·D435 모델 포함 — 카메라 드라이버는 안 뜸) |
 | 통합 실행 | `bash containers/bringup.sh` | 위 + RealSense 드라이버 + yolo 컨테이너 + host voice |
 
 **개별 기동 (m0609_rg2_bringup)**
 
-로봇·그리퍼만 확인하거나 컨테이너 없이 RViz 를 보고 싶을 때 쓴다.
+로봇·그리퍼만 확인하거나 컨테이너 없이 RViz 를 보고 싶을 때 쓴다. 기본값
+(`mode:=virtual`, `camera:=false`)에서는 **RealSense 드라이버가 뜨지 않는다** — 카메라를
+아래 "RealSense 카메라만 따로" 로 별도 터미널에 띄워 붙이는 학습 흐름이 그래서 가능하다.
 
 ```bash
 # 에뮬레이터 (기본)
@@ -141,24 +143,55 @@ ros2 launch dsr_bringup2 dsr_bringup2_rviz.launch.py \
 
 **RealSense 카메라만 따로**
 
-> 이 명령은 upstream 기본값이라 토픽이 `/camera/camera/*` 로 나온다. 소비자(`object_detection` 등)는
-> `/camera/*` 를 보도록 배선돼 있으므로 이 방식으로 띄웠다면 remap 을 그 경로에 맞춰야 한다
-> (`-r img_node:__ns:=/camera/camera`). 통상 경로는 위 `camera:=true` 다.
+카메라를 별도 터미널에 띄운다. 위 개별 기동에 이걸 붙이면 통합 실행과 **똑같은 토픽**
+(`/camera/color/image_raw` 등)이 나오므로, 소비자 노드의 실행 명령을 바꾸지 않아도 된다.
 
 ```bash
-ros2 launch realsense2_camera rs_align_depth_launch.py \
-  depth_module.depth_profile:=848x480x30 rgb_camera.color_profile:=1280x720x30 \
-  align_depth.enable:=true enable_rgbd:=true pointcloud.enable:=true initial_reset:=true
+ros2 run realsense2_camera realsense2_camera_node --ros-args \
+  -r __ns:=/ -r __node:=camera \
+  -p enable_color:=true -p enable_depth:=true \
+  -p depth_module.depth_profile:=848x480x30 -p rgb_camera.color_profile:=1280x720x30 \
+  -p align_depth.enable:=true -p enable_rgbd:=true -p enable_sync:=true \
+  -p pointcloud.enable:=true -p initial_reset:=true
 ```
 
-**launch 인자**
+**인자**
 
+- `-r __ns:=/ -r __node:=camera` : **빼면 안 된다.** 이 드라이버는 스트림 토픽을 private(`~/`)로
+  만들고 노드 기본 네임스페이스가 upstream 소스에 `/camera` 로 박혀 있어, 아무것도 안 주면
+  `/camera/camera/*` 라는 중복 경로가 나온다. 루트(`/`)를 명시해야 통합 기동과 같은 `/camera/*` 가 된다.
+- `enable_color` / `enable_depth` : 컬러·깊이 스트림 활성화.
 - `depth_module.depth_profile:=848x480x30` : 깊이 스트림 848×480, 30fps.
 - `rgb_camera.color_profile:=1280x720x30` : 컬러 스트림 1280×720, 30fps.
 - `align_depth.enable:=true` : 깊이 영상을 컬러 카메라 좌표에 정렬(픽셀 대응).
 - `enable_rgbd:=true` : RGBD 합성 토픽 발행.
+- `enable_sync:=true` : 컬러·깊이 프레임 타임스탬프 동기화.
 - `pointcloud.enable:=true` : 3D 포인트클라우드 발행.
 - `initial_reset:=true` : 기동 전 카메라 하드웨어 리셋(USB 재연결 꼬임 방지).
+
+> 다른 자료에서 흔히 보이는 `ros2 launch realsense2_camera rs_align_depth_launch.py ...` 는
+> upstream 기본값이라 토픽이 `/camera/camera/*` 로 나온다. 그쪽으로 띄웠다면 소비자 remap 을
+> `-r img_node:__ns:=/camera/camera` 로 맞춰야 한다.
+
+**학습용 — 카메라를 따로 붙여 보기**
+
+터미널 3개로 통합 실행과 같은 상태를 손으로 만든다.
+
+```bash
+# 터미널 1 — 로봇 + 그리퍼 + RViz (카메라 없음)
+ros2 launch m0609_rg2_bringup bringup.launch.py
+
+# 터미널 2 — 카메라 (위 ros2 run 명령 그대로)
+ros2 run realsense2_camera realsense2_camera_node --ros-args -r __ns:=/ -r __node:=camera ...
+
+# 터미널 3 — 소비자 노드
+ros2 topic list | grep '^/camera/'      # /camera/camera/ 가 보이면 터미널 2 의 remap 누락
+ros2 run object_detection object_detection --ros-args -r img_node:__ns:=/camera
+```
+
+소비자는 절대 경로가 아니라 상대 이름(`color/image_raw` 등)을 구독한다. `img_node:` 접두어 없이
+`-r __ns:=/camera` 만 주면 같은 프로세스의 `object_detection_node` 까지 옮겨져 `robot_control` 이
+부르는 `/get_3d_position` 이 끊긴다. remap 을 빠뜨리면 에러 없이 토픽만 조용히 빈다.
 
 **통합 실행 (권장)**
 
