@@ -521,7 +521,7 @@
 
 ### ADR-015: 카메라 소유권 host 이전 — yolo 컨테이너는 토픽 subscribe (2026-06-02)
 
-> **표기 갱신 (2026-07-21, ADR-036)**: 카메라 host 소유 + yolo 컨테이너 subscribe 라는 결정 자체는 유효. 다만 아래 본문의 토픽 경로 `/camera/camera/*` 는 `/camera/*` 로 바뀌었고, 소비자는 절대 경로 대신 상대 이름 + remap 으로 붙는다.
+> **표기 갱신 (2026-07-21, ADR-036)**: 카메라 host 소유 + yolo 컨테이너 subscribe 라는 결정 자체는 유효. 다만 아래 본문의 토픽 경로 `/camera/camera/*` 는 `/camera/*` 로 바뀌었다. 소비자 배선은 한때 상대 이름 + remap 이었으나 2026-07-22 에 절대 경로로 되돌렸다(ADR-037).
 
 **Date**: 2026-06-02
 
@@ -1141,6 +1141,8 @@
 
 ### ADR-036: 카메라 토픽 네임스페이스 축소 `/camera/camera/*` → `/camera/*` + 소비자 상대 이름 + 노드 스코프 remap (2026-07-21)
 
+> **부분 supersede (2026-07-22, ADR-037)**: 아래 Decision 의 **"소비자 — 절대 경로 폐기, 상대 이름 + remap"** 과 **"노드 스코프 네임스페이스 remap 을 쓴다"** 두 항목 폐기 — 소비자는 다시 절대 경로(`/camera/color/image_raw` 등)를 구독한다. 그에 딸린 Consequences 의 "remap 누락 = 조용한 실패" 도 해소됐다. 프로듀서 결정(`namespace='/'` + `name='camera'`), 토픽 경로 `/camera/*`, TF·URDF·프로파일 무변경, 와일드카드 remap 미구현, viz 의 토픽 단위 remap 은 모두 유효.
+
 **Status**: ADR-035 의 Decision 항목 **"카메라 namespace 계약 유지"만** supersede — 그 항목이 못박은 `/camera/camera/*` 유지와 `realsense2_camera_node` 의 `namespace='camera'` + `name='camera'` 이중 지정이 대상. ADR-035 의 나머지(진입점 교체, clone + 심볼릭 링크 워크스페이스 취득, 래퍼의 `camera:=true` 기본값 뒤집기, rosdep skip-keys 확장)는 불변. ADR-015 의 **카메라 소유권 host 이전 결정(host 가 publish, yolo 컨테이너는 subscribe)도 대체가 아니라 유지** — 소유 주체는 그대로고 토픽 경로 표기와 소비자 배선 방식만 갱신된다. ADR-015 / ADR-035 본문은 과거 기록으로 미수정, 각 헤더에 인라인 포인터만 달았다.
 
 **Context**:
@@ -1189,3 +1191,36 @@
 - rcl 이 `**` 와일드카드 remap 을 구현하면 → 접두사 일괄 치환으로 배선 단순화 재검토.
 - 다중 카메라가 필요해지면 → 카메라별 구분이 노드 이름 하나로 충분한지(`/cam_left/*` vs 2단 네임스페이스) 재설계.
 - cobot2 가 git 추적 대상이 되거나 패키지로 배포되면 → 소비자 패치 전달 위험이 해소되므로 본 ADR 의 Consequences 첫 항목을 닫는다.
+
+---
+
+### ADR-037: 카메라 소비자를 상대 이름 + remap 에서 절대 경로로 되돌림 (2026-07-22)
+
+**Status**: ADR-036 의 Decision 중 **"소비자 — 절대 경로 폐기, 상대 이름 + remap"** 과 **"노드 스코프 네임스페이스 remap 을 쓴다"** 두 항목을 supersede. ADR-036 의 나머지는 전부 유효 — 프로듀서의 `namespace='/'` + `name='camera'`, 토픽 경로 `/camera/*`, TF 프레임·URDF·스트림 프로파일 무변경, 와일드카드 remap 미구현 사실. **viz 스크립트의 토픽 단위 remap 도 유지**(아래 참조).
+
+**Context**:
+- ADR-036 이 상대 이름을 택한 근거는 "프로듀서가 이름을 바꿔도 소비자 소스를 안 고친다" 였다. 실제로는 `/camera/*` 가 bringup launch 가 고정하는 계약이라 바뀌는 값이 아니다 — 얻을 유연성이 없었다.
+- 대가는 컸다. remap 인자가 `containers/bringup.sh`, README 2곳, `containers/README.md`, `scripts/venv-demo/LAB.md` 등 여러 기동 지점에 흩어지고, **한 곳만 빠뜨려도 노드는 정상 기동한 채 토픽만 조용히 빈다**.
+- 2026-07-22 에 실제로 그 실패가 났다. 컨테이너 안에서 수동으로 yolo 노드를 띄우는 문서 절차(`README.md`, `containers/README.md`)가 계약 변경 때 갱신되지 않아 remap 없이 실행됐고, `camera intrinsics` 재시도만 반복됐다. 원인 파악에 로그가 도움이 되지 않았다 — 에러가 없기 때문이다.
+- 같은 판단은 이미 한 번 내려져 있었다. ADR-036 의 Consequences 는 `corecode.zip` 의 보정 튜토리얼에 대해 "remap 인자 없이 직접 실행하는 흐름이라 절대 경로를 유지한다" 고 적었다. 그 논리는 수동 실행 경로 전반에 똑같이 적용된다.
+
+**Decision**:
+- **소비자는 절대 경로를 구독한다**: `realsense.py` 3벌(`yolo_container/object_detection`, `pick_and_place_text`, `pick_and_place_voice/object_detection`)의 `ImgNode` 가 `/camera/color/image_raw`, `/camera/aligned_depth_to_color/image_raw`, `/camera/color/camera_info` 를 구독한다. 노드 이름 `img_node` 는 유지.
+- **기존 remap 인자는 제거하지 않는다**: 절대 토픽 이름은 네임스페이스 remap 의 영향을 받지 않으므로 `-r img_node:__ns:=/camera` 를 준 채 실행해도 결과가 같다. 즉 **후방 호환**이라 코드 배포와 인자 제거의 순서를 맞출 필요가 없다. 아직 구 소스가 깔린 머신에서는 그 인자가 여전히 필요하므로, 전환기 동안 `containers/bringup.sh` 는 인자를 유지한다.
+- **viz 는 현행 유지**: `viz/viewer.py` / `viz/live_detection.py` 의 상대 이름 + 토픽 단위 remap 은 그대로 둔다. 이 스크립트들은 본 레포가 추적하므로 배선을 바꿔도 전달 문제가 없고, 카메라 외 토픽을 함께 다뤄 토픽 단위 remap 이 이미 적절하다. 비대칭은 의도된 것이다.
+
+**Consequences**:
+- 기동 지점에서 인자를 빠뜨려 생기는 조용한 무수신이 사라진다. 문서와 코드가 어긋나도 파이프라인은 동작한다.
+- 카메라 토픽 경로를 바꾸려면 소비자 소스 3벌을 고쳐야 한다. 경로가 launch 가 고정하는 계약인 이상 실질적 비용은 아니지만, 바꾸게 되면 zip 재패키징이 따라온다.
+- **전달 위험은 그대로다** — cobot2 는 여전히 어떤 git 레포도 추적하지 않는다. 본 변경도 `cobot2.zip` 선반영으로만 전달된다. zip 을 새로 만들 때마다 재적용해야 한다.
+- 구 소스가 깔린 머신은 remap 인자가 있어야 동작하고, 새 소스는 인자 유무와 무관하게 동작한다. 두 상태가 공존해도 깨지지 않는다.
+
+**검증(2026-07-22)**:
+- [실측] `cobot2.zip` 재패키징 — 121개 엔트리 중 `realsense.py` 3벌만 변경(신·구 zip 전체 추출 후 재귀 비교), 3벌 모두 `py_compile` 통과, 상대 이름 잔존 0건.
+- [실측] remap 누락이 원인이라는 진단 — 컨테이너 안에서 `-r img_node:__ns:=/camera` 를 주자 `camera intrinsics` 재시도가 해소됨(사용자 확인).
+- [미검증] 절대 경로 소스가 실제 로봇 데모에서 end-to-end 로 동작하는지. 실측 머신에 zip 재배치 후 확인 필요.
+- [미검증] 절대 경로 + 기존 remap 인자 동시 적용 시 동작 동일 여부. ROS2 이름 해석 규칙상 절대 이름은 네임스페이스 영향을 받지 않으나 실행으로 확인하지 않았다.
+
+**Reopen 조건**:
+- 다중 카메라가 필요해져 소비자가 카메라를 골라야 하면 → 절대 경로로는 부족하므로 파라미터 기반 토픽 이름 주입으로 재설계.
+- cobot2 가 git 추적 대상이 되면 → 전달 위험이 사라지므로 상대 이름 + remap 의 유연성을 다시 저울질할 수 있다.
