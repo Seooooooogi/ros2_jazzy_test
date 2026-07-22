@@ -162,8 +162,6 @@ ros2 node info /img_node                         # 배선 누락 시 여기로 �
 
 `img_node:` 접두사를 빼면 같은 프로세스의 `object_detection_node` 까지 함께 옮겨져, `robot_control.py` 가 절대 경로로 부르는 `/get_3d_position` 이 끊긴다 — 카메라는 고쳐지고 서비스가 죽는 교환이라 더 나쁘다. 접두사 일괄 치환으로 우회할 수도 없다: rcl 의 `**` 와일드카드 remap 은 **미구현**이다(Jazzy 실측 시 `Wildcard '**' is not implemented`). 네임스페이스 remap 또는 토픽 단위 remap 둘 중 하나만 쓸 수 있다.
 
-**구 launch 를 쓰는 경우**: cobot2 의 예전 `cobot2_bringup/bringup_all.launch.py` 는 upstream `examples/align_depth/rs_align_depth_launch.py` 를 include 해 여전히 `/camera/camera/*` 를 낸다. 구 소스(상대 이름)라면 remap 대상을 `-r img_node:__ns:=/camera/camera` 로 맞춘다. **신본(절대 경로)이라면 네임스페이스 remap 으로는 해결되지 않는다** — 절대 이름은 네임스페이스의 영향을 받지 않으므로 토픽 단위 remap 을 쓰거나, 카메라를 `/camera/*` 로 내는 방식으로 띄워야 한다.
-
 **남은 위험 / 미검증**:
 - 소비자 소스(`~/cobot_ws/src/cobot2`)는 **어떤 git 저장소에도 추적되지 않는다**(이 레포도 `.gitignore` 로 배제). 프로듀서만 새 이름으로 바뀌고 소비자 패치가 다른 머신에 전달되지 않으면 파이프라인이 통째로 죽는다 — 새 머신 세팅 시 위 진단 명령을 먼저 돌릴 것.
 - 실 RealSense 하드웨어가 없어 **실제 영상 수신은 미검증**이다. 위 표는 이름 해석(어떤 토픽/서비스 이름으로 붙는지)만 Jazzy 컨테이너에서 실측한 결과다.
