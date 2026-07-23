@@ -1262,11 +1262,12 @@
 | 마이크 16kHz 하드코딩 | `MicConfig.rate=16000` | 2026-07-20 |
 | `detection.py` 3벌 | `_get_depth` 윈도우 중앙값(반사 표면 depth 드롭아웃 대응) | 아래 부록 |
 | `DEPTH_OFFSET` 3곳 | `-35.0` 으로 통일 + 이름 있는 상수 | 아래 부록 |
+| `pick_and_place_*` 동일 이름 14파일 | canonical(cobot2 호스트판)과 완전 일치(재진입·목적지 파싱·Ctrl+C 버그 수정 포함) | ADR-040 |
 
 **부록 — 실습 패키지 드리프트 정리(2026-07-22)**: cobot_ws 패키지군과 `pick_and_place_*` 의 동일 이름 `.py` 11종을 전수 대조한 결과, 한쪽에만 반영된 개선 두 건을 실습 쪽으로 이식했다.
 - `_get_depth` — 실습판은 중심 단일 픽셀(`frame[y, x]`)을 읽어 반사 표면(금속)·모서리의 depth 드롭아웃(0)에서 객체가 보여도 위치 계산이 실패했다. 컨테이너판의 `win=5` 윈도우 유효값 중앙값 + 경계 검사로 통일.
 - `DEPTH_OFFSET` — 값이 세 갈래였다(`robot_control` `-35.0` / `pick_and_place_voice` `-5.0` / `pick_and_place_text` 는 상수도 아닌 인라인 `-25`). **`-35.0` 으로 통일**하되, 이 값은 카메라 장착 위치·그리퍼 길이·대상 높이에 좌우되어 **설치마다 직접 튜닝해야 하는 knob** 이다(사용자 판단 2026-07-22). 그래서 `pick_and_place_text` 의 인라인 숫자를 이름 있는 상수로 승격해 찾을 수 있게 했다.
-- 나머지 차이는 의도된 것으로 확인해 그대로 뒀다: `realsense.py`/`yolo.py`/`detection.py` 의 `SingleThreadedExecutor` + `spin_once()` 대 전역 `rclpy.spin_once()`(컨테이너는 서비스 콜백 안에서 구독을 펌프해야 한다), `robot_control.py` 의 목적지(pos1/2/3) 배치·viz 토픽 기능, 각 파일의 `PACKAGE_NAME`.
+- ~~나머지 차이는 의도된 것으로 확인해 그대로 뒀다: `realsense.py`/`yolo.py`/`detection.py` 의 `SingleThreadedExecutor` + `spin_once()` 대 전역 `rclpy.spin_once()`, `robot_control.py` 의 목적지 배치·viz 토픽, 각 파일의 `PACKAGE_NAME`.~~ **정정(2026-07-23, ADR-040)**: 이 판정은 **틀렸다**. `SingleThreadedExecutor`/`spin_once()` 차이는 의도된 게 아니라 **재진입 버그**였고(`rclpy.spin_once()` 를 서비스 콜백 안에서 부르면 `Executor is already spinning` 크래시 — 실측 재현), `robot_control.py` 의 차이도 목적지 파싱 누락·Ctrl+C 크래시 등 **추가 버그**를 숨기고 있었다. 상세 = ADR-040.
 
 **검증(2026-07-22)**:
 - [실측] 증상 재현 — 이식 전 `pick_and_place_voice` 의 `get_keyword` 가 `confidence: 0` 만 반복(사용자 확인).
@@ -1307,3 +1308,37 @@
 
 **Reopen 조건**:
 - 여러 머신이 ROS2 토픽을 실제로 공유해야 하는 fleet 구성이 표준이 되면 → 기본 인터페이스 정책 재검토(그때도 자동 탐지는 빈-이름 가드 필수).
+
+---
+
+### ADR-040: 실습 패키지(`pick_and_place_*`)의 동일 이름 코드를 canonical(cobot2 호스트판)과 완전 일치 (2026-07-23)
+
+**Status**: 신규. ADR-038 부록(2026-07-22)의 "나머지 차이는 의도된 것" 판정을 **정정·supersede**. ADR-037(카메라 절대 경로)·ADR-038(마이크 sounddevice)은 유효(이번 통일이 그 수정을 canonical 기준으로 재확인).
+
+**Context**:
+- `pick_and_place_text` / `pick_and_place_voice` 는 cobot2 의 `object_detection`(=yolo_container) / `robot_control` / `voice_processing` 을 venv 데모용으로 재포장한 것이다. 같은 이름의 `.py` 가 두 곳에 존재하는데, 시간이 지나며 **한쪽에만 개선이 들어가 드리프트**했다.
+- 이 드리프트가 실제 크래시를 숨겼다. 실측(rokey-test, 2026-07-23): `ros2 run pick_and_place_text detection` 이 서비스 호출 순간 `RuntimeError: Executor is already spinning` 으로 죽었다. 원인은 `detection.py`·`yolo.py` 가 서비스 콜백 안에서 전역 `rclpy.spin_once(img_node)` 를 부른 것(메인은 이미 `rclpy.spin(node)` 로 전역 executor 를 돌리는 중 → 재진입). canonical 은 `ImgNode` 에 전용 `SingleThreadedExecutor` + `spin_once()` 를 둬 이미 고쳐져 있었다.
+- 2026-07-22 의 드리프트 정리 때 이 차이를 "의도된 것"으로 잘못 판정하고 남겨 둔 것이 화근이었다(파일별 땜질로 `detection.py` 만 보고 `yolo.py` 를 놓치는 실수도 반복).
+- 더 파 보니 `pick_and_place_voice/robot_control.py` 는 canonical 대비 **목적지 파싱**("도구 / 목적지" → 각 도구를 목적지에 배치)이 빠져 `message.split()` 로 목적지까지 도구로 취급했고, Ctrl+C 종료 시 `future.result()` 가 None 이라 크래시하는 경로도 있었다. 즉 드리프트가 크래시 하나가 아니라 여러 버그를 숨기고 있었다.
+
+**Decision**:
+- **동일 이름 `.py` 는 canonical 과 내용이 완전히 동일해야 한다**(사용자 결정 2026-07-23). 허용되는 차이는 venv/docker 구조가 강제하는 것뿐:
+  - `pick_and_place_voice`: 서브모듈명이 canonical 과 같다(`object_detection`/`robot_control`/`voice_processing`) → **`PACKAGE_NAME`/`get_package_share_directory` 인자(리소스 위치)만** `pick_and_place_voice` 로. import·노드명·로직 전부 동일.
+  - `pick_and_place_text`: 단일 모듈로 번들 → **import 경로**(`object_detection.`/`robot_control.` → `pick_and_place_text.`)와 `PACKAGE_NAME` 만. 노드명(`object_detection_node` 등)·메서드명·주석은 유지.
+- **canonical 이 단일 진실 소스**. 두 방향이 갈리면 canonical 을 따른다. 이번에 `DEPTH_OFFSET` 튜닝 주석은 반대로 canonical 에 없어서 canonical 에 추가해 일치시켰다.
+- **예외 — `robot_move.py`(text)**: 이름이 `robot_control.py` 와 달라 same-name 규칙 밖. 텍스트 데모 전용 오케스트레이터라 그대로 둔다.
+- 통일 대상 14파일: `detection`/`realsense`/`yolo`(양 패키지) + `onrobot`(양 패키지) + `robot_control`(voice) + voice_processing 5종(voice).
+
+**Consequences**:
+- 같은 이름 파일이 실제로 같아져, 한쪽 수정이 다른 쪽에 자동 반영되지 않아 생기던 이 버그 계열이 사라진다. 앞으로는 canonical 만 고치고 정규화 복사하면 된다.
+- `pick_and_place_voice` 가 canonical 의 목적지 배치·Ctrl+C 안전·`WAKEWORD_TIMEOUT`·viz publish 를 얻는다(데모 기능 복원·강건화). viz publish 는 데모에 구독자가 없어 무해.
+- **전달 위험은 그대로**(ADR-036) — cobot2 는 git 미추적. `cobot2.zip` 선반영으로만 전달되며 zip 재생성 시 재적용 필요. ADR-038 의 zip 재적용 체크리스트에 본 통일을 추가한다.
+
+**검증(2026-07-23, rokey-test 실측)**:
+- [실측] 14파일 전부 canonical 과 **역-정규화 diff = 0**(자동 검증 PASS) — 정규화 차이 외 내용 동일 증명.
+- [실측] `py_compile` 전건 통과, `rclpy.spin_once(` 진짜 호출 잔존 0.
+- [실측] bringup(camera:=true) + `pick_and_place_text detection` + `ros2 service call /get_3d_position {target: hammer}` → `depth_position=[0.0,0.0,0.0]` 정상 응답, `Executor is already spinning`/Traceback **0**. (통일 전엔 매번 크래시.)
+- [미검증] voice 전체 플로우(wakeword→STT→robot_control 목적지 배치)의 end-to-end 실동작. 서비스·노드 기동은 확인, 실제 pick&place 모션은 미확인.
+
+**Reopen 조건**:
+- cobot2 가 git 추적/패키지 배포되면 → 정규화 복사 대신 공유 모듈로 리팩터(중복 제거) 재검토.
