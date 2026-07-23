@@ -41,10 +41,19 @@ cp -r ~/Downloads/cobot2/yolo_container/od_msg ~/cobot_demo_ws/src/
 # 5) DSR 에뮬레이터 이미지 (mode:=virtual 이 이 컨테이너를 띄운다)
 docker pull doosanrobot/dsr_emulator:3.0.1
 
+# 6) RealSense udev 규칙 — 카메라 필수. ROS 의 realsense2_camera 패키지는 udev 규칙을 깔지
+#    않아, 없으면 USB autosuspend 로 스트리밍 중 장치가 재워져 "VIDIOC_QBUF ... No such device"
+#    가 폭주하고 프레임이 안 나온다(IMU 접근 권한도 함께 막힘). 규칙이 그 둘을 다 푼다.
+sudo curl -fsSL https://raw.githubusercontent.com/IntelRealSense/librealsense/master/config/99-realsense-libusb.rules \
+  -o /etc/udev/rules.d/99-realsense-libusb.rules
+sudo udevadm control --reload-rules && sudo udevadm trigger
+# 적용 후 카메라 USB 를 뽑았다 다시 꽂는다.
+
 # 검증
 ls ~/cobot_demo_ws/src/
 # → doosan-robot2  m0609_rg2_bringup  od_msg  onrobot-ros2
 #   pick_and_place_text  pick_and_place_voice
+test -f /etc/udev/rules.d/99-realsense-libusb.rules && echo "udev 규칙 OK"
 ```
 
 fork(`ROKEY-SPARK/doosan-robot2_jazzy`)에는 `DSR_ROBOT2.py` 의 서비스 클래스명·prefix 패치가 이미
