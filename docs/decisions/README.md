@@ -666,6 +666,8 @@
 
 ### ADR-020: cyclonedds 인터페이스 = loopback + 전체 물리 NIC(유선·무선) — ADR-016 의 "유선 only whitelist" supersede (2026-06-10)
 
+> **부분 supersede (2026-07-23, ADR-039)**: Decision 의 **"전체 물리 외부 NIC 자동 탐지·화이트리스트"** 항목 폐기 — 인터페이스를 **loopback 하나로** 축소하고 물리 NIC 은 `DDS_NETIF` 명시 지정만 남긴다. 자동 탐지가 머신에 따라 빈 NIC 이름(`name=""`)을 렌더해 도메인 생성이 통째로 실패하는 사고를 냈기 때문. **본 ADR 의 핵심 결정(loopback 을 우선순위로 넣어 same-host 를 127.0.0.1 로 붙임)은 유지** — 그게 여기서 고친 실제 버그였다. cross-host DDS 는 이 시스템에 없다(로봇·그리퍼는 DDS 참여자가 아니라 DSR/Modbus TCP — ADR-021).
+
 **Date**: 2026-06-10
 
 **Context**:
@@ -1274,3 +1276,34 @@
 **Reopen 조건**:
 - 다른 사운드 칩(PyAudio 로 정상 캡처되는 하드웨어)이 표준 실습 환경이 되면 → 백엔드 선택을 다시 저울질.
 - cobot2 가 git 추적 대상이 되면 → 위 재적용 체크리스트가 불필요해지므로 폐기.
+
+---
+
+### ADR-039: cyclonedds 인터페이스를 loopback 하나로 축소 — 물리 NIC 자동 고정 제거 (2026-07-23)
+
+**Status**: ADR-020 의 Decision 중 **"전체 물리 외부 NIC 자동 탐지·화이트리스트"** 항목을 supersede. ADR-020 의 핵심(loopback 을 우선순위로 넣어 same-host 를 127.0.0.1 로 붙임), 커널 sysctl 버퍼(ADR-016), RMW=cyclonedds 는 전부 유지. `DDS_NETIF` 명시 override 도 유지.
+
+**Context**:
+- `resources/dds-tuning.sh` 가 `/sys/class/net/*` 를 훑어 물리 NIC 을 자동 탐지하고 `<NetworkInterface name="...">` 로 렌더했다. 이 자동 탐지가 어떤 머신(rokey-test)에서 **빈 이름**(`name=""`)을 렌더했고, cyclonedds 는 이를 "Nameless and address-less interface" 로 거부해 `rmw_create_node: failed to create domain` → **모든 ROS 노드가 rcl 노드 생성 단계에서 즉사**했다(bringup 전멸). Notion 배포 매뉴얼의 수동 `sed __NIC__` 버전도 같은 함정을 공유한다.
+- 이 시스템의 ROS2 DDS 참여자는 **전부 같은 호스트**다: bringup 노드, yolo 컨테이너(`network_mode: host`), voice(host), robot_control(host). 실 로봇 컨트롤러(192.168.1.100)와 그리퍼(192.168.1.1)는 각각 DSR 드라이버 TCP·OnRobot Modbus TCP 로 붙지 **DDS 참여자가 아니다**(ADR-021). 즉 cross-host DDS 경로가 필요 없다 → 물리 NIC 을 인터페이스 목록에 넣을 이유 자체가 없다.
+- ADR-020 이 물리 NIC 을 넣은 건 cross-host 여지 + 그 당시 실측 머신(유선+무선 같은 서브넷 노트북)의 라우팅 이슈 대응이었는데, **그 이슈의 실제 해법은 loopback 을 우선순위로 넣은 것**이지 물리 NIC 을 넣은 게 아니었다. loopback 을 유지하면 same-host 는 그대로 붙는다.
+
+**Decision**:
+- **인터페이스 목록 = loopback 하나.** `dds-tuning.sh` 의 물리 NIC 자동 탐지 루프(`/sys/class/net` 스캔)를 제거. 렌더 결과는 항상 `<NetworkInterface name="lo" priority="default" multicast="true"/>` 하나(+ 아래 override).
+- **`DDS_NETIF` 명시 override 는 유지.** cross-host 로 다른 머신의 ROS2 노드와 토픽을 나눠야 하는 드문 경우 `DDS_NETIF=<iface[,iface2]> bash resources/dds-tuning.sh` 로 그 NIC 을 `presence_required="false"` 로 추가. 기본값(빈 문자열)이면 loopback-only.
+- **빈 이름 사고가 구조적으로 불가능해진다** — 자동 탐지가 없으니 치환 실패로 인한 `name=""` 이 나올 수 없다. 최악의 경우도 유효한 loopback-only XML.
+- 커널 sysctl 버퍼(rmem/wmem 2GB + Socket 64MB) 및 `~/.bashrc` env 주입은 무변경.
+
+**Consequences**:
+- rokey-test 류의 도메인 생성 실패가 사라진다. 재설치·타 머신에서도 재현되지 않는다.
+- cross-host ROS2 DDS(여러 워크스테이션이 토픽 공유)는 기본값으로는 안 된다 — `DDS_NETIF` 를 명시해야 한다. 이 시스템은 그 경로를 쓰지 않으므로 실질 손실 없음.
+- same-host(host↔`network_mode: host` 컨테이너)는 loopback 으로 그대로 붙는다 — ADR-020 이 고친 그 경로가 유지된다.
+- 이미 잘못된 XML 이 깔린 머신은 `bash resources/dds-tuning.sh` 재실행으로 loopback-only 로 재생성(또는 `~/.config/cyclonedds/cyclonedds.xml` 의 `name=""` 줄 삭제).
+
+**검증(2026-07-23)**:
+- [실측] `dds-tuning.sh` 렌더 로직 시뮬레이션 — NICS 비었을 때 인터페이스 블록이 loopback 한 줄, `name=""` 0건. 렌더된 XML `xml.dom.minidom` 파싱 통과(interface 1개 = `lo`).
+- [실측] `shellcheck resources/dds-tuning.sh` — 신규 경고 0(기존 SC1091 info 만: sourced config.sh 미추적).
+- [미검증] 실측 머신에서 loopback-only XML 로 bringup 전체 기동 + host↔yolo 컨테이너 discovery. 재생성 후 확인 필요.
+
+**Reopen 조건**:
+- 여러 머신이 ROS2 토픽을 실제로 공유해야 하는 fleet 구성이 표준이 되면 → 기본 인터페이스 정책 재검토(그때도 자동 탐지는 빈-이름 가드 필수).
