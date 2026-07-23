@@ -239,14 +239,25 @@ print('interface imports OK')
 ### 8. 실행 — text 데모
 
 ```bash
-# 터미널 1 — 드라이버 + 카메라 (bringup)
+# 터미널 1 — 드라이버 (bringup · 카메라 없이 — 카메라는 다음 블록에서 따로)
 set -a; source ~/ros2_jazzy_test/resources/config.sh; set +a
 source /opt/ros/jazzy/setup.bash
 source ~/cobot_demo_ws/install/setup.bash
-ros2 launch m0609_rg2_bringup bringup.launch.py mode:=virtual camera:=true
-# 실로봇: ros2 launch m0609_rg2_bringup bringup.launch.py mode:=real host:=192.168.1.100 camera:=true
-# camera:=true 를 붙이는 이유 — 이 launch 의 camera 기본값은 false 다(standalone 개발 시 USB 카메라
-# 를 잡지 않기 위함). virtual 에서도 YOLO depth 서비스가 카메라 토픽을 필요로 하므로 명시한다.
+ros2 launch m0609_rg2_bringup bringup.launch.py mode:=virtual
+# 실로봇: ros2 launch m0609_rg2_bringup bringup.launch.py mode:=real host:=192.168.1.100
+```
+
+```bash
+# 터미널 1-카메라 — RealSense 직접 기동 (bringup 이 camera:=false 라 카메라는 이걸로 따로)
+# -r __ns:=/ -r __node:=camera 가 /camera/camera/* 를 /camera/* 로 맞추는 인자.
+set -a; source ~/ros2_jazzy_test/resources/config.sh; set +a
+source /opt/ros/jazzy/setup.bash
+ros2 run realsense2_camera realsense2_camera_node --ros-args \
+  -r __ns:=/ -r __node:=camera \
+  -p enable_color:=true -p enable_depth:=true \
+  -p depth_module.depth_profile:=848x480x30 -p rgb_camera.color_profile:=1280x720x30 \
+  -p align_depth.enable:=true -p enable_rgbd:=true -p enable_sync:=true \
+  -p pointcloud.enable:=true -p initial_reset:=true
 ```
 
 ```bash
@@ -285,11 +296,24 @@ ros2 run pick_and_place_text robot_move
 ### 9. 실행 — voice 데모
 
 ```bash
-# 터미널 1 — 드라이버 + 카메라
+# 터미널 1 — 드라이버 (bringup · 카메라 없이 — 카메라는 다음 블록에서 따로)
 set -a; source ~/ros2_jazzy_test/resources/config.sh; set +a
 source /opt/ros/jazzy/setup.bash
 source ~/cobot_demo_ws/install/setup.bash
-ros2 launch m0609_rg2_bringup bringup.launch.py mode:=virtual camera:=true
+ros2 launch m0609_rg2_bringup bringup.launch.py mode:=virtual
+```
+
+```bash
+# 터미널 1-카메라 — RealSense 직접 기동 (bringup 이 camera:=false 라 카메라는 이걸로 따로)
+# -r __ns:=/ -r __node:=camera 가 /camera/camera/* 를 /camera/* 로 맞추는 인자.
+set -a; source ~/ros2_jazzy_test/resources/config.sh; set +a
+source /opt/ros/jazzy/setup.bash
+ros2 run realsense2_camera realsense2_camera_node --ros-args \
+  -r __ns:=/ -r __node:=camera \
+  -p enable_color:=true -p enable_depth:=true \
+  -p depth_module.depth_profile:=848x480x30 -p rgb_camera.color_profile:=1280x720x30 \
+  -p align_depth.enable:=true -p enable_rgbd:=true -p enable_sync:=true \
+  -p pointcloud.enable:=true -p initial_reset:=true
 ```
 
 ```bash
