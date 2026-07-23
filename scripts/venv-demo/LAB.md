@@ -1,36 +1,54 @@
 # pick & place 실습 — venv
 
-### 1. 사전 점검
+### 1. 실습 소스 배치 + 사전 점검
 
 ```bash
-# 1) ROS2 jazzy + config.sh
+# 1) 실습 패키지 2개를 데모 워크스페이스로 (cobot2.zip 이 ~/Downloads 에 있다고 가정)
+mkdir -p ~/cobot_demo_ws/src
+cd ~/Downloads && unzip -q cobot2.zip
+mv ~/Downloads/cobot2/pick_and_place_text ~/Downloads/cobot2/pick_and_place_voice \
+   ~/cobot_demo_ws/src/
+
+# 2) 사전 점검
 command -v ros2                                  # → /opt/ros/jazzy/bin/ros2
 ls ~/ros2_jazzy_test/resources/config.sh
-
-# 2) od_msg, cobot2 소스 배치 확인
-ls -d ~/cobot_ws/src/cobot2/yolo_container/od_msg
-
-# 3) 정식 ws 빌드본
-ls ~/cobot_ws/install/dsr_common2/lib/python3.12/site-packages/DSR_ROBOT2.py
-
-# 4) 실습 패키지 배치 확인
 ls ~/cobot_demo_ws/src/                          # → pick_and_place_text  pick_and_place_voice
 ```
 
-### 2. 인터페이스 패키지 준비 (DSR + od_msg)
+`~/Downloads/cobot2` 는 §2 에서 od_msg 를 꺼내 쓰므로 아직 지우지 않는다.
+
+### 2. 인터페이스 + bringup 스택 준비
+
+이 실습은 워크스페이스 하나(`~/cobot_demo_ws`)만 쓴다 — 드라이버와 bringup 도 여기에 함께 둔다.
+정식 워크스페이스(`~/cobot_ws`)를 먼저 빌드해 둘 필요가 없다.
 
 ```bash
-# 1) doosan-robot2 두 패키지만 복사
-git clone --depth 1 https://github.com/ROKEY-SPARK/doosan-robot2_jazzy.git ~/cobot_demo_ws/doosan-robot2
-cp -r ~/cobot_demo_ws/doosan-robot2/dsr_common2 ~/cobot_demo_ws/doosan-robot2/dsr_msgs2 ~/cobot_demo_ws/src/
-rm -rf ~/cobot_demo_ws/doosan-robot2
+# 1) doosan-robot2 드라이버 (dsr_common2 / dsr_msgs2 / dsr_bringup2 / dsr_controller2 / dsr_description2 …)
+git clone --depth 1 https://github.com/ROKEY-SPARK/doosan-robot2_jazzy.git \
+  ~/cobot_demo_ws/src/doosan-robot2
 
-# 2) od_msg — cobot2 소스에서 복사
-cp -r ~/cobot_ws/src/cobot2/yolo_container/od_msg ~/cobot_demo_ws/src/
+# 2) 통합 bringup — 레포는 바깥에 두고 패키지 하나만 심볼릭 링크 (moveit 스택 제외)
+git clone -b jazzy https://github.com/Seooooooogi/M0609_RG2_Integration ~/M0609_RG2_Integration
+ln -sfn ~/M0609_RG2_Integration/src/m0609_rg2_bringup ~/cobot_demo_ws/src/m0609_rg2_bringup
+
+# 3) OnRobot RG2 그리퍼 드라이버 — 커밋 고정
+git clone https://github.com/ABC-iRobotics/onrobot-ros2 ~/cobot_demo_ws/src/onrobot-ros2
+git -C ~/cobot_demo_ws/src/onrobot-ros2 checkout c6e390313e831a2e54a0ad5894b2911cc360a16a
+
+# 4) od_msg — cobot2 소스에서 복사
+cp -r ~/Downloads/cobot2/yolo_container/od_msg ~/cobot_demo_ws/src/
+
+# 5) DSR 에뮬레이터 이미지 (mode:=virtual 이 이 컨테이너를 띄운다)
+docker pull doosanrobot/dsr_emulator:3.0.1
 
 # 검증
-ls ~/cobot_demo_ws/src/   # → dsr_common2  dsr_msgs2  od_msg  pick_and_place_text  pick_and_place_voice
+ls ~/cobot_demo_ws/src/
+# → doosan-robot2  m0609_rg2_bringup  od_msg  onrobot-ros2
+#   pick_and_place_text  pick_and_place_voice
 ```
+
+fork(`ROKEY-SPARK/doosan-robot2_jazzy`)에는 `DSR_ROBOT2.py` 의 서비스 클래스명·prefix 패치가 이미
+반영돼 있다 — 별도 sed 절차가 필요 없다.
 
 ### 3. venv 생성
 
@@ -114,36 +132,37 @@ print('wakeword gate OK')
 
 ### 5. 마이크 장치 확인
 
+wakeword 캡처는 **sounddevice** 로 한다(이 하드웨어의 디지털 마이크는 PyAudio 로는 무음으로
+잡힌다). 그래서 이 확인도 실제 실행과 같은 backend·같은 함수(`resolve_input_device()`)·같은
+16kHz 로 연다 — PyAudio 로 확인하면 통과해도 실행 때 조용히 실패할 수 있다.
+
 ```bash
-# 장치 확인
+# 장치 확인 — 실행이 실제로 쓰는 경로(sounddevice 16kHz)로 연다
 ~/cobot_demo_ws/.venv/bin/python -c "
 import os, sys
 sys.path.insert(0, os.path.expanduser('~/cobot_demo_ws/src/pick_and_place_voice'))
 from voice_processing.audio_device import resolve_input_device
-import pyaudio
+import sounddevice as sd
 idx = resolve_input_device()
-p = pyaudio.PyAudio()
-info = p.get_device_info_by_index(idx)
-print('device:', idx, info['name'], '| rate:', int(info['defaultSampleRate']))
-stream = p.open(format=pyaudio.paInt16, channels=1, rate=16000, input=True,
-                frames_per_buffer=1024, input_device_index=idx)
-data = stream.read(1024, exception_on_overflow=False)
-stream.stop_stream(); stream.close(); p.terminate()
-print('pyaudio open/read/close OK')
+info = sd.query_devices(idx if idx is not None else None, 'input')
+print('device:', idx, info['name'], '| rate:', int(info['default_samplerate']))
+with sd.InputStream(samplerate=16000, channels=1, dtype='int16', blocksize=1280, device=idx) as s:
+    s.read(1280)
+print('sounddevice open/read/close OK')
 "
 ```
 
-다른 기기 사용 시 확인
+다른 기기 사용 시 — 입력 장치 목록에서 인덱스를 골라 `VOICE_MIC_DEVICE` 로 지정
+(ALSA 이름 `hw:1,7` 또는 정수 인덱스. sounddevice 는 둘 다 받는다):
 
 ```bash
 ~/cobot_demo_ws/.venv/bin/python -c "
-import pyaudio
-p = pyaudio.PyAudio()
-[print(i, p.get_device_info_by_index(i)['name'],
-       int(p.get_device_info_by_index(i)['defaultSampleRate']),
-       p.get_device_info_by_index(i)['maxInputChannels'])
- for i in range(p.get_device_count())]
+import sounddevice as sd
+for i, d in enumerate(sd.query_devices()):
+    if d['max_input_channels'] > 0:
+        print(i, d['name'], int(d['default_samplerate']), d['max_input_channels'])
 "
+# 예: export VOICE_MIC_DEVICE='hw:1,7'
 ```
 
 ### 6. voice 에셋 + OPENAI 키
@@ -170,16 +189,42 @@ ls ~/cobot_demo_ws/src/pick_and_place_voice/resource/yolov8n_tools_0122.pt \
 deactivate 2>/dev/null || true
 set -a; source ~/ros2_jazzy_test/resources/config.sh; set +a
 source /opt/ros/jazzy/setup.bash
-cd ~/cobot_demo_ws && colcon build
-# → Summary: 5 packages finished
+
+# DSR 전용 apt 의존 + CycloneDDS RMW.
+# config.sh 가 기본 RMW 를 cyclonedds 로 고정하므로 rmw-cyclonedds-cpp 가 없으면
+# colcon 이 "Could not find ROS middleware implementation" 로 실패한다.
+sudo apt-get install -y ros-jazzy-rmw-cyclonedds-cpp \
+  ros-jazzy-velocity-controllers ros-jazzy-eigen3-cmake-module
+
+cd ~/cobot_demo_ws
+rosdep update
+# skip-keys 사유:
+#   librealsense2                      — apt 로 까는 네이티브 SDK, ROS rosdep 키가 아니다
+#   message_generation/message_runtime — onrobot-ros2 의 ROS1 잔재, jazzy 에 해당 규칙이 없다
+rosdep install --from-paths src --ignore-src --rosdistro jazzy \
+  --skip-keys="librealsense2 message_generation message_runtime" -y
+
+colcon build
 
 # 검증
 source /opt/ros/jazzy/setup.bash
 source ~/cobot_demo_ws/install/setup.bash
-ros2 pkg list | grep -E "pick_and_place_(text|voice)|dsr_common2|dsr_msgs2|od_msg"   # → 5줄
+ros2 pkg list | grep -E "m0609_rg2_bringup|onrobot_rg_control|dsr_bringup2|pick_and_place_(text|voice)|od_msg"
 ls ~/cobot_demo_ws/install/pick_and_place_voice/share/pick_and_place_voice/resource/yolov8n_tools_0122.pt
 
-python3 -c "import DR_init; from DSR_ROBOT2 import movej; from od_msg.srv import SrvDepthPosition; print('interface imports OK')"
+# DSR_ROBOT2 는 import 시점에 모듈 본문이 곧바로 g_node.create_client(...) 를 실행한다.
+# 그 g_node 는 DR_init.__dsr__node 이고 기본값이 None 이라, 노드를 먼저 세우지 않고 그냥
+# import 하면 'NoneType' object has no attribute 'create_client' 로 죽는다. 실제 노드
+# (robot_move.py / robot_control.py)는 import 전에 아래 순서로 노드를 세운다 — 같은 손잡기를 재현한다.
+python3 -c "
+import rclpy, DR_init
+rclpy.init()
+DR_init.__dsr__id = 'dsr01'; DR_init.__dsr__model = 'm0609'
+DR_init.__dsr__node = rclpy.create_node('iface_smoke', namespace='dsr01')
+from DSR_ROBOT2 import movej
+from od_msg.srv import SrvDepthPosition
+print('interface imports OK')
+"
 ```
 
 ### 8. 실행 — text 데모
@@ -188,9 +233,9 @@ python3 -c "import DR_init; from DSR_ROBOT2 import movej; from od_msg.srv import
 # 터미널 1 — 드라이버 + 카메라 (bringup)
 set -a; source ~/ros2_jazzy_test/resources/config.sh; set +a
 source /opt/ros/jazzy/setup.bash
-source ~/cobot_ws/install/setup.bash
+source ~/cobot_demo_ws/install/setup.bash
 ros2 launch m0609_rg2_bringup bringup.launch.py mode:=virtual camera:=true
-# 실로봇: ros2 launch m0609_rg2_bringup bringup.launch.py mode:=real host:=192.168.1.100
+# 실로봇: ros2 launch m0609_rg2_bringup bringup.launch.py mode:=real host:=192.168.1.100 camera:=true
 # camera:=true 를 붙이는 이유 — 이 launch 의 camera 기본값은 false 다(standalone 개발 시 USB 카메라
 # 를 잡지 않기 위함). virtual 에서도 YOLO depth 서비스가 카메라 토픽을 필요로 하므로 명시한다.
 ```
@@ -200,6 +245,9 @@ ros2 launch m0609_rg2_bringup bringup.launch.py mode:=virtual camera:=true
 set -a; source ~/ros2_jazzy_test/resources/config.sh; set +a
 source /opt/ros/jazzy/setup.bash
 source ~/cobot_demo_ws/install/setup.bash
+source ~/cobot_demo_ws/.venv/bin/activate
+# activate 만으로는 부족하다 — ros2 run 이 띄우는 노드는 시스템 python shebang 으로 뜨므로
+# venv 패키지를 보려면 PYTHONPATH 도 함께 넣는다.
 export PYTHONPATH="$(ls -d ~/cobot_demo_ws/.venv/lib/python*/site-packages):$PYTHONPATH"
 ros2 run pick_and_place_text detection
 # 카메라 토픽 배선 — img_node 는 /camera/color/image_raw 등을 절대 경로로 구독하므로 기동 인자가
@@ -216,10 +264,13 @@ ros2 run pick_and_place_text detection
 set -a; source ~/ros2_jazzy_test/resources/config.sh; set +a
 source /opt/ros/jazzy/setup.bash
 source ~/cobot_demo_ws/install/setup.bash
+source ~/cobot_demo_ws/.venv/bin/activate
+# activate 만으로는 부족하다 — ros2 run 이 띄우는 노드는 시스템 python shebang 으로 뜨므로
+# venv 패키지를 보려면 PYTHONPATH 도 함께 넣는다.
 export PYTHONPATH="$(ls -d ~/cobot_demo_ws/.venv/lib/python*/site-packages):$PYTHONPATH"
 ros2 run pick_and_place_text robot_move
 # → DSR 노드 초기화(_robot_id=dsr01) → MoveJ 서비스 대기. 에뮬레이터 없이 "waiting..." 반복 = 정상 [HW/emulator]
-# → OnRobot 그리퍼는 import 시 192.168.1.1:502 Modbus 연결 시도 — 하드웨어 없으면 그 지점에서 멈춤 = 정상 [HW]
+# → OnRobot 그리퍼는 import 시 192.168.1.1:502 Modbus 연결 시도 — 실패 시 가상 모드 진입 [HW]
 ```
 
 ### 9. 실행 — voice 데모
@@ -228,7 +279,7 @@ ros2 run pick_and_place_text robot_move
 # 터미널 1 — 드라이버 + 카메라
 set -a; source ~/ros2_jazzy_test/resources/config.sh; set +a
 source /opt/ros/jazzy/setup.bash
-source ~/cobot_ws/install/setup.bash
+source ~/cobot_demo_ws/install/setup.bash
 ros2 launch m0609_rg2_bringup bringup.launch.py mode:=virtual camera:=true
 ```
 
@@ -237,6 +288,9 @@ ros2 launch m0609_rg2_bringup bringup.launch.py mode:=virtual camera:=true
 set -a; source ~/ros2_jazzy_test/resources/config.sh; set +a
 source /opt/ros/jazzy/setup.bash
 source ~/cobot_demo_ws/install/setup.bash
+source ~/cobot_demo_ws/.venv/bin/activate
+# activate 만으로는 부족하다 — ros2 run 이 띄우는 노드는 시스템 python shebang 으로 뜨므로
+# venv 패키지를 보려면 PYTHONPATH 도 함께 넣는다.
 export PYTHONPATH="$(ls -d ~/cobot_demo_ws/.venv/lib/python*/site-packages):$PYTHONPATH"
 ros2 run pick_and_place_voice object_detection
 # 카메라 토픽 배선은 §8 터미널 2 와 동일 — img_node 가 /camera/color/image_raw 등을 절대 경로로
@@ -251,6 +305,9 @@ ros2 run pick_and_place_voice object_detection
 set -a; source ~/ros2_jazzy_test/resources/config.sh; set +a
 source /opt/ros/jazzy/setup.bash
 source ~/cobot_demo_ws/install/setup.bash
+source ~/cobot_demo_ws/.venv/bin/activate
+# activate 만으로는 부족하다 — ros2 run 이 띄우는 노드는 시스템 python shebang 으로 뜨므로
+# venv 패키지를 보려면 PYTHONPATH 도 함께 넣는다.
 export PYTHONPATH="$(ls -d ~/cobot_demo_ws/.venv/lib/python*/site-packages):$PYTHONPATH"
 ros2 run pick_and_place_voice get_keyword
 # → "MicRecorderNode initialized." → "wait for client's request..." (wakeword "Hello Rokey" 대기)
@@ -261,6 +318,9 @@ ros2 run pick_and_place_voice get_keyword
 set -a; source ~/ros2_jazzy_test/resources/config.sh; set +a
 source /opt/ros/jazzy/setup.bash
 source ~/cobot_demo_ws/install/setup.bash
+source ~/cobot_demo_ws/.venv/bin/activate
+# activate 만으로는 부족하다 — ros2 run 이 띄우는 노드는 시스템 python shebang 으로 뜨므로
+# venv 패키지를 보려면 PYTHONPATH 도 함께 넣는다.
 export PYTHONPATH="$(ls -d ~/cobot_demo_ws/.venv/lib/python*/site-packages):$PYTHONPATH"
 ros2 run pick_and_place_voice robot_control
 ```
@@ -268,5 +328,6 @@ ros2 run pick_and_place_voice robot_control
 ### 10. 정리 (teardown)
 
 ```bash
-rm -rf ~/cobot_demo_ws
+docker rm -f dsr01_emulator 2>/dev/null || true
+rm -rf ~/cobot_demo_ws ~/M0609_RG2_Integration
 ```
