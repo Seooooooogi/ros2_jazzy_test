@@ -83,7 +83,8 @@ python3 verify.py
 ```bash
 ros2 launch realsense2_camera rs_align_depth_launch.py \
   depth_module.depth_profile:=848x480x30 rgb_camera.color_profile:=1280x720x30 \
-  align_depth.enable:=true enable_rgbd:=true pointcloud.enable:=true initial_reset:=true
+  align_depth.enable:=true enable_rgbd:=true pointcloud.enable:=true \
+  pointcloud.stream_filter:=2 initial_reset:=true
 ```
 
 - IR: 위에 `enable_infra:=true enable_infra1:=true enable_infra2:=true depth_module.emitter_enabled:=0` 추가.

@@ -66,7 +66,7 @@ README §기동을 네 군데 고친다.
      -p enable_color:=true -p enable_depth:=true \
      -p depth_module.depth_profile:=848x480x30 -p rgb_camera.color_profile:=1280x720x30 \
      -p align_depth.enable:=true -p enable_rgbd:=true -p enable_sync:=true \
-     -p pointcloud.enable:=true -p initial_reset:=true
+     -p pointcloud.enable:=true -p pointcloud.stream_filter:=2 -p initial_reset:=true
    ```
 
    remap 두 개가 필요한 이유(upstream 기본 ns 하드코딩 → 안 주면 `/camera/camera/*`)를 2줄로 덧붙인다.

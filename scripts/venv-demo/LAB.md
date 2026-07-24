@@ -250,6 +250,7 @@ ros2 launch m0609_rg2_bringup bringup.launch.py mode:=virtual
 ```bash
 # 터미널 1-카메라 — RealSense 직접 기동 (bringup 이 camera:=false 라 카메라는 이걸로 따로)
 # -r __ns:=/ -r __node:=camera 가 /camera/camera/* 를 /camera/* 로 맞추는 인자.
+# pointcloud.stream_filter 2 = color 텍스처 — 미지정 시 0(ANY)이라 cloud 에 rgb 가 없어 RViz RGB8 표시가 error.
 set -a; source ~/ros2_jazzy_test/resources/config.sh; set +a
 source /opt/ros/jazzy/setup.bash
 ros2 run realsense2_camera realsense2_camera_node --ros-args \
@@ -257,7 +258,7 @@ ros2 run realsense2_camera realsense2_camera_node --ros-args \
   -p enable_color:=true -p enable_depth:=true \
   -p depth_module.depth_profile:=848x480x30 -p rgb_camera.color_profile:=1280x720x30 \
   -p align_depth.enable:=true -p enable_rgbd:=true -p enable_sync:=true \
-  -p pointcloud.enable:=true -p initial_reset:=true
+  -p pointcloud.enable:=true -p pointcloud.stream_filter:=2 -p initial_reset:=true
 ```
 
 ```bash
@@ -306,6 +307,7 @@ ros2 launch m0609_rg2_bringup bringup.launch.py mode:=virtual
 ```bash
 # 터미널 1-카메라 — RealSense 직접 기동 (bringup 이 camera:=false 라 카메라는 이걸로 따로)
 # -r __ns:=/ -r __node:=camera 가 /camera/camera/* 를 /camera/* 로 맞추는 인자.
+# pointcloud.stream_filter 2 = color 텍스처 — 미지정 시 0(ANY)이라 cloud 에 rgb 가 없어 RViz RGB8 표시가 error.
 set -a; source ~/ros2_jazzy_test/resources/config.sh; set +a
 source /opt/ros/jazzy/setup.bash
 ros2 run realsense2_camera realsense2_camera_node --ros-args \
@@ -313,7 +315,7 @@ ros2 run realsense2_camera realsense2_camera_node --ros-args \
   -p enable_color:=true -p enable_depth:=true \
   -p depth_module.depth_profile:=848x480x30 -p rgb_camera.color_profile:=1280x720x30 \
   -p align_depth.enable:=true -p enable_rgbd:=true -p enable_sync:=true \
-  -p pointcloud.enable:=true -p initial_reset:=true
+  -p pointcloud.enable:=true -p pointcloud.stream_filter:=2 -p initial_reset:=true
 ```
 
 ```bash
