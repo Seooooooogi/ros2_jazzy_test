@@ -23,6 +23,8 @@ install.log
 *.tar.gz
 *.tgz
 *.zip
+# 배포 zip 의 사본 — `*.zip` 규칙에 안 걸려 실제로 두 번 추적 사고가 났다(042512a, c1fd4f4).
+*.zip.*
 
 # Python (Voice 단계 잔여물)
 __pycache__/
