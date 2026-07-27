@@ -188,9 +188,9 @@ obtain_cobot2() {
     echo "           This repo no longer ships cobot2 — place the source there, then re-run:" >&2
     echo "             mkdir -p ${DSR_WORKSPACE}/src && cp -a <cobot2-source> ${cobot2}" >&2
     echo "           Then split the monolithic lab packages out (README step 3-1):" >&2
-    echo "             mkdir -p ${HOME}/cobot_demo_ws/src" >&2
-    echo "             mv ${cobot2}/pick_and_place_{text,voice} ${HOME}/cobot_demo_ws/src/" >&2
-    echo "             rm -f ${HOME}/cobot_demo_ws/src/pick_and_place_*/COLCON_IGNORE" >&2
+    echo "             mkdir -p ${HOME}/cobot_venv_ws/src" >&2
+    echo "             mv ${cobot2}/pick_and_place_{text,voice} ${HOME}/cobot_venv_ws/src/" >&2
+    echo "             rm -f ${HOME}/cobot_venv_ws/src/pick_and_place_*/COLCON_IGNORE" >&2
     exit 1
 }
 

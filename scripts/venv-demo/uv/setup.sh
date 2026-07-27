@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# scripts/venv-demo/uv/setup.sh — 데모 venv(~/cobot_demo_ws/.venv) 원커맨드 구성/복구.
+# scripts/venv-demo/uv/setup.sh — 데모 venv(~/cobot_venv_ws/.venv) 원커맨드 구성/복구.
 # LAB.md A3+A4 와 동일 결과물을 uv.lock 기준으로 재현한다(순서 함정 없음).
 # 학습용이 아니다 — 처음이면 LAB.md 를 한 줄씩(각 핀의 이유가 실습 내용).
 # exit code 는 0(성공)/비0(실패) 2단계만 — set -e 가 하위 도구(apt/curl/uv) 코드를 그대로 전파한다.
 set -euo pipefail
 
 UV_VERSION="0.11.2"
-VENV_DIR="$HOME/cobot_demo_ws/.venv"
+VENV_DIR="$HOME/cobot_venv_ws/.venv"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
 TOTAL=6
@@ -85,7 +85,7 @@ print('deps OK', numpy.__version__)
 EOF
 # 진짜 게이트(LAB 동일): 의존성·shim·feature 모델·wakeword 모델을 실추론 1회로 한꺼번에 확증.
 # ws 미구성(복구 전 단계)이면 skip — venv 자체는 완성.
-WAKEWORD="$HOME/cobot_demo_ws/src/pick_and_place_voice/resource/hello_rokey_8332_32.tflite"
+WAKEWORD="$HOME/cobot_venv_ws/src/pick_and_place_voice/resource/hello_rokey_8332_32.tflite"
 if [[ -f "${WAKEWORD}" ]]; then
     "${PY}" - "${WAKEWORD}" <<'EOF'
 import sys

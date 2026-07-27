@@ -16,11 +16,11 @@ bash install.sh
 
 ```bash
 # 3) cobot2 애플리케이션 소스 배치
-mkdir -p ~/cobot2_ws/src ~/cobot_demo_ws/src
+mkdir -p ~/cobot2_ws/src ~/cobot_venv_ws/src
 cp -a ~/Downloads/cobot2 ~/cobot2_ws/src/cobot2
 
 # 3-1) pick & place 실습 패키지는 별도 워크스페이스로 분리
-mv ~/cobot2_ws/src/cobot2/pick_and_place_{text,voice} ~/cobot_demo_ws/src/
+mv ~/cobot2_ws/src/cobot2/pick_and_place_{text,voice} ~/cobot_venv_ws/src/
 
 # 3-2) voice OPENAI 키 배치
 echo 'OPENAI_API_KEY=sk-...' \
