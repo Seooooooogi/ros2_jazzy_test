@@ -16,21 +16,25 @@ bash install.sh
 
 ```bash
 # 3) cobot2 애플리케이션 소스 배치
-mkdir -p ~/cobot_ws/src ~/cobot_demo_ws/src
-cp -a ~/Downloads/cobot2 ~/cobot_ws/src/cobot2
+mkdir -p ~/cobot2_ws/src ~/cobot_venv_ws/src
+cp -a ~/Downloads/cobot2 ~/cobot2_ws/src/cobot2
 
 # 3-1) pick & place 실습 패키지는 별도 워크스페이스로 분리
-mv ~/cobot_ws/src/cobot2/pick_and_place_{text,voice} ~/cobot_demo_ws/src/
-rm -f ~/cobot_demo_ws/src/pick_and_place_*/COLCON_IGNORE
+mv ~/cobot2_ws/src/cobot2/pick_and_place_{text,voice} ~/cobot_venv_ws/src/
+rm -f ~/cobot_venv_ws/src/pick_and_place_*/COLCON_IGNORE
 
 # 3-2) voice OPENAI 키 배치
 echo 'OPENAI_API_KEY=sk-...' \
-  > ~/cobot_ws/src/cobot2/voice_processing/resource/.env
+  > ~/cobot2_ws/src/cobot2/voice_processing/resource/.env
 
 # 4) 애플리케이션 셋업 — 워크스페이스(DSR 드라이버 + RealSense + host voice 설치 + cobot2 colcon 빌드)
 #    + 컨테이너(toolkit + yolo :dev-builder 이미지 빌드)
 bash setup-app.sh
 ```
+
+> 워크스페이스 이름이 `~/cobot_ws` → `~/cobot2_ws`, 실습용은 `~/cobot_demo_ws` → `~/cobot_venv_ws` 로 바뀌었다.
+> 옛 이름으로 이미 빌드해 둔 머신은 `export DSR_WORKSPACE="$HOME/cobot_ws"` 로 기존 경로를 계속 쓰거나,
+> 새 경로에서 다시 빌드한다 (colcon `install/` 에는 절대 경로가 박혀 있어 디렉토리 rename 만으로는 오버레이가 깨진다).
 
 ## 옵션
 
@@ -62,14 +66,14 @@ bash setup-app.sh --help
 
 ```bash
 source /opt/ros/jazzy/setup.bash
-source ~/cobot_ws/install/setup.bash
+source ~/cobot2_ws/install/setup.bash
 set -a; source ~/ros2_jazzy_test/resources/config.sh; set +a
 ```
 
 > 💡 **매번 치기 싫으면 `~/.bashrc` 에 1회 등록**
 > ```bash
 > # >>> ros2_jazzy_test runtime env >>>
-> [ -f ~/cobot_ws/install/setup.bash ] && source ~/cobot_ws/install/setup.bash
+> [ -f ~/cobot2_ws/install/setup.bash ] && source ~/cobot2_ws/install/setup.bash
 > set -a; source ~/ros2_jazzy_test/resources/config.sh; set +a
 > # <<< ros2_jazzy_test runtime env <<<
 > ```
@@ -113,7 +117,7 @@ docker run -d --name yolo-detection \
   -e ROS_DOMAIN_ID=${ROS_DOMAIN_ID:-0} -e RMW_IMPLEMENTATION=rmw_cyclonedds_cpp \
   -e CYCLONEDDS_URI=file:///cyclonedds.xml -e PYTHONUNBUFFERED=1 \
   -v ~/.config/cyclonedds/cyclonedds.xml:/cyclonedds.xml:ro \
-  -v ~/cobot_ws/src/cobot2/yolo_container:/ws/src \
+  -v ~/cobot2_ws/src/cobot2/yolo_container:/ws/src \
   -v yolo_build:/ws/build -v yolo_install:/ws/install \
   -v ~/ros2_jazzy_test/containers/dev/bashrc:/root/.bashrc:ro \
   local/ros2-jazzy-yolo:dev-builder \
