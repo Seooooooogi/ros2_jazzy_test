@@ -47,7 +47,7 @@ usage() {
     cat <<EOF
 setup-app.sh — set up the cobot2 application (workspace + containers) on top of the base install.sh.
 
-  bash setup-app.sh                 workspace (driver + cobot2 + RealSense + host voice + colcon) + containers (toolkit + yolo :dev-builder image)
+  bash setup-app.sh                 workspace (driver + cobot2 + m0609 bringup + RealSense + host voice + colcon) + containers (toolkit + yolo :dev-builder image)
   bash setup-app.sh --workspace-only   only the workspace (incl. host voice Python)
   bash setup-app.sh --containers-only  only the container layer (toolkit + yolo image)
   bash setup-app.sh --reset         wipe the doosan-robot2 clone + build/install/log first, then rebuild
@@ -57,6 +57,8 @@ setup-app.sh — set up the cobot2 application (workspace + containers) on top o
   bash setup-app.sh -h, --help      this help.
 
 The cobot2 application source is NOT shipped by this repo — place it at ${DSR_WORKSPACE}/src/cobot2 before running.
+The m0609 bringup repo is cloned to ${M0609_REPO_DIR} when missing (override M0609_REPO_DIR / M0609_REF),
+and only its m0609_rg2_bringup package is symlinked into ${DSR_WORKSPACE}/src.
 EOF
 }
 
@@ -93,7 +95,7 @@ print_copyright
 
 # 진행률 분모 — [n/total] 표시에만 사용.
 TOTAL=0
-[[ ${DO_WORKSPACE} -eq 1 ]] && TOTAL=$(( TOTAL + 6 ))   # 6개: cobot2 확인 + dsr + rs-sdk + rs-ros + voice-host + colcon
+[[ ${DO_WORKSPACE} -eq 1 ]] && TOTAL=$(( TOTAL + 7 ))   # 7개: cobot2 확인 + m0609/onrobot + dsr + rs-sdk + rs-ros + voice-host + colcon
 [[ ${DO_CONTAINERS} -eq 1 ]] && TOTAL=$(( TOTAL + 2 ))  # 2개: toolkit + yolo image
 STEP_N=0
 #######################################
@@ -186,10 +188,64 @@ obtain_cobot2() {
     echo "           This repo no longer ships cobot2 — place the source there, then re-run:" >&2
     echo "             mkdir -p ${DSR_WORKSPACE}/src && cp -a <cobot2-source> ${cobot2}" >&2
     echo "           Then split the monolithic lab packages out (README step 3-1):" >&2
-    echo "             mkdir -p ${HOME}/cobot_demo_ws/src" >&2
-    echo "             mv ${cobot2}/pick_and_place_{text,voice} ${HOME}/cobot_demo_ws/src/" >&2
-    echo "             rm -f ${HOME}/cobot_demo_ws/src/pick_and_place_*/COLCON_IGNORE" >&2
+    echo "             mkdir -p ${HOME}/cobot_venv_ws/src" >&2
+    echo "             mv ${cobot2}/pick_and_place_{text,voice} ${HOME}/cobot_venv_ws/src/" >&2
+    echo "             rm -f ${HOME}/cobot_venv_ws/src/pick_and_place_*/COLCON_IGNORE" >&2
     exit 1
+}
+
+#######################################
+# 통합 bringup(m0609_rg2_bringup)과 그 외부 의존(onrobot-ros2)을 워크스페이스에 준비.
+#
+# M0609 레포는 공개 저장소라 없으면 clone 하고, 이미 있으면 손대지 않는다(개발 중인 작업본 보호).
+# 워크스페이스에는 레포 전체가 아니라 bringup 패키지 하나만 심볼릭 링크한다 — 같은 레포의
+# m0609_rg2_moveit 은 moveit 스택 전체를 rosdep 으로 끌어오는데 이 설치엔 쓰이지 않는다.
+# (colcon 은 심볼릭 링크된 패키지 디렉토리를 그대로 인식한다 — 실측 확인.)
+# onrobot-ros2 는 M0609 레포가 추적하지 않는 외부 패키지 → 커밋 SHA 로 핀 고정해 별도 clone.
+#
+# 멱등: clone 은 .git 존재 시 skip, 링크는 ln -sfn 으로 매번 같은 결과.
+# Globals:
+#   DSR_WORKSPACE, M0609_REPO_URL, M0609_REF, M0609_REPO_DIR,
+#   ONROBOT_REPO_URL, ONROBOT_COMMIT (읽기)
+# Returns:
+#   준비되면 0, 링크 자리에 실제 디렉토리가 있으면 안내 후 종료(exit 1)
+#######################################
+obtain_m0609() {
+    local ws_src="${DSR_WORKSPACE}/src"
+    local link="${ws_src}/m0609_rg2_bringup"
+    local pkg="${M0609_REPO_DIR}/src/m0609_rg2_bringup"
+    local onrobot="${ws_src}/onrobot-ros2"
+
+    mkdir -p "${ws_src}"
+
+    if [[ -d "${M0609_REPO_DIR}/.git" ]]; then
+        echo "setup-app: m0609 repo already at ${M0609_REPO_DIR} (skip clone, M0609_REF ignored)"
+    else
+        git clone --branch "${M0609_REF}" "${M0609_REPO_URL}" "${M0609_REPO_DIR}"
+    fi
+
+    if [[ ! -f "${pkg}/package.xml" ]]; then
+        echo "setup-app: ${pkg}/package.xml not found — check ${M0609_REPO_DIR}" >&2
+        exit 1
+    fi
+
+    # 링크 자리에 실제 디렉토리가 있으면 ln -sfn 이 그 안쪽에 링크를 만들어 조용히 어긋난다.
+    # 사용자가 손으로 복사해 둔 경우일 수 있으니 지우지 말고 멈춘다.
+    if [[ -e "${link}" && ! -L "${link}" ]]; then
+        echo "setup-app: ${link} exists and is not a symlink — remove it and re-run." >&2
+        exit 1
+    fi
+    ln -sfn "${pkg}" "${link}"
+    echo "setup-app: linked ${link} -> ${pkg}"
+
+    if [[ -d "${onrobot}/.git" ]]; then
+        echo "setup-app: onrobot-ros2 already cloned (skip)"
+    else
+        git clone "${ONROBOT_REPO_URL}" "${onrobot}"
+    fi
+    # clone 을 건너뛴 경우에도 핀을 다시 적용 — 누가 브랜치를 옮겨 놨어도 같은 커밋으로 수렴.
+    git -C "${onrobot}" checkout --quiet "${ONROBOT_COMMIT}"
+    echo "setup-app: onrobot-ros2 pinned at ${ONROBOT_COMMIT}"
 }
 
 #######################################
@@ -203,20 +259,25 @@ do_reset() {
     # 지워도 되는 것만 지움 — 다시 clone·빌드하면 복구됨. cobot2(사용자 배치본)는 그대로 유지.
     if [[ ${ASSUME_YES} -ne 1 ]]; then
         if [[ -t 0 ]]; then
-            read -r -p "[setup-app] --reset will rm -rf ${DSR_WORKSPACE}/src/doosan-robot2 and ${DSR_WORKSPACE}/{build,install,log} (cobot2 kept). Continue? [y/N] " reply
+            read -r -p "[setup-app] --reset will rm -rf ${DSR_WORKSPACE}/src/{doosan-robot2,onrobot-ros2,m0609_rg2_bringup} and ${DSR_WORKSPACE}/{build,install,log} (cobot2 and ${M0609_REPO_DIR} kept). Continue? [y/N] " reply
             [[ "${reply}" =~ ^[Yy]$ ]] || { echo "[setup-app] aborted."; exit 1; }
         else
             echo "[setup-app] --reset needs confirmation but no TTY — re-run with --yes." >&2
             exit 1
         fi
     fi
-    echo "[setup-app] reset: wiping doosan-robot2 clone + build/install/log (cobot2 kept)"
+    # m0609_rg2_bringup 은 심볼릭 링크라 지워도 원본(${M0609_REPO_DIR})은 그대로다.
+    # onrobot-ros2 는 핀 고정 clone 이라 다시 받으면 같은 커밋으로 복구된다.
+    echo "[setup-app] reset: wiping doosan-robot2 / onrobot-ros2 / m0609 link + build/install/log (cobot2 and ${M0609_REPO_DIR} kept)"
     rm -rf "${DSR_WORKSPACE}/src/doosan-robot2" \
+           "${DSR_WORKSPACE}/src/onrobot-ros2" \
            "${DSR_WORKSPACE}/build" "${DSR_WORKSPACE}/install" "${DSR_WORKSPACE}/log"
+    rm -f  "${DSR_WORKSPACE}/src/m0609_rg2_bringup"
 }
 
 do_workspace() {
     step "cobot2 source (verify)"; obtain_cobot2   # 빠른 확인 — 콘솔에 그대로 표시(로그로 안 보냄)
+    step "m0609 bringup + onrobot-ros2"; obtain_m0609
     run "doosan-robot2 driver + DSR deps" bash "${RESOURCE_DIR}/dsr-project-install.sh"
     run "RealSense SDK"                   bash "${RESOURCE_DIR}/realsense-install.sh" sdk
     run "RealSense ROS2 wrapper"          bash "${RESOURCE_DIR}/realsense-install.sh" ros

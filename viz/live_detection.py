@@ -34,7 +34,11 @@ PACKAGE_NAME = "object_detection"
 YOLO_MODEL_FILENAME = "yolov8n_tools_0122.pt"
 
 # 카메라 color 토픽 — host realsense2_camera 가 publish(bgr8, 1280x720@30).
-COLOR_TOPIC = "/camera/camera/color/image_raw"
+# 카메라 토픽은 상대 이름이다 — 절대 경로를 박으면 카메라 이름/네임스페이스가 바뀔 때마다
+# 이 파일을 고쳐야 한다. 배선은 기동 명령의 remap 이 정한다:
+#   --ros-args -r color/image_raw:=/camera/color/image_raw
+# 이 노드는 카메라 외의 토픽도 다루므로 __ns 통째 이동이 아니라 토픽 단위 remap 을 쓴다.
+COLOR_TOPIC = "color/image_raw"
 # viewer 가 구독할 경량 detection 토픽.
 DETECTIONS_TOPIC = "/yolo/detections"
 
@@ -49,7 +53,7 @@ class YoloLiveDetector(Node):
     """color 스트림을 연속 추론해 박스+클래스를 JSON 으로 publish 하는 노드.
 
     Subscribes:
-        /camera/camera/color/image_raw (sensor_msgs/Image): host 카메라 원본(bgr8).
+        /camera/color/image_raw (sensor_msgs/Image): host 카메라 원본(bgr8).
 
     Publishes:
         /yolo/detections (std_msgs/String): JSON. full-frame 픽셀좌표 박스 리스트.

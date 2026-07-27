@@ -17,7 +17,7 @@ RealSense color 화면 위에 **YOLO 실시간 박스 + 클래스**, 좌상단�
 
 | 토픽 | 타입 | publisher |
 |------|------|-----------|
-| `/camera/camera/color/image_raw` | sensor_msgs/Image | host realsense2_camera (기존) |
+| `/camera/color/image_raw` | sensor_msgs/Image | host realsense2_camera (기존, 구 `/camera/camera/color/image_raw`) |
 | `/yolo/detections` | std_msgs/String (JSON) | yolo-viz 컨테이너 (신규) |
 | `/ui/current_task` | std_msgs/String (JSON) | robot_control (신규) |
 | `/wakeword_detected` | std_msgs/Bool | voice get_keyword (기존) |
@@ -28,10 +28,12 @@ RealSense color 화면 위에 **YOLO 실시간 박스 + 클래스**, 좌상단�
 ## 실행
 
 ### 1. host 카메라 기동 (필수)
+통합 bringup 이 카메라 노드를 함께 띄운다(`align_depth.enable` 등 스트림 프로파일 내장). 종전의 수동 `ros2 launch realsense2_camera rs_launch.py align_depth.enable:=true` 안내를 대체한다.
 ```
-ros2 launch realsense2_camera rs_launch.py align_depth.enable:=true
-ros2 topic hz /camera/camera/color/image_raw   # 프레임 확인
+ros2 launch m0609_rg2_bringup bringup.launch.py mode:=virtual camera:=true
+ros2 topic hz /camera/color/image_raw   # 프레임 확인
 ```
+`camera:=true` 를 명시하는 이유 — 이 launch 의 `camera` 기본값은 false 다(standalone 개발 시 USB 카메라 미점유).
 
 ### 2. yolo-viz 컨테이너 기동
 전제: `~/.config/cyclonedds/cyclonedds.xml` 존재(dds-tuning), yolo `:dev-builder` 이미지가 빌드돼 있어야 함(`bash containers/build-all.sh` 또는 `setup-app.sh`). yolo-viz 는 `:dev-builder` 고정이라 `YOLO_TAG` 는 영향 없음(`DOCKERHUB_USER` 만 이미지 네임스페이스에 반영).
@@ -46,13 +48,14 @@ ros2 topic echo /yolo/detections --once                            # 박스 JSON
 ```
 set -a; source resources/config.sh; set +a   # ROS_DISTRO 설정(단일 진실 소스)
 source /opt/ros/${ROS_DISTRO}/setup.bash
-python3 viz/viewer.py
+python3 viz/viewer.py --ros-args -r color/image_raw:=/camera/color/image_raw
 ```
+`viewer.py` 는 카메라를 상대 이름 `color/image_raw` 로 구독하므로 배선은 이 remap 이 정한다. 카메라 외 토픽(`/yolo/detections` 등)도 다루기 때문에 네임스페이스 통째 이동이 아니라 토픽 단위 remap 을 쓴다. remap 을 빠뜨리면 창은 뜨지만 프레임이 안 들어온다(에러 없음).
 창에 라이브 피드 + 공구 추적 박스가 뜬다. 좌상단 wakeword/target/pos 는 voice·robot_control 이 함께 돌 때만 채워진다(아니면 `-`). 종료: 창에서 `q`.
 
 ## 트러블슈팅
 
-- **박스가 안 뜸 / `/yolo/detections` 가 비어 있음**: 컨테이너가 카메라 프레임을 못 받는 경우. 카메라 구독은 best-effort(SensorDataQoS)라 realsense publisher QoS 와 무관하게 호환되지만, 토픽명/도메인(`ROS_DOMAIN_ID=42`)·RMW 일치 여부와 `ros2 topic hz /camera/camera/color/image_raw` 로 host publish 자체를 먼저 확인한다.
+- **박스가 안 뜸 / `/yolo/detections` 가 비어 있음**: 컨테이너가 카메라 프레임을 못 받는 경우. 카메라 구독은 best-effort(SensorDataQoS)라 realsense publisher QoS 와 무관하게 호환되지만, 토픽명/도메인(`ROS_DOMAIN_ID=42`)·RMW 일치 여부와 `ros2 topic hz /camera/color/image_raw` 로 host publish 자체를 먼저 확인한다. 컨테이너 쪽은 `docker-compose.yml` 의 yolo-viz command 에 `-r color/image_raw:=/camera/color/image_raw` remap 이 붙어 있어야 한다 — 빠지면 노드는 정상 기동하고 토픽만 조용히 비어 있다.
 - **viewer 창이 안 뜸**: host 데스크톱 세션의 `DISPLAY` 가 필요하다(SSH 면 X11 forwarding 또는 로컬 데스크톱에서 실행).
 - **컨테이너가 cyclonedds.xml mount 실패로 안 뜸**: dds-tuning(`install.sh` 마지막 step 또는 단독 실행)이 먼저 끝나 host 에 파일이 렌더돼 있어야 한다.
 - **GPU 미사용(느림)**: `nvidia-container-toolkit` 가 host 에 설치돼 있어야 컨테이너가 GPU 를 본다. `docker logs` 에서 추론 device 확인.

@@ -10,7 +10,7 @@
 # backup/dsr-project-install{,_25}.sh 를 jazzy 로 옮기고 멱등(여러 번 실행해도 결과 동일)하게 만든 버전.
 #   - ROKEY-SPARK fork 의 기본 브랜치(main = 버전 고정한 jazzy 스냅샷)를 clone. 이미 clone 돼 있으면
 #     건너뜀(재현성 — git pull 안 함). fork 가 버전을 핀(고정)해 두어 upstream 이 push 해도 흔들리지 않음.
-#   - 워크스페이스 = ${DSR_WORKSPACE}(=~/cobot_ws). 이 스크립트 = DSR 드라이버만 설치, doosan-robot2 는
+#   - 워크스페이스 = ${DSR_WORKSPACE}(=~/cobot2_ws). 이 스크립트 = DSR 드라이버만 설치, doosan-robot2 는
 #     ${DSR_WORKSPACE}/src 로 clone 됨. cobot2 앱 소스는 이 레포가 미제공 — 사용자가
 #     ${DSR_WORKSPACE}/src/cobot2 에 직접 배치(setup-app.sh 가 colcon 빌드 전에 존재 확인).
 #   - 에뮬레이터: doosanrobot/dsr_emulator:${DSR_EMULATOR_VERSION} 태그를 명시해서 pull.

@@ -33,34 +33,21 @@ SYSCTL_DST="/etc/sysctl.d/60-cyclonedds.conf"
 [[ -f "${TEMPLATE}" ]]   || { echo "dds-tuning: template missing: ${TEMPLATE}" >&2; exit 1; }
 [[ -f "${SYSCTL_SRC}" ]] || { echo "dds-tuning: sysctl source missing: ${SYSCTL_SRC}" >&2; exit 1; }
 
-# --- 1. 물리 외부 NIC 감지 (유선 + 무선) --------------
-# 물리 NIC = 케이블 연결·IP 없어도 /sys/class/net 에 존재 → 로봇 안 붙은 설치 환경에서도 감지 가능.
-# 가상 인터페이스(device 심링크 없음) 와 docker/veth/bridge/tap/tun 은 제외 — 이들은 다른 머신으로 가는 경로가 아니고
-# 쓸모없는 주소(locator) 만 늘려 discovery 잡음 / 전송 실패(-1) 유발. lo 는 렌더 단계에서 항상 따로
-# 맨 앞에 추가 → 이 목록에서는 제외.
+# --- 1. 인터페이스 목록: loopback 기본, 물리 NIC 은 명시 지정만 --------------
+# 물리 NIC 자동 고정은 제거했다(2026-07-23). 이 시스템의 ROS2 DDS 참여자는 전부 같은 호스트다
+# (host + network_mode:host 컨테이너); 실 로봇은 DSR 드라이버의 TCP 로 붙지 DDS 참여자가 아니다.
+# 따라서 loopback 하나로 충분하다. 자동 감지는 머신에 따라 빈 NIC 이름(name="")을 렌더해
+# cyclonedds 가 "Nameless and address-less interface" 로 도메인 생성을 통째로 거부(rmw_create_node
+# failed → 모든 노드 즉사)하는 사고를 냈다 — 그 위험을 원천 제거한다.
+# 다른 머신의 ROS2 노드와 토픽을 나눠야 하는 드문 cross-host 경우에만 DDS_NETIF 로 명시 지정.
 declare -a NICS=()
 if [[ -n "${DDS_NETIF}" ]]; then
-    # override: 쉼표로 구분해 여러 개 지정 가능. 사용자 책임 하에 그대로 사용. lo 는 렌더 단계에서
-    # 항상 따로 추가되므로 여기엔 외부 NIC 만 기입 (lo 넣어도 중복 방지 가드 존재).
+    # override: 쉼표로 구분해 여러 개 지정 가능. lo 는 렌더 단계에서 항상 따로 추가되므로
+    # 여기엔 외부 NIC 만 기입 (lo 넣어도 중복 방지 가드 존재).
     IFS=',' read -r -a NICS <<< "${DDS_NETIF}"
-    echo "[dds] DDS_NETIF override → ${NICS[*]}"
+    echo "[dds] DDS_NETIF override → external NIC(s): ${NICS[*]}"
 else
-    for path in /sys/class/net/*; do
-        nic="$(basename "${path}")"
-        [[ "${nic}" == "lo" ]] && continue
-        case "${nic}" in docker*|veth*|br-*|virbr*|bond*|tap*|tun*) continue ;; esac
-        [[ -e "${path}/device" ]] || continue   # 물리 인터페이스(device 심링크 있는 것) 만 — 유선/무선 둘 다
-        NICS+=("${nic}")
-    done
-    if [[ "${#NICS[@]}" -eq 0 ]]; then
-        # 외부 NIC 이 0개여도 loopback 하나로 같은 호스트(host↔container) 통신 가능 →
-        # 치명적 에러 아님 (예전엔 exit 1 → lo 항상 추가 정책으로 변경됨).
-        echo "[dds] warning: no physical external NIC detected — only same-host communication is configured via loopback." >&2
-        echo "       If cross-host communication with other machines is needed, specify the interface explicitly:" >&2
-        echo "       DDS_NETIF=<iface[,iface2]> bash resources/dds-tuning.sh" >&2
-    else
-        echo "[dds] external NIC auto-detect → ${NICS[*]} (docker/virtual excluded; loopback always added)"
-    fi
+    echo "[dds] loopback-only (physical NIC pinning removed). For cross-host ROS2, set DDS_NETIF=<iface[,iface2]>."
 fi
 
 # --- 2. 재부팅에도 유지되는 sysctl 설치 + 적용 (cyclonedds 노드보다 먼저) ----------------
@@ -94,7 +81,7 @@ r ${iface_block}
 d
 }" "${TEMPLATE}" > "${rendered_xml}"
 mv "${rendered_xml}" "${CYCLONEDDS_XML}"
-echo "[dds] render complete: ${CYCLONEDDS_XML} (loopback + ${#NICS[@]} external)"
+echo "[dds] render complete: ${CYCLONEDDS_XML} (loopback + ${#NICS[@]} external NIC)"
 
 # --- 4. ~/.bashrc 환경변수 멱등 주입 (관리 블록 하나로 통합) ----------------------
 # config.sh 는 source 되는 상황(activate.sh/CI) 에서만 적용, 대화형 셸(interactive shell) 은

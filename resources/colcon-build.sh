@@ -5,14 +5,14 @@
 # =============================================================
 #
 # shellcheck source-path=SCRIPTDIR
-# resources/colcon-build.sh — cobot_ws 워크스페이스 colcon 빌드 (a02 의 step 4).
+# resources/colcon-build.sh — cobot2_ws 워크스페이스 colcon 빌드 (a02 의 step 4).
 #
 # DSR + RealSense 설치 후 딱 한 번만 빌드 (중복 빌드 방지 — DSR/RealSense 하위 스크립트는 빌드 안 함).
 # 하나로 합쳐진 워크스페이스의 src/ (dsr-project-install.sh 가 레포에서 복사해 둠) 안에 모든 패키지 묶임.
 # host 빌드는 컨테이너 전용 패키지(object_detection — yolo 이미지 안에서만 실행)를 --packages-skip 로
 # 건너뛴다. voice_processing 은 host 에서 직접 실행(voice-host-install.sh)하므로 여기서 함께 빌드 —
 # console_script 가 system python shebang 을 받아 host 에 깐 langchain/openwakeword 를 본다.
-# pick_and_place_* (모놀리식 실습본) 는 애초에 이 ws 에 없음 — ~/cobot_demo_ws 로 분리 (README 3-1).
+# pick_and_place_* (모놀리식 실습본) 는 애초에 이 ws 에 없음 — ~/cobot_venv_ws 로 분리 (README 3-1).
 #   - rosdep init 은 a01 의 ros2-desktop-main.sh 에서 이미 처리 → 여기선 update 만.
 #   - --skip-keys=librealsense2: 이 SDK 는 apt 로 까는 네이티브 패키지 → ROS rosdep 키 아님 (a02 step2).
 #   - 증분(incremental) 빌드 — build/install/log 를 rm -rf 안 함 → 재개(resume) 시 빠름.
@@ -49,8 +49,14 @@ cd "${DSR_WORKSPACE}"
 
 # rosdep: 워크스페이스 패키지들이 선언해 둔 의존성을 자동 설치 (init 은 a01 에서 이미 끝냄).
 rosdep update
+# skip-keys 사유:
+#   librealsense2                      — apt 로 까는 네이티브 SDK. ROS rosdep 키가 아니다.
+#   message_generation/message_runtime — onrobot_rg_control/package.xml 의 ROS1 잔재. jazzy 에 해당
+#                                        rosdep 규칙이 없어 그대로 두면 이 단계가 통째로 실패한다
+#                                        (이 스크립트는 set -e). 실제 빌드에는 쓰이지 않는 키다.
+# `-r`(오류 무시하고 계속)은 쓰지 않는다 — 모든 해결 실패를 삼켜 진짜 누락 의존까지 가린다.
 rosdep install --from-paths src --ignore-src --rosdistro "${ROS_DISTRO}" \
-    --skip-keys=librealsense2 -y
+    --skip-keys="librealsense2 message_generation message_runtime" -y
 
 # colcon 빌드. object_detection(yolo)은 host 에서 실행 불가(torch 가 yolo 이미지 안에만) → --packages-skip.
 # voice_processing 은 host 직접 실행이라 여기서 빌드(voice-host-install.sh 가 langchain/openwakeword 를

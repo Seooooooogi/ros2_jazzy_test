@@ -6,7 +6,7 @@
 #
 # containers/bringup.sh — 로봇 구동 + yolo 컨테이너 + host voice 노드를 함께 띄우고, 종료 시 확실히 정리하는 통합 실행 스크립트.
 #
-# 로봇 드라이버 + 카메라(cobot2_bringup launch) + yolo 컨테이너 생명주기(docker compose up -d) +
+# 로봇 드라이버 + 그리퍼 + 카메라(m0609_rg2_bringup launch) + yolo 컨테이너 생명주기(docker compose up -d) +
 # host voice 노드(ros2 run voice_processing get_keyword — 컨테이너 아님, 마이크 하드웨어 종속이라 host 실행)를
 # 이 스크립트가 직접 관리. shell trap 설정 → Ctrl+C 시 컨테이너 down + host voice 프로세스 kill.
 #
@@ -16,11 +16,14 @@
 # launch 가 어떻게 끝나든 정리 보장(재현 실험으로 확인). 이제 launch 자체는 미관여(컨테이너/voice 없이
 # 로봇/카메라만 띄우려면 launch 직접 실행).
 #
-# 사전 조건: 먼저 `bash setup-app.sh` 실행(cobot2_bringup + 오버레이 빌드, host voice Python 설치, yolo dev-builder 이미지 빌드).
-# launch 인자 = 그대로 전달:
+# 사전 조건: 먼저 `bash setup-app.sh` 실행(m0609_rg2_bringup + 오버레이 빌드, host voice Python 설치, yolo dev-builder 이미지 빌드).
+# launch 인자(mode / host / port / camera / rviz / rt_host) = 그대로 전달:
 #   bash containers/bringup.sh                       # 가상(emulator) + 카메라 + yolo 컨테이너 + host voice
 #   bash containers/bringup.sh mode:=real            # 실제 로봇
-#   bash containers/bringup.sh mode:=virtual camera:=false
+#   bash containers/bringup.sh camera:=false          # 카메라 없이 (yolo 는 대기 상태가 된다)
+#                                                     # mode 와 무관하게 유효 — real 에서도 꺼진다
+# camera 를 지정하지 않으면 이 스크립트가 camera:=true 를 붙인다 — yolo 파이프라인이 카메라 토픽에
+# 의존하므로, launch 자체의 기본값(false, standalone 개발용)을 여기서 뒤집는다.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -39,7 +42,8 @@ set +a
 # OPENAI_API_KEY 는 인스톨러가 다루지 않는다 — voice_processing 노드가 자기 패키지 resource/.env
 # (colcon 빌드 내장)를 load_dotenv 로 직접 읽으므로 bringup 이 env 에 주입할 필요가 없다.
 
-# ROS underlay + cobot_ws 오버레이 source 해야 `ros2 launch cobot2_bringup` 인식.
+# ROS underlay + cobot2_ws 오버레이 source 해야 `ros2 launch m0609_rg2_bringup` 인식
+# (setup-app.sh 의 obtain_m0609 가 이 워크스페이스 src 에 패키지를 링크해 둔다).
 # set +u: ROS 의 setup.bash 는 `set -u` 상태에서 정의 안 된(unbound) 변수를 참조하기 때문.
 set +u
 # shellcheck disable=SC1090,SC1091
@@ -131,9 +135,12 @@ echo "[bringup] launching yolo node inside the dev container…"
 # docker exec = 비대화(non-interactive) 모드 → ~/.bashrc 자동 source 안 함. 그래서 dev bashrc 를
 # 직접 source(dev override 가 /root/.bashrc 로 mount). ROS + 오버레이가 잡혀,
 # 대화형 exec 이 받는 것과 같은 환경.
-docker exec -d yolo-detection bash -c 'source /root/.bashrc; exec ros2 run object_detection object_detection'
+# ImgNode 는 카메라 토픽만 구독하므로 노드 스코프 네임스페이스 remap 한 줄로 붙인다.
+# 'img_node:' 접두사 필수 — 프로세스 전역 __ns 는 같은 프로세스의 object_detection_node 까지
+# 옮겨 robot_control 이 부르는 /get_3d_position 경로를 끊는다.
+docker exec -d yolo-detection bash -c 'source /root/.bashrc; exec ros2 run object_detection object_detection --ros-args -r img_node:__ns:=/camera'
 
-# host voice 노드 — 컨테이너 아님. 위에서 ROS underlay + cobot_ws 오버레이 이미 source(get_keyword
+# host voice 노드 — 컨테이너 아님. 위에서 ROS underlay + cobot2_ws 오버레이 이미 source(get_keyword
 # console_script shebang = system python → voice-host-install.sh 가 host 에 깐 langchain/openwakeword 를 봄).
 # 백그라운드로 띄우고 PID 를 trap(cleanup)이 회수. 마이크 = 데스크톱 PipeWire 기본(VOICE_MIC_DEVICE override).
 #
@@ -162,5 +169,19 @@ if ! kill -0 "${VOICE_PID}" 2>/dev/null; then
 fi
 echo "[bringup] host voice node up (pgid ${VOICE_PID})"
 
-echo "[bringup] launching robot driver + camera — Ctrl+C tears everything down."
-ros2 launch cobot2_bringup bringup_all.launch.py "$@"
+echo "[bringup] launching robot driver + gripper + camera — Ctrl+C tears everything down."
+# camera 기본값 뒤집기: m0609_rg2_bringup 의 launch 는 camera 기본이 false 다(standalone 개발 시
+# USB 카메라를 잡지 않기 위함). 하지만 이 스크립트는 yolo 컨테이너를 함께 띄우고, 그 노드는
+# /camera/* 토픽이 없으면 조용히 대기만 한다. 그래서 사용자가 camera 를 명시하지 않은
+# 경우에만 camera:=true 를 덧붙인다. launch 의 중복 인자 우선순위에 기대지 않고 직접 검사한다.
+# 사용자가 camera:=false 를 명시하면 mode 와 무관하게 그대로 존중된다(예전에는 mode:=real 이
+# 그 값을 무시하고 카메라를 강제 기동했으나, launch 쪽에서 그 강제를 제거했다).
+LAUNCH_ARGS=("$@")
+camera_set=0
+for arg in "$@"; do
+    [[ "${arg}" == camera:=* ]] && camera_set=1
+done
+if [[ "${camera_set}" -eq 0 ]]; then
+    LAUNCH_ARGS+=(camera:=true)
+fi
+ros2 launch m0609_rg2_bringup bringup.launch.py "${LAUNCH_ARGS[@]}"
