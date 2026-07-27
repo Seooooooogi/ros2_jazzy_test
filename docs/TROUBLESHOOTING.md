@@ -122,7 +122,7 @@
 
 > **적용 범위**: 소비자 소스가 **구본**(상대 이름 구독)인 머신에만 해당한다. 2026-07-22 이후의
 > `cobot2.zip` 을 배치했다면 `ImgNode` 가 절대 경로를 구독하므로 이 실패 자체가 생기지 않는다.
-> 판별: `grep -n "create_subscription" -A1 ~/cobot_ws/src/cobot2/yolo_container/object_detection/object_detection/realsense.py`
+> 판별: `grep -n "create_subscription" -A1 ~/cobot2_ws/src/cobot2/yolo_container/object_detection/object_detection/realsense.py`
 > → `'/camera/color/image_raw'` (절대) 면 신본, `'color/image_raw'` (상대) 면 구본이라 아래가 적용된다.
 
 **증상**: 앞 항목과 정반대로 **publisher 는 멀쩡하다**. `/camera/color/image_raw` 가 topic list 에 있고 hz 도 나오는데, 소비자만 아무것도 못 받는다. 노드는 에러 없이 정상 기동하고 로그도 깨끗하다.
@@ -163,7 +163,7 @@ ros2 node info /img_node                         # 배선 누락 시 여기로 �
 `img_node:` 접두사를 빼면 같은 프로세스의 `object_detection_node` 까지 함께 옮겨져, `robot_control.py` 가 절대 경로로 부르는 `/get_3d_position` 이 끊긴다 — 카메라는 고쳐지고 서비스가 죽는 교환이라 더 나쁘다. 접두사 일괄 치환으로 우회할 수도 없다: rcl 의 `**` 와일드카드 remap 은 **미구현**이다(Jazzy 실측 시 `Wildcard '**' is not implemented`). 네임스페이스 remap 또는 토픽 단위 remap 둘 중 하나만 쓸 수 있다.
 
 **남은 위험 / 미검증**:
-- 소비자 소스(`~/cobot_ws/src/cobot2`)는 **어떤 git 저장소에도 추적되지 않는다**(이 레포도 `.gitignore` 로 배제). 프로듀서만 새 이름으로 바뀌고 소비자 패치가 다른 머신에 전달되지 않으면 파이프라인이 통째로 죽는다 — 새 머신 세팅 시 위 진단 명령을 먼저 돌릴 것.
+- 소비자 소스(`~/cobot2_ws/src/cobot2`)는 **어떤 git 저장소에도 추적되지 않는다**(이 레포도 `.gitignore` 로 배제). 프로듀서만 새 이름으로 바뀌고 소비자 패치가 다른 머신에 전달되지 않으면 파이프라인이 통째로 죽는다 — 새 머신 세팅 시 위 진단 명령을 먼저 돌릴 것.
 - 실 RealSense 하드웨어가 없어 **실제 영상 수신은 미검증**이다. 위 표는 이름 해석(어떤 토픽/서비스 이름으로 붙는지)만 Jazzy 컨테이너에서 실측한 결과다.
 
 ---

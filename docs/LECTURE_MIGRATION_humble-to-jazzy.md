@@ -82,7 +82,7 @@
 - 실행 = host 에서 각 노드 직접 + 로봇 bringup `dsr_bringup2_rviz.launch.py mode:=real host:=192.168.1.100 ... model:=m0609`.
 
 **After**
-- cobot2 는 **레포 외부 소스** → `~/cobot_ws/src/cobot2` 에 배치(추적 제외).
+- cobot2 는 **레포 외부 소스** → `~/cobot2_ws/src/cobot2` 에 배치(추적 제외).
 - `object_detection` = **컨테이너**, `voice_processing`·`robot_control` = **host**(voice 는 ADR-027 로 host).
 - 통합 실행 = **`bash containers/bringup.sh`**(로봇+카메라+컨테이너+노드 자동 기동, Ctrl+C teardown). `mode:=real`/`mode:=virtual`(에뮬레이터).
 - 컨테이너는 소스 live-mount + `--symlink-install` → `.py` 수정 후 노드 재실행이면 반영(재빌드 불요).
@@ -135,7 +135,7 @@
 
 1. **설치 = `install.sh` → `setup-app.sh` 2단계** (resumable, 진행률, reboot 자동 재개).
 2. **컨테이너 워크플로** (빌드 → `bringup.sh` → `docker exec` → `ros2 run`, 소스 수정 반영 규칙).
-3. **cobot2 소스 취득/배치** (`~/cobot_ws/src/cobot2`, 레포 외부).
+3. **cobot2 소스 취득/배치** (`~/cobot2_ws/src/cobot2`, 레포 외부).
 4. **OPENAI key = 사용자가 `~/.config/cobot2/.env` 직접 생성** (인스톨러 자동생성 없음, host voice 노드가 로드 — ADR-028).
 5. **ROS_DOMAIN_ID prompt(기본 42)** — 조별 하드코딩 폐기.
 
@@ -150,7 +150,7 @@
 - **langchain import 실물**: `keyword_extraction.py` 가 `from langchain.prompts import PromptTemplate` + `ChatOpenAI(model="gpt-4o", temperature=0.5)`. 구 import 는 langchain 1.0 에서 제거 → 현재 repo 는 `langchain_core.prompts` 로 이미 교체(반영됨). **강의안 코드 스샷도 갱신 필요.** (§6-D 본문의 "LLMChain" 표현도 실제 코드는 `ChatOpenAI` 직접 → 문구 정정.)
 - **corecode 실제 4개 디렉토리**: `Calibration_Tutorial` / `DRL_Tutorial` / `OD_Tutorial` / `VoiceProcessing`. 본문(§3)은 2개만 언급 → **본문 보강**. (현재 repo corecode 도 동일 4개 — 구조 일치.)
 - **VoiceProcessing 구성**: `keyword_extraction.py`·`MicController.py`·`mic_test.py`·`STT.py`·`wakeup_word.py`·`.env`·`class_embeddings.json`·`hello_rokey_8332_32.tflite`. tflite wakeword 모델명이 현재 host voice smoke 검증과 동일.
-- **workspace 구조**: 강의안 `~/cobot_ws/src/{cobot1_ws, cobot2_ws, doosan-robot2}`, cobot2_ws = 7패키지(object_detection·od_msg·pick_and_place_text·pick_and_place_voice·robot_control·rokey·voice_processing). 현재 = `~/cobot_ws/src/cobot2`(+ doosan-robot2 드라이버). **cobot2_ws → cobot2 로 이름/구조 재편 + 컨테이너화 분담** 안내 필요.
+- **workspace 구조**: 강의안 `~/cobot_ws/src/{cobot1_ws, cobot2_ws, doosan-robot2}`, cobot2_ws = 7패키지(object_detection·od_msg·pick_and_place_text·pick_and_place_voice·robot_control·rokey·voice_processing). 현재 = `~/cobot2_ws/src/cobot2`(+ doosan-robot2 드라이버). **cobot2_ws → cobot2 로 이름/구조 재편 + 컨테이너화 분담** 안내 필요.
 - **그리퍼 실물**: `from onrobot import RG`, RG2, `192.168.1.1:502`, pymodbus — 현재 `pymodbus<3.7` 핀(3.7+ 는 `ModbusTcpClient` 잉여 kwargs 거부). 핀 주의 유효.
 - **로봇 API 불변**: topic `/dsr01/*`, service `/dsr01/aux_control|controller_manager/*`, `robot_model=m0609`, `dsr01` prefix — Humble/Jazzy 공통(doosan-robot2 드라이버). rokey `get_current_pos` 의 tk 좌표 복사 UI 도 그대로 유효.
 - **이론/기초는 그대로**: object detection 개념(AABB/bbox), YOLO COCO 데모, ROS pub/sub 튜토리얼(`simple_publisher/subscriber.py`), calibration `calibrate_data.json`(file_name/pos/type) — distro 무관, 수정 불요.

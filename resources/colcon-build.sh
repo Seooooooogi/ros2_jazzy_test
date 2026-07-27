@@ -5,7 +5,7 @@
 # =============================================================
 #
 # shellcheck source-path=SCRIPTDIR
-# resources/colcon-build.sh — cobot_ws 워크스페이스 colcon 빌드 (a02 의 step 4).
+# resources/colcon-build.sh — cobot2_ws 워크스페이스 colcon 빌드 (a02 의 step 4).
 #
 # DSR + RealSense 설치 후 딱 한 번만 빌드 (중복 빌드 방지 — DSR/RealSense 하위 스크립트는 빌드 안 함).
 # 하나로 합쳐진 워크스페이스의 src/ (dsr-project-install.sh 가 레포에서 복사해 둠) 안에 모든 패키지 묶임.

@@ -302,5 +302,5 @@ nmcli -g IP4.ADDRESS device show <NIC>
 ---
 
 여기까지 = `install.sh` 완료 상태(base 환경 준비 완료). 이후:
-1. `~/cobot_ws/src` 에 cobot2 소스 배치
+1. `~/cobot2_ws/src` 에 cobot2 소스 배치
 2. app 계층(voice OPENAI 키 → DSR 드라이버 / RealSense / voice / colcon 빌드 / 컨테이너) — Notion "최초 빌드 수동화 명령어 정리"의 §10-17 진행.

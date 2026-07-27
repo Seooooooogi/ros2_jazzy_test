@@ -42,7 +42,7 @@ set +a
 # OPENAI_API_KEY 는 인스톨러가 다루지 않는다 — voice_processing 노드가 자기 패키지 resource/.env
 # (colcon 빌드 내장)를 load_dotenv 로 직접 읽으므로 bringup 이 env 에 주입할 필요가 없다.
 
-# ROS underlay + cobot_ws 오버레이 source 해야 `ros2 launch m0609_rg2_bringup` 인식
+# ROS underlay + cobot2_ws 오버레이 source 해야 `ros2 launch m0609_rg2_bringup` 인식
 # (setup-app.sh 의 obtain_m0609 가 이 워크스페이스 src 에 패키지를 링크해 둔다).
 # set +u: ROS 의 setup.bash 는 `set -u` 상태에서 정의 안 된(unbound) 변수를 참조하기 때문.
 set +u
@@ -140,7 +140,7 @@ echo "[bringup] launching yolo node inside the dev container…"
 # 옮겨 robot_control 이 부르는 /get_3d_position 경로를 끊는다.
 docker exec -d yolo-detection bash -c 'source /root/.bashrc; exec ros2 run object_detection object_detection --ros-args -r img_node:__ns:=/camera'
 
-# host voice 노드 — 컨테이너 아님. 위에서 ROS underlay + cobot_ws 오버레이 이미 source(get_keyword
+# host voice 노드 — 컨테이너 아님. 위에서 ROS underlay + cobot2_ws 오버레이 이미 source(get_keyword
 # console_script shebang = system python → voice-host-install.sh 가 host 에 깐 langchain/openwakeword 를 봄).
 # 백그라운드로 띄우고 PID 를 trap(cleanup)이 회수. 마이크 = 데스크톱 PipeWire 기본(VOICE_MIC_DEVICE override).
 #

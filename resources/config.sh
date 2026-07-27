@@ -46,7 +46,7 @@ export ROS2_JAZZY_TEST_REPO
 # --- DSR (jazzy 브랜치 활성 확인 2026-05-26) ---------------
 : "${DSR_BRANCH:=${ROS_DISTRO}}"
 : "${DSR_EMULATOR_VERSION:=3.0.1}"
-: "${DSR_WORKSPACE:=${HOME}/cobot_ws}"
+: "${DSR_WORKSPACE:=${HOME}/cobot2_ws}"
 
 # --- M0609 + RG2 통합 bringup ------------------------------------------
 # 로봇 드라이버 · 그리퍼 · RealSense 브라켓을 한 URDF / 한 launch 로 올리는 패키지.
@@ -64,7 +64,7 @@ export ROS2_JAZZY_TEST_REPO
 : "${ONROBOT_REPO_URL:=https://github.com/ABC-iRobotics/onrobot-ros2}"
 : "${ONROBOT_COMMIT:=c6e390313e831a2e54a0ad5894b2911cc360a16a}"
 
-# --- 앱 워크스페이스 경로 (통합 cobot_ws 하위) ------------------------------------
+# --- 앱 워크스페이스 경로 (통합 cobot2_ws 하위) ------------------------------------
 # YOLO_WS: yolo_container(od_msg + object_detection) — dev 모드(docker-compose.dev.yml)에서
 #   컨테이너 /ws/src 로 bind-mount(live-mount). 별도 src/ 없이 디렉토리 자체가 패키지.
 # VOICE_WS: voice_processing 패키지 디렉토리(flat — voice_container wrapper 폐기). voice 는 host 직접 실행(컨테이너 아님).

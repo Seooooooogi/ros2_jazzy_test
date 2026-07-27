@@ -121,7 +121,7 @@ ros2 service call /get_keyword std_srvs/srv/Trigger "{}"
 
 ## 7. pick and place 패키지 · 실행 구조
 
-- **cobot2 배치**: `~/cobot_ws/src/cobot2`(레포 외부, 추적 제외). 구 `cobot_ws/src/{cobot1_ws, cobot2_ws}` 중첩 → **`cobot2` 단일**로 재편.
+- **cobot2 배치**: `~/cobot2_ws/src/cobot2`(레포 외부, 추적 제외). 구 `cobot_ws/src/{cobot1_ws, cobot2_ws}` 중첩 → **`cobot2` 단일**로 재편.
 - **패키지 분담(3-패키지 분리)**:
   - `object_detection` + `od_msg` → **yolo 컨테이너**
   - `voice_processing` → **host**(`ros2 run voice_processing get_keyword` — 마이크 하드웨어 종속, ADR-027)
@@ -180,7 +180,7 @@ ros2 service call /dsr01/system/set_robot_mode dsr_msgs2/srv/SetRobotMode "robot
 ros2 run robot_control robot_control
 ```
 
-- `source /opt/ros/jazzy/setup.bash`(구 humble). `~/cobot_ws/install/setup.bash` overlay 자동.
+- `source /opt/ros/jazzy/setup.bash`(구 humble). `~/cobot2_ws/install/setup.bash` overlay 자동.
 
 ---
 

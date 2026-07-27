@@ -20,7 +20,7 @@ ls ~/cobot_demo_ws/src/                          # → pick_and_place_text  pick
 ### 2. 인터페이스 + bringup 스택 준비
 
 이 실습은 워크스페이스 하나(`~/cobot_demo_ws`)만 쓴다 — 드라이버와 bringup 도 여기에 함께 둔다.
-정식 워크스페이스(`~/cobot_ws`)를 먼저 빌드해 둘 필요가 없다.
+정식 워크스페이스(`~/cobot2_ws`)를 먼저 빌드해 둘 필요가 없다.
 
 ```bash
 # 1) doosan-robot2 드라이버 (dsr_common2 / dsr_msgs2 / dsr_bringup2 / dsr_controller2 / dsr_description2 …)

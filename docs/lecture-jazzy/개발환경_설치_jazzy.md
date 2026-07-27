@@ -51,8 +51,8 @@ bash install.sh --help
 - cobot2 애플리케이션 소스는 **레포에 없음**(추적 제외). 직접 배치:
 
 ```bash
-mkdir -p ~/cobot_ws/src
-cp -a <cobot2 소스> ~/cobot_ws/src/cobot2
+mkdir -p ~/cobot2_ws/src
+cp -a <cobot2 소스> ~/cobot2_ws/src/cobot2
 ```
 
 ## Step 4. 애플리케이션 설치 — `setup-app.sh`
