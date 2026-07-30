@@ -67,40 +67,6 @@ services:
     # volumes:
     #   - ./models/yolov8n_tools_0122.pt:/ws/install/share/object_detection/resource/yolov8n_tools_0122.pt:ro
 
-  yolo-viz:                     # 시각화 전용 — color 스트림 연속추론 → /yolo/detections (host viewer 가 구독).
-    # dev-builder(yolo) 이미지를 재사용한다(신규/무태그 이미지 없음). 노드 본문은 build 된
-    # object_detection 서비스와 별개로, 마운트한 스크립트를 직접 실행한다
-    # → 이미지 재빌드/재배포 없이 viz 노드만 추가·수정 가능. viz 는 /ws bind-mount 없이
-    #   builder 가 baked 한 /ws/install overlay 를 그대로 쓴다(소스 편집 대상 아님).
-    image: docker.io/${DOCKERHUB_USER:-local}/ros2-jazzy-yolo:dev-builder
-    profiles: [viz]             # opt-in — 프로덕션 up 에 자동 포함 안 됨. `--profile viz` 로만 기동.
-    network_mode: host          # host net namespace 공유 → cyclonedds NIC whitelist·버퍼 상속(카메라 토픽 수신).
-    restart: unless-stopped
-    environment:
-      - ROS_DOMAIN_ID=${ROS_DOMAIN_ID:-0}
-      - RMW_IMPLEMENTATION=${RMW_IMPLEMENTATION:-rmw_cyclonedds_cpp}
-      - CYCLONEDDS_URI=file:///cyclonedds.xml
-      - PYTHONUNBUFFERED=1       # 모델 로드·추론 로그를 docker logs 에 실시간 노출.
-    volumes:
-      - ${CYCLONEDDS_XML:-${HOME}/.config/cyclonedds/cyclonedds.xml}:/cyclonedds.xml:ro
-      # `../` 는 의도적 — compose 파일이 containers/ 에 있어 volume 상대경로는 파일 기준이다.
-      # repo-root 의 viz/live_detection.py 를 가리키려면 한 단계 위로 올라간다.
-      - ../viz/live_detection.py:/opt/viz/live_detection.py:ro
-      # builder 이미지엔 runtime entrypoint 가 없다 → dev/bashrc 를 /root/.bashrc 로 mount 해
-      # ROS overlay 를 command 에서 source 한다(dev 서비스와 동일 recipe).
-      - ./dev/bashrc:/root/.bashrc:ro
-    deploy:                     # GPU 예약 — yolo-detection 과 동일.
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: 1
-              capabilities: [gpu]
-    # builder 이미지엔 entrypoint 가 없어 mount 한 /root/.bashrc 로 ROS overlay 를 source 한 후 실행.
-    # 카메라 토픽은 스크립트가 상대 이름으로 구독하고 여기서 remap 으로 붙인다
-    # (절대 경로를 스크립트에 박지 않기 위함 — 카메라 이름이 바뀌면 이 줄만 고친다).
-    command: ["bash", "-c", "source /root/.bashrc; exec python3 /opt/viz/live_detection.py --ros-args -r color/image_raw:=/camera/color/image_raw"]
-
   dsr-emulator:                 # 실기 우선 — 개발/테스트 시에만 명시적 활성화
     image: doosanrobot/dsr_emulator:3.0.1
     profiles: [dev]
