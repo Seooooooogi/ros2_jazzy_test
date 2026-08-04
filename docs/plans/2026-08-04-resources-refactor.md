@@ -21,6 +21,24 @@
 - **커밋 메시지는 한국어, AI attribution 금지.** `Co-Authored-By` / `Generated with` 류를 넣지 않는다.
 - **브랜치 분리.** 코드는 `refactor/resources-merge`(base `main`), 문서·검증 하네스는 `fix/dsr-clone-pin`. `README.md` 는 `.main-keep-ours` 라 main 기준 브랜치에서만 고쳐야 실제로 반영된다.
 
+## 검증 원칙 — 본문 동일성 diff 가 1차 증거다
+
+개발 머신(192.168.1.2)은 **Ubuntu 22.04 jammy** 이고 인스톨러 타깃은 24.04 noble 이다. 그래서 트레이스가 OS 게이트에서 조기 종료한다 — 실측하면 `ros2_desktop` 은 코드 82줄인데 트레이스가 4줄, `voice` 2줄, `colcon` 2줄이다. 트레이스만으로는 옮긴 본문의 대부분을 지나가지 않는다.
+
+그래서 병합 태스크(3·4·5)의 **1차 증거는 본문 동일성 diff** 다 — 옮긴 함수 본문이 원본과 글자 단위로 같은지 직접 비교한다. 머신·OS와 무관하고, 트레이스가 도달 못 하는 줄까지 덮는다. 트레이스 diff 는 2차 신호로 유지한다(도달하는 범위 안에서 wrapper·dispatch 실수를 잡는다).
+
+패턴 — 원본에서 헤더(shebang·배너·`set -euo pipefail`·`SCRIPT_DIR=`·`source`·`config_assert_set`)를 뺀 나머지와, 새 파일의 함수 본문에서 들여쓰기 4칸을 뺀 것을 비교한다:
+
+```bash
+# 예: kernel-baseline.sh → base-install.sh 의 base_kernel()
+diff <(sed -n '/^config_assert_set$/,$p' ~/rjt-main/resources/kernel-baseline.sh | tail -n +2) \
+     <(sed -n '/^base_kernel() {$/,/^}$/p' ~/rjt-refactor/resources/base-install.sh | sed '1d;$d' | sed 's/^    //')
+```
+
+남아도 되는 차이는 두 종류뿐이다 — 최상단 상수를 `local` 로 내린 줄, 그리고 앞뒤 빈 줄. 그 밖의 차이는 전부 옮기다 생긴 실수다.
+
+실기 머신(192.168.1.11)은 noble + Python 3.12 + `/opt/ros/jazzy` 라 게이트를 다 통과해 트레이스가 깊게 들어간다. 태스크마다 SSH 왕복을 하는 대신 **Task 11 에서 한 번** 깊은 캡처를 돌려 통합 검증한다.
+
 ## Setup — 두 브랜치 동시 작업
 
 **선행 조건은 이미 끝나 있다**: `fix/dsr-clone-pin` 의 미승격 4커밋을 `main` 으로 승격하고 push 했다(`65489ac`). `refactor/resources-merge` 의 base 인 `main` 에 doosan-robot2 커밋 핀과 새 `dsr-project-install.sh` 가 들어 있다. `git log --oneline -1 main` 이 `65489ac` 이상인지 확인하고 시작한다.
@@ -527,7 +545,42 @@ run_stage_a03() {
 
 **state 키 6개가 그대로인지 눈으로 확인한다.**
 
-- [ ] **Step 5: 정적 검사**
+- [ ] **Step 5: 본문 동일성 diff — 이 태스크의 1차 증거**
+
+옮긴 본문이 원본과 글자 단위로 같은지 확인한다. 트레이스보다 이쪽이 강하다(검증 원칙 절 참고).
+
+```bash
+cd ~/rjt-refactor
+M=~/rjt-main/resources
+body() { sed -n "/^$2() {\$/,/^}\$/p" "$1" | sed '1d;$d' | sed 's/^    //'; }
+
+diff <(sed -n '/^config_assert_set$/,$p' "$M/kernel-baseline.sh" | tail -n +2) \
+     <(body resources/base-install.sh base_kernel)                       && echo "kernel OK"
+diff <(sed -n '/^config_assert_set$/,$p' "$M/docker-install.sh" | tail -n +2) \
+     <(body resources/base-install.sh base_docker)                       && echo "docker OK"
+diff <(sed -n '/^config_assert_set$/,$p' "$M/vscode-install.sh" | tail -n +2) \
+     <(body resources/base-install.sh base_vscode)                       && echo "vscode OK"
+diff <(body "$M/ros2-packages.sh" ros2_desktop) \
+     <(body resources/base-install.sh ros2_desktop)                      && echo "ros2_desktop OK"
+diff <(body "$M/ros2-packages.sh" ros2_extras) \
+     <(body resources/base-install.sh ros2_extras)                       && echo "ros2_extras OK"
+diff <(body "$M/nvidia-driver-install.sh" _resolve_driver_pkg) \
+     <(body resources/base-install.sh _resolve_driver_pkg)               && echo "_resolve_driver_pkg OK"
+```
+
+Expected: 여섯 줄 모두 `... OK`.
+
+`base_nvidia` 는 위 패턴으로 안 잡힌다 — 원본이 `_resolve_driver_pkg()` 정의와 최상위 코드가 섞인 구조라 그 함수 정의를 뺀 나머지가 본문이다. 이건 손으로 비교한다:
+
+```bash
+diff <(sed -n '/^config_assert_set$/,$p' "$M/nvidia-driver-install.sh" | tail -n +2 \
+        | sed '/^_resolve_driver_pkg() {$/,/^}$/d') \
+     <(body resources/base-install.sh base_nvidia)
+```
+
+남아도 되는 차이는 두 종류뿐이다 — 최상단 상수를 `local` 로 내린 줄(`DOCKER_LIST` `DOCKER_KEY` `MS_KEY` `VSCODE_LIST` `arch` `running`), 그리고 앞뒤 빈 줄. 그 밖의 차이가 나오면 옮기다 생긴 실수다.
+
+- [ ] **Step 6: 정적 검사**
 
 ```bash
 cd ~/rjt-refactor && shellcheck resources/*.sh install.sh setup-app.sh && bash -n resources/*.sh
@@ -535,7 +588,7 @@ cd ~/rjt-refactor && shellcheck resources/*.sh install.sh setup-app.sh && bash -
 
 Expected: 출력 없음.
 
-- [ ] **Step 6: 트레이스 비교**
+- [ ] **Step 7: 트레이스 비교 (2차 신호)**
 
 ```bash
 cd ~/ros2_jazzy_test
@@ -547,7 +600,7 @@ Expected: `TRACE IDENTICAL`.
 
 차이가 나면 대개 원인이 셋 중 하나다 — 최상단 상수를 `local` 로 안 내려서 값이 비었거나, 본문 일부를 빠뜨렸거나, `exit 1` 이 함수 안에서 `return` 으로 바뀌었거나. **`exit` 을 `return` 으로 바꾸지 않는다** — 서브커맨드는 별도 프로세스라 `exit` 이 그대로 맞다.
 
-- [ ] **Step 7: 커밋**
+- [ ] **Step 8: 커밋**
 
 ```bash
 cd ~/rjt-refactor
@@ -649,7 +702,34 @@ git add resources/app-install.sh
 
 **순서를 바꾸지 않는다.** voice 가 colcon 앞에 오는 것은 의도된 것이다 — colcon 이 voice 패키지를 system python 으로 빌드할 때 그 shebang 이 여기서 깐 의존성을 봐야 한다.
 
-- [ ] **Step 5: 정적 검사 + 트레이스 비교**
+- [ ] **Step 5: 본문 동일성 diff — 이 태스크의 1차 증거**
+
+```bash
+cd ~/rjt-refactor
+M=~/rjt-main/resources
+body() { sed -n "/^$2() {\$/,/^}\$/p" "$1" | sed '1d;$d' | sed 's/^    //'; }
+
+diff <(sed -n '/^config_assert_set$/,$p' "$M/dsr-project-install.sh" | tail -n +2) \
+     <(body resources/app-install.sh app_dsr)                              && echo "dsr OK"
+diff <(sed -n '/^config_assert_set$/,$p' "$M/colcon-build.sh" | tail -n +2) \
+     <(body resources/app-install.sh app_colcon)                           && echo "colcon OK"
+diff <(sed -n '/^config_assert_set$/,$p' "$M/voice-host-install.sh" | tail -n +2) \
+     <(body resources/app-install.sh app_voice)                            && echo "voice OK"
+diff <(sed -n '/^config_assert_set$/,$p' "$M/nvidia-container-toolkit-install.sh" | tail -n +2) \
+     <(body resources/app-install.sh app_toolkit)                          && echo "toolkit OK"
+diff <(body "$M/realsense-install.sh" realsense_sdk) \
+     <(body resources/app-install.sh realsense_sdk)                        && echo "realsense_sdk OK"
+diff <(body "$M/realsense-install.sh" realsense_ros) \
+     <(body resources/app-install.sh realsense_ros)                        && echo "realsense_ros OK"
+```
+
+Expected: 여섯 줄 모두 `... OK`.
+
+남아도 되는 차이는 최상단 상수를 `local` 로 내린 줄(`WS_SRC`, `OWW_SRC`, toolkit 의 상수)과 앞뒤 빈 줄뿐이다.
+
+`app_voice` 는 heredoc(`<<'PY' ... PY`)을 품고 있다. 종료 표지 `PY` 가 행 맨 앞에 있어야 하므로 함수 안에서도 들여쓰지 않는다 — 위 diff 에서 `sed 's/^    //'` 가 heredoc 내부 줄의 들여쓰기까지 지우므로, heredoc 안이 원본대로 안 들여써져 있으면 이 diff 가 바로 잡아낸다.
+
+- [ ] **Step 6: 정적 검사 + 트레이스 비교 (2차 신호)**
 
 ```bash
 cd ~/rjt-refactor && shellcheck resources/*.sh install.sh setup-app.sh && bash -n resources/*.sh
@@ -659,7 +739,7 @@ diff -ru .trace-baseline .trace-after && echo "TRACE IDENTICAL"
 
 Expected: 정적 검사 무출력 + `TRACE IDENTICAL`.
 
-- [ ] **Step 6: `setup-app.sh --help` 확인**
+- [ ] **Step 7: `setup-app.sh --help` 확인**
 
 ```bash
 cd ~/rjt-refactor && bash setup-app.sh --help >/dev/null && echo "SETUP-APP HELP OK"
@@ -755,7 +835,24 @@ state 키 `dds_tuning` · `network_static_ip` 를 바꾸지 않는다.
 
 `install.sh:206` 주석의 `bash resources/dds-tuning.sh` 안내 문구도 `bash resources/hostcfg.sh dds` 로 고친다.
 
-- [ ] **Step 4: 정적 검사 + 트레이스 비교**
+- [ ] **Step 4: 본문 동일성 diff — 이 태스크의 1차 증거**
+
+```bash
+cd ~/rjt-refactor
+M=~/rjt-main/resources
+body() { sed -n "/^$2() {\$/,/^}\$/p" "$1" | sed '1d;$d' | sed 's/^    //'; }
+
+diff <(sed -n '/^config_assert_set$/,$p' "$M/dds-tuning.sh" | tail -n +2) \
+     <(body resources/hostcfg.sh hostcfg_dds)                        && echo "dds OK"
+diff <(sed -n '/^config_assert_set$/,$p' "$M/network-static-ip.sh" | tail -n +2) \
+     <(body resources/hostcfg.sh hostcfg_network)                    && echo "network OK"
+```
+
+Expected: 두 줄 다 `... OK`.
+
+남아도 되는 차이는 `TEMPLATE` · `SYSCTL_SRC` 를 `local` 로 내린 줄과 앞뒤 빈 줄뿐이다. 두 상수의 **경로 문자열은 그대로여야 한다** — `SCRIPT_DIR` 이 여전히 `resources/` 이므로 `cyclonedds.xml.in` · `sysctl-cyclonedds.conf` 를 같은 자리에서 읽는다.
+
+- [ ] **Step 5: 정적 검사 + 트레이스 비교 (2차 신호)**
 
 ```bash
 cd ~/rjt-refactor && shellcheck resources/*.sh install.sh setup-app.sh && bash -n resources/*.sh
@@ -765,7 +862,7 @@ diff -ru .trace-baseline .trace-after && echo "TRACE IDENTICAL"
 
 Expected: `TRACE IDENTICAL`.
 
-- [ ] **Step 5: 커밋**
+- [ ] **Step 6: 커밋**
 
 ```bash
 cd ~/rjt-refactor
