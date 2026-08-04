@@ -1,6 +1,6 @@
 # containers — Phase 4 애플리케이션 컨테이너 (yolo)
 
-> voice(voice_processing)는 컨테이너가 아니라 **host 에서 직접 실행**한다 — 마이크 하드웨어 종속 때문. `resources/voice-host-install.sh` 로 설치하고 `ros2 run voice_processing get_keyword` 로 띄운다(최상위 `README.md`). 이 디렉토리는 yolo 컨테이너만 다룬다.
+> voice(voice_processing)는 컨테이너가 아니라 **host 에서 직접 실행**한다 — 마이크 하드웨어 종속 때문. `resources/app-install.sh voice` 로 설치하고 `ros2 run voice_processing get_keyword` 로 띄운다(최상위 `README.md`). 이 디렉토리는 yolo 컨테이너만 다룬다.
 
 - base 서비스 정의: `docker-compose.yml` — network/GPU/env. 단독 `up` 은 runtime(최종) 이미지·노드 자동 기동 경로(학습 기본 흐름은 이걸 빌드 안 함, 수동/publish 용 보존).
 - 기본 통합 실행: `bash containers/bringup.sh` = base + `docker-compose.dev.yml`(dev-builder) 머지 — live-mount + 컨테이너 안 colcon build 후 노드 자동 기동. 이미지 빌드/검증은 `containers/build-all.sh`(builder 스테이지 = `:dev-builder`). 최상위 `README.md` 참조.

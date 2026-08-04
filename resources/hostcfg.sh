@@ -88,7 +88,7 @@ hostcfg_dds() {
     fi
     {
         echo "${BEGIN_MARK}"
-        echo "# CycloneDDS standard + large-topic buffer/interface tuning (managed by dds-tuning.sh, do not edit manually)"
+        echo "# CycloneDDS standard + large-topic buffer/interface tuning (managed by hostcfg.sh dds, do not edit manually)"
         echo "export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp"
         echo "export CYCLONEDDS_URI=\"file://${CYCLONEDDS_XML}\""
         # ROS_DOMAIN_ID 는 일부러 여기서 관리하지 않는다 — 학생이 직접 자기 ~/.bashrc 에 추가하는
@@ -127,7 +127,7 @@ hostcfg_network() {
         if [[ "${#found[@]}" -eq 0 ]]; then
             echo "[net] warning: no physical wired NIC detected — skipping the static IP setup (this step is recorded as complete)." >&2
             echo "      After connecting a NIC (USB-ethernet, etc.), re-run this script standalone to apply it:" >&2
-            echo "        bash resources/network-static-ip.sh   (or specify HOST_ETH_NETIF=<iface>)" >&2
+            echo "        bash resources/hostcfg.sh network   (or specify HOST_ETH_NETIF=<iface>)" >&2
             exit 0
         fi
         nic="${found[0]}"

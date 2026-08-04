@@ -164,7 +164,7 @@ set +m
 sleep 5
 if ! kill -0 "${VOICE_PID}" 2>/dev/null; then
     echo "[bringup] host voice node died on startup — 위 출력에서 원인 확인" >&2
-    echo "          (모델/의존성 점검: bash resources/voice-host-install.sh)" >&2
+    echo "          (모델/의존성 점검: bash resources/app-install.sh voice)" >&2
     exit 1
 fi
 echo "[bringup] host voice node up (pgid ${VOICE_PID})"

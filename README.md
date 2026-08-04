@@ -32,10 +32,6 @@ echo 'OPENAI_API_KEY=sk-...' \
 bash setup-app.sh
 ```
 
-> 워크스페이스 이름이 `~/cobot_ws` → `~/cobot2_ws`, 실습용은 `~/cobot_demo_ws` → `~/cobot_venv_ws` 로 바뀌었다.
-> 옛 이름으로 이미 빌드해 둔 머신은 `export DSR_WORKSPACE="$HOME/cobot_ws"` 로 기존 경로를 계속 쓰거나,
-> 새 경로에서 다시 빌드한다 (colcon `install/` 에는 절대 경로가 박혀 있어 디렉토리 rename 만으로는 오버레이가 깨진다).
-
 ## 옵션
 
 base 설치 (`install.sh`):
