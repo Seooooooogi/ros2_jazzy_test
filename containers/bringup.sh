@@ -141,7 +141,7 @@ echo "[bringup] launching yolo node inside the dev container…"
 docker exec -d yolo-detection bash -c 'source /root/.bashrc; exec ros2 run object_detection object_detection --ros-args -r img_node:__ns:=/camera'
 
 # host voice 노드 — 컨테이너 아님. 위에서 ROS underlay + cobot2_ws 오버레이 이미 source(get_keyword
-# console_script shebang = system python → voice-host-install.sh 가 host 에 깐 langchain/openwakeword 를 봄).
+# console_script shebang = system python → app-install.sh voice 가 host 에 깐 langchain/openwakeword 를 봄).
 # 백그라운드로 띄우고 PID 를 trap(cleanup)이 회수. 마이크 = 데스크톱 PipeWire 기본(VOICE_MIC_DEVICE override).
 #
 # `set -m`(job control) 이유: `ros2 run` 은 노드를 exec 하지 않고 자식 프로세스로 띄운다

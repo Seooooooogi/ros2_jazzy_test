@@ -133,13 +133,13 @@ app_voice() {
     local PYVER
     PYVER="$(python3 -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')"
     if [[ "${PYVER}" != "3.12" ]]; then
-        echo "voice-host-install: Python 3.12 기대(noble), 실제 ${PYVER} — ai-edge-litert wheel 전제 불충족" >&2
+        echo "voice: Python 3.12 기대(noble), 실제 ${PYVER} — ai-edge-litert wheel 전제 불충족" >&2
         exit 1
     fi
 
     # 1) 오디오 시스템 라이브러리 — portaudio 는 PyAudio/sounddevice 가, libsndfile 은 soundfile 이,
     #    ffmpeg 은 오디오 디코드가 쓴다(-dev 는 pyaudio 컴파일용).
-    echo "[voice-host-install] 1/6 시스템 라이브러리(apt)"
+    echo "[voice] 1/6 시스템 라이브러리(apt)"
     sudo apt-get update
     sudo apt-get install -y --no-install-recommends \
         python3-dev python3-pip \
@@ -151,22 +151,22 @@ app_voice() {
     local PIP=(sudo python3 -m pip install --break-system-packages --no-cache-dir)
 
     # 2) 음성/LLM 스택. scipy 는 1.18 부터 numpy>=2 를 요구해 마지막의 numpy<2 고정과 충돌하므로 상한을 둔다.
-    echo "[voice-host-install] 2/6 langchain / openai / 음성 스택"
+    echo "[voice] 2/6 langchain / openai / 음성 스택"
     # openai 가 apt 로 깔린 typing-extensions 를 올리려 하는데, dpkg 로 설치된 것은 pip 가 지울 수
     # 없어("RECORD file not found") 그대로 두면 실패한다. 상위 버전을 먼저 얹어 apt 본을 가리면
     # 이후 단계는 이미 충족으로 보고 삭제를 시도하지 않는다.
-    # ponytail: 이런 식으로 걸리는 apt 파이썬 패키지는 지금 typing-extensions 뿐. 늘어나면 여기 한 줄 추가.
+    # 이런 식으로 걸리는 apt 파이썬 패키지는 지금 typing-extensions 뿐. 늘어나면 여기 한 줄 추가.
     "${PIP[@]}" --ignore-installed --no-deps "typing-extensions>=4.14,<5"
     "${PIP[@]}" \
         "langchain<2" "langchain-openai<2" "openai<3" \
         pyaudio sounddevice "scipy<1.18" python-dotenv
 
     # 3) openwakeword(호출어 감지). 의존성에 3.12 wheel 이 없는 tflite-runtime 이 걸려 있어 --no-deps 로 깐다.
-    echo "[voice-host-install] 3/6 openwakeword(--no-deps)"
+    echo "[voice] 3/6 openwakeword(--no-deps)"
     "${PIP[@]}" --no-deps "openwakeword==0.6.0"
 
     # 4) 그래서 빠진 실제 의존성을 직접 깔고, tflite-runtime 자리에는 API 가 같은 ai-edge-litert 를 넣는다.
-    echo "[voice-host-install] 4/6 openwakeword 의존 + ai-edge-litert"
+    echo "[voice] 4/6 openwakeword 의존 + ai-edge-litert"
     "${PIP[@]}" \
         "onnxruntime<2,>=1.10.0" "tqdm<5,>=4.0" "scikit-learn<2,>=1" "requests<3,>=2.0" \
         "ai-edge-litert>=2.0.2,<3"
@@ -180,7 +180,7 @@ app_voice() {
     #    다운로드 호출이 아무 일도 하지 않게 된다.
     #    다운로드가 일시적으로 실패하면 에러 HTML 이 .tflite 이름으로 저장돼 런타임에서야 터졌다.
     #    그래서 받은 뒤 파일 시그니처를 확인하고, 깨진 것은 지우고 여기서 멈춘다(다시 실행하면 새로 받는다).
-    echo "[voice-host-install] 5/6 feature 복사 + stock 모델 다운로드 + TFL3 검증"
+    echo "[voice] 5/6 feature 복사 + stock 모델 다운로드 + TFL3 검증"
     # sudo 는 환경변수를 지우므로 OWW_SRC 는 env 로 넘긴다.
     sudo env "OWW_SRC=${OWW_SRC}" python3 - <<'PY'
 import os, shutil, openwakeword, openwakeword.utils
@@ -204,13 +204,13 @@ PY
 
     # 6) numpy 를 1.x 로 되돌린다 — 앞의 pip 단계 중 하나가 2.x 를 끌어왔을 수 있고, 이 스택은 1.x 로만
     #    검증돼 있다. 이미 1.x 면 아무 일도 일어나지 않는다.
-    echo "[voice-host-install] 6/6 numpy<2 보장 + import 검증"
+    echo "[voice] 6/6 numpy<2 보장 + import 검증"
     "${PIP[@]}" "numpy<2"
 
     # 검증 — openwakeword 는 import 만으론 부족하다(모델을 런타임에야 읽는다). 실제 모델을 올려
     # 한 번 추론까지 돌려 봐야 여기서 실패를 잡을 수 있다.
     if [[ ! -f "${WAKEWORD_MODEL}" ]]; then
-        echo "voice-host-install: wakeword 모델 없음 — ${WAKEWORD_MODEL}" >&2
+        echo "voice: wakeword 모델 없음 — ${WAKEWORD_MODEL}" >&2
         echo "           cobot2 소스가 먼저 배치돼야 함(setup-app.sh obtain_cobot2 선행)." >&2
         exit 1
     fi
@@ -222,7 +222,7 @@ assert numpy.__version__.startswith("1."), numpy.__version__
 from openwakeword.model import Model
 m = Model(wakeword_models=[os.environ["WAKEWORD_MODEL"]])
 m.predict(np.zeros(1280, dtype=np.int16))
-print(f"  voice-host-install import OK — numpy {numpy.__version__}, "
+print(f"  voice import OK — numpy {numpy.__version__}, "
       f"tflite shim -> {tflite_runtime.interpreter.Interpreter.__module__}, Model(.tflite) load + predict OK")
 PY
 
@@ -233,7 +233,7 @@ PY
 # DSR 과 RealSense 설치가 모두 끝난 뒤 한 번만 부른다 — 앞 단계마다 빌드하면 같은 일을 여러 번 한다.
 app_colcon() {
     if [[ ! -d "${DSR_WORKSPACE}/src" ]]; then
-        echo "colcon-build: ${DSR_WORKSPACE}/src missing — the DSR install step must run first" >&2
+        echo "colcon: ${DSR_WORKSPACE}/src missing — the DSR install step must run first" >&2
         exit 1
     fi
 
@@ -272,13 +272,13 @@ app_colcon() {
     voice_share="${DSR_WORKSPACE}/install/voice_processing/share/voice_processing/resource"
     if [[ -d "${DSR_WORKSPACE}/install/voice_processing" ]] \
         && ! compgen -G "${voice_share}/*.tflite" >/dev/null; then
-        echo "colcon-build: voice_processing 의 wakeword 모델이 설치 트리에 없음" >&2
+        echo "colcon: voice_processing 의 wakeword 모델이 설치 트리에 없음" >&2
         echo "           기대 경로: ${voice_share}/*.tflite" >&2
         echo "           voice_processing/setup.py 의 data_files 가 resource/ 를 설치하는지 확인." >&2
         exit 1
     fi
 
-    echo "colcon-build: success building colcon workspace at ${DSR_WORKSPACE}"
+    echo "colcon: success building colcon workspace at ${DSR_WORKSPACE}"
 }
 
 # NVIDIA Container Toolkit 설치 + docker 에 nvidia runtime 등록.

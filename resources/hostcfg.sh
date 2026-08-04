@@ -22,8 +22,8 @@ hostcfg_dds() {
     local SYSCTL_SRC="${SCRIPT_DIR}/sysctl-cyclonedds.conf"
     SYSCTL_DST="/etc/sysctl.d/60-cyclonedds.conf"
 
-    [[ -f "${TEMPLATE}" ]]   || { echo "dds-tuning: template missing: ${TEMPLATE}" >&2; exit 1; }
-    [[ -f "${SYSCTL_SRC}" ]] || { echo "dds-tuning: sysctl source missing: ${SYSCTL_SRC}" >&2; exit 1; }
+    [[ -f "${TEMPLATE}" ]]   || { echo "dds: template missing: ${TEMPLATE}" >&2; exit 1; }
+    [[ -f "${SYSCTL_SRC}" ]] || { echo "dds: sysctl source missing: ${SYSCTL_SRC}" >&2; exit 1; }
 
     # --- 1. 인터페이스 목록: loopback 기본, 물리 NIC 은 명시 지정만 --------------
     # 이 시스템의 DDS 참여자는 전부 같은 호스트에 있다(host + network_mode:host 컨테이너) — 실 로봇은

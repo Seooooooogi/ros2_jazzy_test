@@ -345,6 +345,7 @@ sudo_prime() {
     # sleep 이 터미널의 foreground 프로세스 그룹에 남아 입력을 막는다.
     ( set +e
       trap 'kill "${_ka_sleep:-0}" 2>/dev/null; exit 0' TERM EXIT
+      # ( ) & 서브셸 안의 $$ 는 이 서브셸이 아니라 호출자 스크립트의 PID — 그 스크립트가 끝나면 이 while 도 함께 끝난다.
       while kill -0 "$$" 2>/dev/null; do
           sudo -n true 2>/dev/null
           sleep 60 & _ka_sleep=$!

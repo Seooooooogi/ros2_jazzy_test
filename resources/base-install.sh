@@ -36,11 +36,11 @@ base_kernel() {
     #    여기서는 경고만 하고 멈추지 않는다: 방금 새 커널이 깔렸다면 아직 돌고 있는 옛 커널에
     #    그 디렉토리가 없는 게 정상이고, 재부팅하면 해결된다.
     if [[ ! -d "/lib/modules/${running}/kernel/drivers/net/wireless" ]]; then
-        echo "kernel-baseline: warning — /lib/modules/${running}/.../net/wireless missing." >&2
+        echo "kernel: warning — /lib/modules/${running}/.../net/wireless missing." >&2
         echo "  the current kernel (${running}) may be missing modules-extra (affects wifi/USB input)." >&2
     fi
 
-    echo "kernel-baseline: HWE kernel meta + headers + modules-extra guaranteed (current kernel ${running})."
+    echo "kernel: HWE kernel meta + headers + modules-extra guaranteed (current kernel ${running})."
 }
 
 # 설치된 nvidia-driver-NNN 메타 패키지 이름을 찾아 출력한다(없으면 빈 문자열).
