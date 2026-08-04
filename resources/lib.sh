@@ -327,15 +327,15 @@ install_steps_total() {
 #######################################
 run_stage_a01() {
     local off="$1" skip_nvidia="${2:-0}"
-    run_step $((off + 1)) a01_kernel_baseline bash "${RESOURCE_DIR}/kernel-baseline.sh"
+    run_step $((off + 1)) a01_kernel_baseline bash "${RESOURCE_DIR}/base-install.sh" kernel
     if [[ "$skip_nvidia" == 1 ]]; then
         run_step_skip $((off + 2)) a01_nvidia_driver "nvidia driver assumed pre-installed (--no-nvidia-driver)"
     else
-        run_step $((off + 2)) a01_nvidia_driver bash "${RESOURCE_DIR}/nvidia-driver-install.sh"
+        run_step $((off + 2)) a01_nvidia_driver bash "${RESOURCE_DIR}/base-install.sh" nvidia
     fi
-    run_step $((off + 3)) a01_docker          bash "${RESOURCE_DIR}/docker-install.sh"
-    run_step $((off + 4)) a01_ros2_desktop    bash "${RESOURCE_DIR}/ros2-packages.sh" desktop
-    run_step $((off + 5)) a01_ros2_extras     bash "${RESOURCE_DIR}/ros2-packages.sh" extras
+    run_step $((off + 3)) a01_docker       bash "${RESOURCE_DIR}/base-install.sh" docker
+    run_step $((off + 4)) a01_ros2_desktop bash "${RESOURCE_DIR}/base-install.sh" ros2-desktop
+    run_step $((off + 5)) a01_ros2_extras  bash "${RESOURCE_DIR}/base-install.sh" ros2-extras
 }
 
 #######################################
@@ -348,7 +348,7 @@ run_stage_a01() {
 #######################################
 run_stage_a03() {
     local off="$1"
-    run_step $((off + 1)) a03_vscode bash "${RESOURCE_DIR}/vscode-install.sh"
+    run_step $((off + 1)) a03_vscode bash "${RESOURCE_DIR}/base-install.sh" vscode
 }
 
 # ============================================================================
