@@ -189,13 +189,13 @@ run_stage_a03 6
 
 # --- step 8: DDS 튜닝(CycloneDDS 버퍼 + 유선 NIC 자동 화이트리스트) ---
 # 호스트 노드와 앱 컨테이너가 함께 쓰는 cyclonedds 환경을 결정론적으로(항상 같은 결과) 설정.
-# 스테이지 스크립트에 없음 — install.sh 에서만, 또는 단독(bash resources/dds-tuning.sh)으로 실행.
-run_step 8 dds_tuning bash "${RESOURCE_DIR}/dds-tuning.sh"
+# 스테이지 스크립트에 없음 — install.sh 에서만, 또는 단독(bash resources/hostcfg.sh dds)으로 실행.
+run_step 8 dds_tuning bash "${RESOURCE_DIR}/hostcfg.sh" dds
 
 # --- step 9: 정적 이더넷 IP(로봇 LAN: .1 그리퍼 / .100 로봇 / .30 호스트) ---
 # 유선 NIC 을 로봇 LAN 정적 IP 로 설정(nmcli). gateway/DNS 없음 → wifi 인터넷은 그대로. 멱등(여러 번 실행해도 결과 동일).
 # confirm 없음(되돌릴 수 있고, 실행 시작의 단일 동의가 이걸 포함).
-run_step 9 network_static_ip bash "${RESOURCE_DIR}/network-static-ip.sh"
+run_step 9 network_static_ip bash "${RESOURCE_DIR}/hostcfg.sh" network
 
 # 재개용 autostart 정리(재개 진입 때 이미 제거됐으면 아무 일 안 함 — 멱등).
 remove_resume_autostart 2>/dev/null || true
