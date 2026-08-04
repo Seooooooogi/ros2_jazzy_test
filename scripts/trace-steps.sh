@@ -33,7 +33,7 @@ touch "${FAKEHOME}/.bashrc"
 # 스텁끼리 파이프로 잇는 경우, 읽는 쪽 스텁이 stdin 을 안 비우고 바로 종료하면 쓰는 쪽이 SIGPIPE(exit 141)로
 # 죽는 레이스가 생겨 실행마다 결과가 달라진다. 항상 다 읽고 종료해야 파이프 양쪽이 결정적으로 끝난다.
 for c in sudo apt-get apt-key add-apt-repository curl wget gpg nmcli rosdep colcon docker \
-         systemctl usermod modprobe dkms update-initramfs pip pip3 snap tee; do
+         systemctl usermod modprobe dkms update-initramfs pip pip3 snap tee git; do
     printf '#!/usr/bin/env bash\ncat >/dev/null\necho "CMD %s $*"\n' "${c}" > "${STUB}/${c}"
     chmod +x "${STUB}/${c}"
 done
