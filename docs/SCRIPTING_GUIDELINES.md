@@ -30,7 +30,7 @@
 - `apt-get install -y` 자체는 이미 설치 시 no-op 이라 단순 패키지는 가드 없이 둬도 멱등. `dpkg -s` 가드는 재실행 시 apt 캐시 갱신을 건너뛰어 더 빠를 때만 추가.
 
 ## 4. apt repo + keyring 등록 — `add_apt_repo`
-새 외부 apt repo 는 직접 키링/list 코드를 쓰지 말고 `resources/lib.sh` 의 `add_apt_repo` 를 쓴다(키링 dir 보장 + 키 다운로드 + `chmod a+r` + list 멱등 기록 + `apt-get update` 중앙화). 설치 스크립트는 파일 최상단에서 이미 `lib.sh` 를 source 하므로 함수 안에서 그냥 호출하면 된다.
+새 외부 apt repo 는 직접 키링/list 코드를 쓰지 말고 `resources/lib.sh` 의 `add_apt_repo` 를 쓴다(키링 dir 보장 + 키 다운로드 + `chmod a+r` + list 멱등 기록 + `apt-get update` 중앙화). `base-install.sh` / `app-install.sh` 는 파일 최상단에서 이미 `lib.sh` 를 source 하므로 함수 안에서 그냥 호출하면 된다. `hostcfg.sh` 는 `config.sh` 만 source 하므로, 거기에 apt repo 를 쓰는 단계를 추가한다면 `lib.sh` source 를 먼저 넣는다 — 없으면 `add_apt_repo: command not found` 로 죽는다.
 
 ```bash
 add_apt_repo \
@@ -104,7 +104,7 @@ esac
 ## 8. 주석 스타일
 - **언어** — 주석 본문은 한글. 식별자·경로·플래그·env 이름·`# shellcheck` 지시어·`echo` 출력 문자열은 영어 그대로(한글화 금지).
 - **분량** — 블록당 무엇을 하는지 한 줄 + 왜 그런지 한 줄. 두 줄로 안 되면 코드가 복잡한 것이지 주석이 모자란 것이 아니다.
-- **함수 주석** — 함수 위 한 줄. Google `####` 블록(`Globals:`/`Arguments:`/`Outputs:`/`Returns:`)은 쓰지 않는다. 인자는 함수 첫 줄의 `local a="$1" b="$2"` 가 이미 보여주고, 목록을 따로 두면 코드와 어긋난 채 남는다. `# Public:` / `# Internal:` 태그도 안 씀 — `_` prefix 가 내부(private) 신호.
+- **함수 주석** — 함수 위 한두 줄. 밖에서 불리는 헬퍼는 `# 사용법:` 한 줄을 덧붙이고(`confirm_or_abort` / `sudo_prime`), 인자가 많아 호출 형태가 한눈에 안 들어오는 `add_apt_repo` 만 여러 줄 사용법 블록을 둔다. Google `####` 블록(`Globals:`/`Arguments:`/`Outputs:`/`Returns:`)은 쓰지 않는다. 인자는 함수 첫 줄의 `local a="$1" b="$2"` 가 이미 보여주고, 목록을 따로 두면 코드와 어긋난 채 남는다. `# Public:` / `# Internal:` 태그도 안 씀 — `_` prefix 가 내부(private) 신호.
 - **독자 수준** — 전공 지식은 있으나 이 도메인은 처음인 사람. 도메인 용어(RMW, DDS discovery, HWE 커널, DKMS, colcon overlay)는 첫 등장 시 한 번만 부연한다. bash 관용구(`set -euo pipefail`, `:=`, `${VAR:?}`)는 설명하지 않는다.
 - **rationale** — 한 줄로 압축해 남긴다. 사고 경위를 문단으로 적지 않는다. 자세한 배경은 `docs/` 쪽 문서가 담당한다.
 - **`docs/...` 링크를 주석에 넣지 않는다** — `docs/` 는 `main` 트리에 없어 공개 브랜치에서 죽은 참조가 된다. 근거를 직접 서술한다.
