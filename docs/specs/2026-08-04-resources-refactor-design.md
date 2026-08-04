@@ -192,7 +192,7 @@ main 트리에 없으므로 `fix/dsr-clone-pin` 에서 별도로 처리한다. �
 | `docs/TRAINEE_PRACTICE_PATH.md` | 2 |
 | `CLAUDE.md` | 2 |
 
-`docs/SCRIPTING_GUIDELINES.md` 는 참조 갱신에 더해 신규 스크립트 템플릿·`add_apt_repo` 사용법 절이 새 파일 구조를 가리키도록 고친다.
+`docs/SCRIPTING_GUIDELINES.md` 는 **경로 치환만으로 부족하다** — §8 주석 스타일이 지금 Google `####` 블록을 강제하고(118줄) rationale 삭제를 금지한다(123줄). §6 신규 스크립트 템플릿도 "새 파일을 만들라"고 지시한다. 이 절들을 고치지 않으면 다음에 스크립트를 손대는 사람이 방금 걷어낸 형식을 도로 넣는다. §6 은 "새 파일 대신 기존 셋 중 하나에 함수로 추가"로, §8 은 새 주석 기준(§6)으로 다시 쓴다.
 
 ## 6. 주석 기준
 
