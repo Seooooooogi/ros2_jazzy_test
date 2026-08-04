@@ -1,16 +1,16 @@
 # Shell Scripting Guidelines
 
-설치 스크립트(`install.sh` / `a0N` / `resources/*.sh` / `containers/*.sh`) 작성·리팩토링 규약. 신규 스크립트는 아래 패턴을 따르면 기존 코드와 일관된다.
+설치 스크립트(`install.sh` / `setup-app.sh` / `resources/*.sh` / `containers/*.sh`) 작성·리팩토링 규약. 아래 패턴을 따르면 기존 코드와 일관된다.
 
 ## 1. 실행 진입점 vs source 전용 라이브러리
 
 | 구분 | `set -euo pipefail` | 예시 |
 |---|---|---|
-| **실행 진입점** (직접 `bash X.sh`) | **필수** (shebang 다음 줄) | `install.sh`, `a0N`, `resources/` 설치 본문(kernel-baseline, docker-install …) |
-| **source 전용 라이브러리** (`source X.sh`) | **두지 않는다** | `config.sh`, `orchestrate.sh`(state + run_step + step 정의), `interaction.sh`(env-load + confirm + resume autostart), `activate.sh`, `apt-repo.sh` |
+| **실행 진입점** (직접 `bash X.sh`) | **필수** (shebang 다음 줄) | `install.sh`, `setup-app.sh`, `resources/{base-install,app-install,hostcfg}.sh` |
+| **source 전용 라이브러리** (`source X.sh`) | **두지 않는다** | `config.sh`(버전 핀), `lib.sh`(state + run_step + step 정의 + confirm/autostart + apt repo 등록), `activate.sh` |
 
 - sourced 파일에 `set -e` 를 넣으면 **호출자 셸 옵션을 오염**시킨다(호출 셸 전체가 errexit). 셸 옵션은 호출 진입점이 소유한다.
-- source 전용 라이브러리는 헤더 주석에 `# source 전용 라이브러리 — set -euo 를 여기 두지 않는다(호출 진입점이 셸 옵션을 소유).` 한 줄 명시.
+- source 전용 라이브러리는 헤더 한 줄에 `source 전용` 임을 밝힌다 — 읽는 사람이 `set -euo` 부재를 빠뜨린 것으로 오해하지 않게.
 
 ## 2. shebang / shellcheck
 - shebang 은 항상 `#!/usr/bin/env bash` (시스템 경로 독립).
@@ -30,10 +30,9 @@
 - `apt-get install -y` 자체는 이미 설치 시 no-op 이라 단순 패키지는 가드 없이 둬도 멱등. `dpkg -s` 가드는 재실행 시 apt 캐시 갱신을 건너뛰어 더 빠를 때만 추가.
 
 ## 4. apt repo + keyring 등록 — `add_apt_repo`
-새 외부 apt repo 는 직접 키링/list 코드를 쓰지 말고 `resources/apt-repo.sh` 의 `add_apt_repo` 를 쓴다(키링 dir 보장 + 키 다운로드 + `chmod a+r` + list 멱등 기록 + `apt-get update` 중앙화).
+새 외부 apt repo 는 직접 키링/list 코드를 쓰지 말고 `resources/lib.sh` 의 `add_apt_repo` 를 쓴다(키링 dir 보장 + 키 다운로드 + `chmod a+r` + list 멱등 기록 + `apt-get update` 중앙화). 설치 스크립트는 파일 최상단에서 이미 `lib.sh` 를 source 하므로 함수 안에서 그냥 호출하면 된다.
 
 ```bash
-source "${SCRIPT_DIR}/apt-repo.sh"
 add_apt_repo \
     --mode dearmor --downloader curl \
     --key-url  "https://example.com/key.gpg" \
@@ -47,79 +46,68 @@ add_apt_repo \
 - 새 repo 도입 시 `docs/COMPATIBILITY.md` 매트릭스도 갱신.
 
 ## 5. 메시지 / 로그
-- 콘솔 메시지는 `<script>: <msg>` prefix (예: `docker: ...`, `voice: ...`, `dsr: ...`). 어느 step 출력인지 식별.
+- 콘솔 메시지는 `<step>: <msg>` prefix (예: `docker: ...`, `dds-tuning: ...`, `realsense-sdk: ...`). 한 파일이 여러 step 을 담으므로 prefix 는 파일명이 아니라 **step 이름**이다 — 로그만 보고 어느 step 출력인지 알 수 있어야 한다.
 - 경고·에러는 `>&2`(stderr). 진행 정보는 stdout(로그 파일로 분리됨).
-- 진행률 배너 `[n/total]` 는 `orchestrate.sh`(`run_step`)가 전담 — 본문에서 직접 출력하지 않는다.
+- 진행률 배너 `[n/total]` 는 `lib.sh`(`run_step`)가 전담 — 본문에서 직접 출력하지 않는다.
 - 변수: 전역/환경 = 대문자(`ROS_DISTRO`), 지역 = `local` 소문자, 내부 헬퍼 = `_` prefix.
 
-## 6. 신규 설치 스크립트 템플릿
-```bash
-#!/usr/bin/env bash
-# resources/<name>-install.sh — 한 줄 설명.
-# 순수 설치 본문 — state 프레이밍은 오케스트레이터(orchestrate.sh 의 run_step)가 소유.
-set -euo pipefail
+## 6. 설치 단계 추가하기
+새 설치 단계는 **새 파일을 만들지 않는다**. 성격에 맞는 기존 스크립트에 함수로 넣고 `case` 에 서브커맨드를 등록한다.
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# shellcheck source=./config.sh
-source "${SCRIPT_DIR}/config.sh"
-config_assert_set
-
-# 1) 전제/멱등 가드.
-if command -v <tool> >/dev/null 2>&1; then
-    echo "<name>: <tool> 이미 설치됨 — skip"
-    exit 0
-fi
-
-# 2) 작업.
-sudo apt-get update
-sudo apt-get install -y <package>
-
-echo "<name>: success — <작업> 완료"
-```
-- step 추가 시 `resources/orchestrate.sh` 의 스테이지 함수 + `STAGE_*_COUNT` 1곳만 갱신(install.sh/a0N 양쪽 자동 반영).
-- 함수 주석 — 비자명 함수는 Google `####` 블록(해당되는 `Globals`/`Arguments`/`Outputs`/`Returns` 섹션만), 사소한 헬퍼는 한 줄:
+| 성격 | 파일 |
+|---|---|
+| 재부팅 앞뒤 시스템 계층(커널·드라이버·런타임·apt 패키지) | `resources/base-install.sh` |
+| 워크스페이스·앱 계층(드라이버 소스·SDK·python·빌드·컨테이너) | `resources/app-install.sh` |
+| 설치 후 호스트 런타임 설정 | `resources/hostcfg.sh` |
 
 ```bash
-#######################################
-# 단계 하나를 실행하고 성공/실패를 state 에 기록.
-# Globals:
-#   STATE_FILE
-# Arguments:
-#   $1 - 단계 이름
-#   $2.. - 실행할 명령
-# Returns:
-#   명령의 종료 코드
-#######################################
-run_step() { ...; }
+# <무엇을 하는지 한 줄>. <왜 이 방식인지 한 줄 — 필요할 때만>
+base_<name>() {
+    local <파일 안에서만 쓰는 상수>="..."
 
-# 사소한 헬퍼는 한 줄.
-_ts() { ...; }
+    # 1) 전제/멱등 가드.
+    if command -v <tool> >/dev/null 2>&1; then
+        echo "<name>: <tool> 이미 설치됨 — skip"
+        exit 0
+    fi
+
+    # 2) 작업.
+    sudo apt-get update
+    sudo apt-get install -y <package>
+
+    echo "<name>: success — <작업> 완료"
+}
 ```
+
+- 함수 이름은 서브커맨드가 드러나게 짓는다(`base_kernel` / `ros2_desktop` / `app_colcon` / `hostcfg_dds`). 내부 헬퍼만 `_` prefix.
+- **파일 최상단에 상수를 두지 않는다.** 한 파일에 여러 서브커맨드가 살아서 이름이 겹치고, `set -u` 아래에서 남의 변수를 보게 된다. 함수 안 `local` 로 둔다. 여러 step 이 공유하는 버전 핀만 `config.sh` 로 올린다.
+- 서브커맨드는 별도 프로세스로 실행되므로 실패 시 `exit` 이 맞다. `return` 으로 바꾸지 않는다.
+- 단계를 install.sh 시퀀스에 넣으려면 `resources/lib.sh` 의 스테이지 함수 + `STAGE_*_COUNT` 1곳만 갱신한다.
+- **state 키(`run_step` 의 두 번째 인자)는 한 번 정하면 바꾸지 않는다.** 설치를 진행 중인 머신이 완료 단계를 다시 돈다.
 
 ## 7. 한 도메인 = 여러 step → 서브커맨드 dispatch
 같은 vendor/도메인이 여러 step 으로 나뉘면(예: ROS2 desktop+extras, RealSense sdk+ros) 파일을
 나누는 대신 **한 파일 + 서브커맨드 dispatch** 로 묶는다. 각 step 은 여전히 별도 프로세스
 (`bash <file>.sh <sub>`)로 실행돼 `set -euo` 진입점 분리와 run_step 진행률/resume key 독립이
-유지된다(`ros2-packages.sh desktop|extras`, `realsense-install.sh sdk|ros`).
+유지된다(`base-install.sh ros2-desktop|ros2-extras`, `app-install.sh realsense-sdk|realsense-ros`).
 
 ```bash
-case "${1:?<name>: subcommand 필요 (a|b)}" in
+case "${1:?<name>: subcommand required (a|b)}" in
     a) do_a ;;
     b) do_b ;;
-    *) echo "<name>: 알 수 없는 subcommand '$1' (a|b)" >&2; exit 2 ;;
+    *) echo "<name>: unknown subcommand '$1'" >&2; exit 2 ;;
 esac
 ```
-- `orchestrate.sh` 의 `run_step` 줄에 서브커맨드를 인자로 넘긴다: `bash "${RESOURCE_DIR}/<file>.sh" a`.
+- `lib.sh` 의 `run_step` 줄에 서브커맨드를 인자로 넘긴다: `bash "${RESOURCE_DIR}/<file>.sh" a`.
 - 서브커맨드 분기 안에서만 쓰는 변수는 해당 함수 `local` 로 — branch 간 누수 차단.
 
 ## 8. 주석 스타일
 - **언어** — 주석 본문은 한글. 식별자·경로·플래그·env 이름·`# shellcheck` 지시어·`echo` 출력 문자열은 영어 그대로(한글화 금지).
-- **함수 주석**:
-    - 비자명 함수 → Google `####` 블록(`#######################################` 구분선). 해당되는 섹션만 나열: `Globals:` / `Arguments:` / `Outputs:` / `Returns:`. 없는 섹션에 `None` 채우지 않음.
-    - 자명·짧은 헬퍼 → 한 줄 주석.
-    - `# Public:` / `# Internal:` 태그 안 씀 — 설명이 의도를 담고, `_` prefix 가 내부(private) 신호.
-- **인라인 주석**:
-    - 난이도 = 초심자 기준. jargon(전문 용어) 첫 등장 시 한글 부연(예: "errexit(`set -e` — 실패 시 즉시 중단)").
-    - rationale(왜 이렇게 했나)는 **삭제 금지** — plain 서술로 풀어서 유지.
+- **분량** — 블록당 무엇을 하는지 한 줄 + 왜 그런지 한 줄. 두 줄로 안 되면 코드가 복잡한 것이지 주석이 모자란 것이 아니다.
+- **함수 주석** — 함수 위 한 줄. Google `####` 블록(`Globals:`/`Arguments:`/`Outputs:`/`Returns:`)은 쓰지 않는다. 인자는 함수 첫 줄의 `local a="$1" b="$2"` 가 이미 보여주고, 목록을 따로 두면 코드와 어긋난 채 남는다. `# Public:` / `# Internal:` 태그도 안 씀 — `_` prefix 가 내부(private) 신호.
+- **독자 수준** — 전공 지식은 있으나 이 도메인은 처음인 사람. 도메인 용어(RMW, DDS discovery, HWE 커널, DKMS, colcon overlay)는 첫 등장 시 한 번만 부연한다. bash 관용구(`set -euo pipefail`, `:=`, `${VAR:?}`)는 설명하지 않는다.
+- **rationale** — 한 줄로 압축해 남긴다. 사고 경위를 문단으로 적지 않는다. 자세한 배경은 `docs/` 쪽 문서가 담당한다.
+- **`docs/...` 링크를 주석에 넣지 않는다** — `docs/` 는 `main` 트리에 없어 공개 브랜치에서 죽은 참조가 된다. 근거를 직접 서술한다.
+- **폐기된 구조의 이력을 적지 않는다** — "구 XXX 였고 …로 옮김" 류. 지금 무엇인지만 적는다.
 - **규칙 번호 인용 금지** — ADR 번호·Hard Rule #N·Tier·내부 Phase 번호를 주석에 박지 않음(재정렬·삭제로 stale 됨). 대신 그 규칙의 **이유·사실을 직접 서술**(예: ❌ "Hard Rule #6" → ✅ "sourced `set -e` 는 호출자 셸을 오염").
-- **source 전용 라이브러리 헤더** — §1 문구 그대로: `# source 전용 라이브러리 — set -euo 를 여기 두지 않는다(호출 진입점이 셸 옵션을 소유).`
+- **source 전용 라이브러리 헤더** — §1 대로 헤더 한 줄에 `source 전용` 임을 밝힌다. 정해진 문구를 통째로 복사해 붙이지는 않는다.

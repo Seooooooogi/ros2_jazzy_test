@@ -32,7 +32,7 @@
    커널 모듈은 버전별로 따로 설치되므로, 현재 실행 커널이 달라도 대상 커널용 패키지를 설치하면 그 커널로 부팅했을 때 적용된다.
 
 **예방** (현재 installer 에 반영됨):
-- 커널 베이스라인 단계(`resources/kernel-baseline.sh`)가 nvidia 보다 먼저 실행돼 `linux-generic-hwe-24.04` + 헤더 메타를 `--install-recommends` 로 설치 → 이미지 + 헤더 + `modules-extra` 를 항상 함께 보장.
+- 커널 베이스라인 단계(`resources/base-install.sh kernel`)가 nvidia 보다 먼저 실행돼 `linux-generic-hwe-24.04` + 헤더 메타를 `--install-recommends` 로 설치 → 이미지 + 헤더 + `modules-extra` 를 항상 함께 보장.
 - nvidia 드라이버를 자동선택 대신 명시 핀(`nvidia-driver-595` closed)으로 설치하고, 커널-모듈 메타로 커널 업데이트를 자동 추적. (Optimus 노트북 디스플레이 안정성 위해 open 대신 closed 채택.)
 - nvidia 설치 직후 **부팅 예정 커널에 `nvidia.ko` 가 실제로 있는지 검증**하고 없으면 재부팅 단계로 넘어가기 전에 중단(silent brick → 재부팅 전 시끄러운 실패).
 
@@ -55,7 +55,7 @@
 **원인**: ament_python 패키지는 **빌드 시 third-party 를 import 하지 않아** 빌드는 통과하지만, 런타임에 import 한다. host venv(`--system-site-packages`)는 venv→system 단방향만 열려, system Python 으로 실행되는 `ros2 run` 이 venv 의 app Python 을 못 본다.
 
 **복구 / 예방** (application-shell):
-- 핵심은 **colcon 빌드를 venv active 에서 수행**하는 것 — 그래야 entry_point console_script 의 shebang 이 venv python 으로 박혀 `ros2 run` 이 venv 를 본다(`resources/colcon-build.sh` 가 `HOST_VENV` 있으면 자동 activate).
+- 핵심은 **colcon 빌드를 venv active 에서 수행**하는 것 — 그래야 entry_point console_script 의 shebang 이 venv python 으로 박혀 `ros2 run` 이 venv 를 본다(`resources/app-install.sh colcon` 가 `HOST_VENV` 있으면 자동 activate).
 - 이미 빌드했는데 깨졌다면 venv active 상태에서 재빌드: `source ~/cobot_ws/.venv/bin/activate && cd ~/cobot_ws && colcon build`.
 - 직접 `python3 ...` 실행/디버깅은 `source resources/activate.sh` (ROS + 워크스페이스 overlay + venv 함께 활성화).
 - 설치된 스크립트 shebang 확인: `head -1 ~/cobot_ws/install/robot_control/lib/robot_control/robot_control` → venv python 경로여야 함.

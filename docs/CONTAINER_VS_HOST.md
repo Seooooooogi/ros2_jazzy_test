@@ -157,7 +157,7 @@ host 단독은 단위가 "host venv 1개"라 변경·고장의 영향 반경이 
 - 컨테이너 실물: `containers/{yolo-detection,voice-processing}/Dockerfile`, `containers/entrypoint.sh`,
   `containers/docker-compose.yml`, `containers/README.md`.
 - host 단독 실물: `feat/application-shell:resources/host-python-deps.sh` (`git show` 로 열람), 동 브랜치 `a02-robot-camera.sh`.
-- 통신/튜닝: `resources/dds-tuning.sh`, `docs/COMPATIBILITY.md`(Phase 4 핀 매트릭스).
+- 통신/튜닝: `resources/hostcfg.sh dds`, `docs/COMPATIBILITY.md`(Phase 4 핀 매트릭스).
 
 > 업데이트 트리거: 실측 머신에서 §5 측정값을 채울 때, 단일 fat 컨테이너(§6)를 실제 구축할 때,
 > 또는 두 브랜치의 배포 구조가 바뀔 때.

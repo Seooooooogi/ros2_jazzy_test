@@ -41,9 +41,9 @@ ROS2 Humble installer → ROS2 Jazzy installer 마이그레이션. 1–4주, sol
 - [ ] 2-5. `nvidia-driver-install.sh` 마이그레이션 — Ubuntu 24.04 NVIDIA 드라이버 호환성 확인
 - [ ] ~~2-6. `cuda-pytorch-install.sh` 마이그레이션~~ — **폐기 (ADR-006, 2026-05-29)**. host 에 CUDA toolkit/PyTorch 미설치 (host 콜콘 패키지에 CUDA 소비자 없음, ADR-008). CUDA 12-8 + PyTorch cu128 은 Phase 4 yolo 컨테이너 base image 에서만.
 - [ ] 2-7. `docker-install.sh` 마이그레이션 — 베이스 이미지 태그 핀 고정 (`ros:jazzy-ros-base-noble`, Hard Rule #6)
-- [x] 2-8. `dsr-project-install.sh` 마이그레이션 (M3, 2026-05-29) — `resources/dsr-project-install.sh` 신규. doosan-robot2 `-b jazzy` clone (idempotent), DSR 전용 apt deps, emulator `3.0.1` 핀 pull. ws = `~/cobot2_ws`, host 패키지(robot_control/od_msg) symlink. 빌드는 `resources/colcon-build.sh`.
+- [x] 2-8. `dsr-project-install.sh` 마이그레이션 (M3, 2026-05-29) — 현재 `resources/app-install.sh dsr`. doosan-robot2 `-b jazzy` clone (idempotent), DSR 전용 apt deps, emulator `3.0.1` 핀 pull. ws = `~/cobot2_ws`, host 패키지(robot_control/od_msg) symlink. 빌드는 `resources/app-install.sh colcon`.
 - [x] 2-9. RealSense 마이그레이션 (M3, 2026-05-29) — `resources/realsense-sdk-install.sh` (librealsense2 Intel noble apt 정식, vendored 폴백 불필요) + `resources/realsense-ros-install.sh` (`ros-jazzy-realsense2-camera/-description`). `realsense-viewer` 자동실행/`libgtk-3-dev` purge 제거.
-- [x] a03. VS Code 마이그레이션 (2026-05-29) — `a03-vs-code-install.sh` 오케스트레이터 + `resources/vscode-install.sh`. 일회성 .deb 다운로드 → Microsoft apt repo + keyring(`packages.microsoft.gpg`, codename 무관 stable main). `code` GUI 자동 실행 제거.
+- [x] a03. VS Code 마이그레이션 (2026-05-29) — `a03-vs-code-install.sh` 오케스트레이터 + `resources/base-install.sh vscode`. 일회성 .deb 다운로드 → Microsoft apt repo + keyring(`packages.microsoft.gpg`, codename 무관 stable main). `code` GUI 자동 실행 제거.
 - [x] 2-10. **재정의 (ADR-008 + 사용자 결정 2026-05-27: install.sh = host only)** — 구현 완료 (2026-05-29): `a04-voice-precheck.sh` 오케스트레이터 + `resources/voice-env-check.sh`. host pip install 단계 **전부 제거**, application Python (numpy, langchain, openai, PyAudio, ultralytics, cv2, …) 은 host 가 아닌 yolo/voice 컨테이너 Dockerfile 안에서 설치. a04 는 `.env` 존재·`OPENAI_API_KEY` 점검 + Docker Hub 로그인 안내만 수행 (host 설치 없음).
   - 사용자 결정 "`install.sh` 는 host 만 책임, application(컨테이너) layer 는 `docker compose` 가 책임" 으로 a06 잔여 결정이 **(b) 최소 wrapper 로 좁혀짐**: `.env` placeholder 존재 검증 + Docker Hub login 안내 (ADR-007 의 publish 채택 후 `docker compose pull` 전제 조건). (a) 완전 삭제는 `.env` 검증 손실 위험, (c) launcher 변환은 host/container layer 책임 경계를 다시 흐림 → 둘 다 채택 안 함.
   - ADR-002 (numpy<2 핀) 의 install 순서 원칙 (ultralytics → langchain → numpy 마지막) 은 그대로. 단 적용 위치가 host venv → 컨테이너 Dockerfile 의 마지막 RUN layer (Phase 4-1, 4-2).
@@ -134,7 +134,7 @@ ROS2 Humble installer → ROS2 Jazzy installer 마이그레이션. 1–4주, sol
   - **GPU 패스스루**: NVIDIA Container Toolkit 의존 (host a01 에서 driver 설치되어 있다는 전제)
   - 모델 가중치 / 설정은 volume mount (image 안에 안 박음)
   - **`od_msg` 빌드 정합성**: yolo 컨테이너 + host(robot_control) + voice 가 동일 `od_msg` 정의를 빌드해야 service type hash 일치. 단일 source = `cobot2_ws/od_msg`
-- [ ] 4-2. voice_processing 실행 환경 — **컨테이너 폐기, host 직접 실행으로 이관**(ADR-027, 2026-07-08). 마이크가 하드웨어 종속이라(`asound.conf` 의 `hw:1,7` 하드코딩 + raw `/dev/snd`) 사운드칩이 다른 머신에서 wakeword/STT 가 안 잡혔다. 이제 `resources/voice-host-install.sh` 가 host system Python 에 스택을 깔고, `containers/bringup.sh` 가 노드를 host 백그라운드로 띄운다. 폐기된 레시피는 `backup/voice-processing/` 보존. — *미충족: `.env` 런타임 주입 동작, service 왕복 실기 검증.*
+- [ ] 4-2. voice_processing 실행 환경 — **컨테이너 폐기, host 직접 실행으로 이관**(ADR-027, 2026-07-08). 마이크가 하드웨어 종속이라(`asound.conf` 의 `hw:1,7` 하드코딩 + raw `/dev/snd`) 사운드칩이 다른 머신에서 wakeword/STT 가 안 잡혔다. 이제 `resources/app-install.sh voice` 가 host system Python 에 스택을 깔고, `containers/bringup.sh` 가 노드를 host 백그라운드로 띄운다. 폐기된 레시피는 `backup/voice-processing/` 보존. — *미충족: `.env` 런타임 주입 동작, service 왕복 실기 검증.*
   - ~~Base: `ros:jazzy-ros-base-noble` 명시 핀~~ (컨테이너 폐기)
   - **역할 = service server** `/get_keyword` (`std_srvs/Trigger`). client 는 host 의 `robot_control` 노드. wake-word 발화 → STT → keyword 추출 결과를 response 로 반환.
   - 내부: langchain + langchain-openai + openai + PyAudio + openwakeword + tflite-runtime + sounddevice
@@ -209,7 +209,7 @@ ROS2 Humble installer → ROS2 Jazzy installer 마이그레이션. 1–4주, sol
 
 **Phase 4 산출물**:
 - `containers/yolo-detection/Dockerfile` + 부속 (entrypoint, requirements, `.dockerignore`)
-- ~~`containers/voice-processing/Dockerfile` + 부속 (`.dockerignore`)~~ → 폐기(ADR-027). 대체 = `resources/voice-host-install.sh` + `resources/oww_models/`. 보존본 `backup/voice-processing/`
+- ~~`containers/voice-processing/Dockerfile` + 부속 (`.dockerignore`)~~ → 폐기(ADR-027). 대체 = `resources/app-install.sh voice` + `resources/oww_models/`. 보존본 `backup/voice-processing/`
 - `containers/docker-compose.yml` (image 태그 = ADR-007 publish target, secret 은 runtime env 주입)
 - `containers/build-all.sh` (빌드 게이트 wrapper — `docker build` ×2 + secret hygiene grep + isolated import smoke 자동화. compose 플러그인 부재로 `docker build` 직접 사용) — *완료 2026-05-30*
 - `containers/entrypoint.sh` (공유 — ROS2 + `/ws/install` overlay source) — *완료 2026-05-30*

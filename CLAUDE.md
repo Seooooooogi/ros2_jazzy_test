@@ -20,7 +20,7 @@ ROS2 Humble installer → ROS2 Jazzy installer 마이그레이션. Ubuntu + NVID
 
 4. **설치 진행률 시각화** — 모든 설치 단계는 `[n/total] <step name>` 형식으로 stdout에 명시. 사용자는 항상 "지금 어디인지, 얼마나 남았는지"를 알 수 있어야 한다. 진행률 없는 silent 실행 금지.
 
-5. **`set -euo pipefail` 필수 (실행 진입점 `.sh`)** — 직접 실행되는 `.sh`(install.sh / a0N / `resources/` 설치 본문 등)는 최상단(shebang 다음)에 `set -euo pipefail`. 중간 명령 실패 시 silent continue로 의존성 누락 상태로 다음 단계 진입하는 cascading failure를 차단. **예외: source 전용 라이브러리**(`resources/{config,orchestrate,interaction,activate,apt-repo}.sh`)는 `set -e` 를 두지 않는다 — sourced 파일의 `set -e` 는 호출자 셸 옵션을 오염시키므로, 셸 옵션은 호출 진입점이 소유한다.
+5. **`set -euo pipefail` 필수 (실행 진입점 `.sh`)** — 직접 실행되는 `.sh`(install.sh / a0N / `resources/` 설치 본문 등)는 최상단(shebang 다음)에 `set -euo pipefail`. 중간 명령 실패 시 silent continue로 의존성 누락 상태로 다음 단계 진입하는 cascading failure를 차단. **예외: source 전용 라이브러리**(`resources/{config,lib,activate}.sh`)는 `set -e` 를 두지 않는다 — sourced 파일의 `set -e` 는 호출자 셸 옵션을 오염시키므로, 셸 옵션은 호출 진입점이 소유한다.
 
 6. **Docker 이미지 태그 핀 고정** — `FROM ros:latest` 또는 무태그 금지. `FROM ros:jazzy-ros-base-noble` 처럼 명시 태그만 사용. `docker pull` 시에도 태그 생략 금지. `latest`는 시간에 따라 silently drift 한다.
 
@@ -38,10 +38,10 @@ ROS2 Humble installer → ROS2 Jazzy installer 마이그레이션. Ubuntu + NVID
 ## Quick Ref
 
 - Entry (권장): `bash install.sh` — **base 환경**만 단일 시퀀스(`[n/9]`)로 실행(kernel/NVIDIA/Docker/ROS2 + reboot + VS Code + DDS + 정적 IP). 시작 시 confirm 1회, 이후 자동 진행. step 6 에서 1회 자동 reboot → 복귀(로그인) 시 GUI autostart 로 자동 재개(GUI 세션 필요, 복귀 후 sudo 비번 1회). OPENAI 키는 인스톨러가 다루지 않음(사용자가 voice_processing 패키지 resource/.env 에 직접 배치 — 별도 안내). autostart 등록 불가 환경이면 reboot 후 `bash install.sh` 재실행(완료 step 자동 skip). 옵션: `--status`/`--reset`/`--verbose`(`VERBOSE=1`)/`--help`. 콘솔엔 `[n/total]` 진행률만(상세 출력은 레포 루트 `install_log`). 단계 실패 시 `[FAIL]` + 로그 경로, 종료 시 로그 경로 1회.
-- 애플리케이션 셋업: `bash setup-app.sh` — 워크스페이스 7 단계(`obtain_cobot2`(수동 배치 검증) → `obtain_m0609`(m0609 레포 clone + `m0609_rg2_bringup` 심볼릭 링크 + `onrobot-ros2` SHA 핀 clone) → `dsr-project-install.sh`(DSR 드라이버) → `realsense-install.sh` sdk/ros → voice-host → `colcon-build.sh`) + 컨테이너(`nvidia-container-toolkit-install.sh` → `containers/build-all.sh`(`:dev-builder` 이미지 빌드 + 검증)). 플래그 `--workspace-only`/`--containers-only`/`--reset`(install.sh `--reset` 와 이름 통일)/`-y`/`--help`. `--reset` 은 doosan-robot2 + onrobot-ros2 clone + m0609 심볼릭 링크를 지우고, cobot2 와 `${M0609_REPO_DIR}` 원본은 보존한다. (구 `reinstall-workspace.sh` 흡수·폐기. prebuilt `--fetch` 경로는 dev-builder 단일 모델로 통합하며 폐기.)
+- 애플리케이션 셋업: `bash setup-app.sh` — 워크스페이스 7 단계(`obtain_cobot2`(수동 배치 검증) → `obtain_m0609`(m0609 레포 clone + `m0609_rg2_bringup` 심볼릭 링크 + `onrobot-ros2` SHA 핀 clone) → `app-install.sh dsr`(DSR 드라이버) → `app-install.sh realsense-sdk`/`realsense-ros` → `app-install.sh voice` → `app-install.sh colcon`) + 컨테이너(`app-install.sh toolkit` → `containers/build-all.sh`(`:dev-builder` 이미지 빌드 + 검증)). 플래그 `--workspace-only`/`--containers-only`/`--reset`(install.sh `--reset` 와 이름 통일)/`-y`/`--help`. `--reset` 은 doosan-robot2 + onrobot-ros2 clone + m0609 심볼릭 링크를 지우고, cobot2 와 `${M0609_REPO_DIR}` 원본은 보존한다. (구 `reinstall-workspace.sh` 흡수·폐기. prebuilt `--fetch` 경로는 dev-builder 단일 모델로 통합하며 폐기.)
 - 통합 실행 진입점: `bash containers/bringup.sh [launch args]` — host voice 노드 + yolo 컨테이너와 함께 `ros2 launch m0609_rg2_bringup bringup.launch.py` 실행(구 `cobot2_bringup bringup_all.launch.py` 대체). 사용자가 `camera:=` 를 안 주면 `camera:=true` 를 덧붙인다 — 새 launch 의 camera 기본값은 false 인데 yolo 노드는 카메라 토픽(`/camera/*` — 2026-07-21 `/camera/camera/*` 에서 변경)이 없으면 조용히 대기만 하기 때문. 같은 스크립트가 yolo 노드를 `--ros-args -r img_node:__ns:=/camera` 로 띄운다 — 신본 `ImgNode` 는 절대 경로를 구독해 이 인자가 없어도 되지만, 구 소스(상대 이름)가 깔린 머신을 위해 전환기 동안 남겨 둔다(절대 이름은 네임스페이스 remap 의 영향을 안 받아 양쪽 다 동작).
-- 단계 재실행: `bash install.sh` 재실행 시 완료 step 은 state 기준 자동 skip 되어 끊긴 지점부터 이어진다. 특정 작업만 강제 재실행은 `--reset`(전체 초기화) 또는 해당 `resources/<step>.sh` 직접 실행.
-- 순차 의미: install.sh = `a01(1-5) → reboot(6) → a03 vscode(7) → dds(8) → network(9)`. (구 a02=DSR/RealSense/colcon, a04=voice·OPENAI key 는 install.sh 에서 제거 → voice 는 `setup-app.sh`(host 설치), OPENAI key 는 사용자 수동 배치(voice_processing 패키지 `resource/.env`).) `run_step` 은 `resources/orchestrate.sh`(state + run_step + step 정의 통합 엔진)로 중앙화(install.sh 가 `STEPS_TOTAL` 만 설정).
+- 단계 재실행: `bash install.sh` 재실행 시 완료 step 은 state 기준 자동 skip 되어 끊긴 지점부터 이어진다. 특정 작업만 강제 재실행은 `--reset`(전체 초기화) 또는 해당 서브커맨드 직접 실행(예: `bash resources/base-install.sh vscode`).
+- 순차 의미: install.sh = `a01(1-5) → reboot(6) → a03 vscode(7) → dds(8) → network(9)`. (구 a02=DSR/RealSense/colcon, a04=voice·OPENAI key 는 install.sh 에서 제거 → voice 는 `setup-app.sh`(host 설치), OPENAI key 는 사용자 수동 배치(voice_processing 패키지 `resource/.env`).) `run_step` 은 `resources/lib.sh`(state + run_step + step 정의 + 사용자 확인 + apt repo 등록 통합)로 중앙화(install.sh 가 `STEPS_TOTAL` 만 설정).
 - 정적 검증: `shellcheck *.sh resources/*.sh scripts/*.sh`
 - Compatibility matrix: `docs/COMPATIBILITY.md` (Phase 1 산출물)
 - 트러블슈팅 카탈로그: `docs/TROUBLESHOOTING.md` (Phase 3 산출물)
@@ -60,7 +60,7 @@ ROS2 Humble installer → ROS2 Jazzy installer 마이그레이션. Ubuntu + NVID
 - 셸 스크립트 작성/리팩토링 규약은 `docs/SCRIPTING_GUIDELINES.md` 참조 (멱등 가드 패턴, 메시지 prefix, `set -euo` 예외, `add_apt_repo` 사용법, 신규 스크립트 템플릿).
 - 새 단계 추가 시 `total` 카운트와 진행률 표시 동시 갱신 (Hard Rule #4).
 - 새 외부 repo / Docker image 도입 시 `docs/COMPATIBILITY.md` 매트릭스 갱신 (Hard Rule #8).
-- 로그는 append-only — 각 step 의 상세 stdout/stderr 는 `orchestrate.sh` 의 `run_step` 이 `~/.ros2_jazzy_test/install.log` 로 append(콘솔엔 `[n/total]` 진행률 + 경고/에러만). 덮어쓰기 (`> install.log`) 금지.
+- 로그는 append-only — 각 step 의 상세 stdout/stderr 는 `lib.sh` 의 `run_step` 이 `~/.ros2_jazzy_test/install.log` 로 append(콘솔엔 `[n/total]` 진행률 + 경고/에러만). 덮어쓰기 (`> install.log`) 금지.
 - 커밋은 한 논리 변경 단위로 분리 (예: "RealSense distro 패치"와 "DSR 의존성 갱신"은 다른 커밋).
 - 커밋은 사용자 명시적 요청 시에만 (Hard Rule #11).
 - **커밋 메시지는 외부 사람이 이해 가능하게 작성** — 내부 마일스톤 코드 (M1, M2), 결정 기록 번호 (ADR-NNN), 단계 번호 (Phase N), 룰 ID (Hard Rule #N) 같은 본 레포 내부 축약어 미사용. 기능 단위로 분할. 한국어 회화 + 영어 식별자 혼용.
