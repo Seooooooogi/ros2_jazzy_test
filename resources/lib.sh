@@ -317,7 +317,7 @@ install_steps_total() {
 
 #######################################
 # a01: 커널 기준선 → NVIDIA → Docker → ROS2 desktop → ROS2 extras(reboot 은 호출자에 인라인).
-# ros2-packages.sh 는 desktop/extras 하위 명령을 각각 별도 프로세스의 별도 단계로 실행.
+# base-install.sh 는 서브커맨드마다(kernel/nvidia/docker/ros2-desktop/ros2-extras) 별도 프로세스의 별도 단계로 실행.
 # Globals:
 #   RESOURCE_DIR (읽기)
 # Arguments:

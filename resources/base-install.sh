@@ -7,6 +7,7 @@
 # shellcheck source-path=SCRIPTDIR
 # resources/base-install.sh — 재부팅 앞뒤로 도는 시스템 계층 설치.
 # 서브커맨드마다 별도 프로세스로 실행되므로 한쪽이 실패해도 다른 쪽에 영향이 없다.
+# ros2_desktop() / ros2_extras() 원본: Tiryoh/ros2_setup_scripts_ubuntu (Apache-2.0), ROS2 공식 문서 (CC-BY-4.0).
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -16,6 +17,7 @@ source "${SCRIPT_DIR}/config.sh"
 source "${SCRIPT_DIR}/lib.sh"
 config_assert_set
 
+# HWE 이미지만 깔면 modules-extra(와이파이/일부 USB 드라이버)가 빠질 수 있어 headers 와 함께 명시적으로 보강한다.
 base_kernel() {
 
     # 1) HWE 커널 meta + headers meta 설치. --install-recommends 는 modules-extra 도 함께 끌어옴
@@ -49,6 +51,7 @@ _resolve_driver_pkg() {
         | grep -E '^nvidia-driver-[0-9]+(-open|-server|-server-open)?$' | sort -V | tail -n1 || true
 }
 
+# 자동 선택은 머신마다 다른 드라이버가 뽑혀 비결정적이라 버전을 고정하고, 재부팅 전 커널 모듈 존재를 검증해 화면 먹통을 막는다.
 base_nvidia() {
 
     # apt 컴포넌트 활성화 — nvidia-modprobe 는 multiverse 에 들어 있어서, multiverse 가 꺼진 설치본
@@ -129,6 +132,7 @@ base_nvidia() {
     fi
 }
 
+# 최신 stable 을 설치한 뒤 apt-mark hold 로 고정해, apt upgrade 로 버전이 조용히 밀리는 것을 막는다.
 base_docker() {
 
     local DOCKER_LIST=/etc/apt/sources.list.d/docker.list
@@ -314,6 +318,7 @@ ros2_extras() {
     echo "ros2-extras: success installing ROS2 ${ROS_DISTRO} extras (robot/control + Gazebo Harmonic)"
 }
 
+# .deb 파일을 직접 설치하는 대신 apt 저장소로 등록해, 이후 업데이트를 apt 가 자동으로 관리하게 한다.
 base_vscode() {
 
     local MS_KEY="${KEYRING_DIR}/packages.microsoft.gpg"
