@@ -402,15 +402,15 @@ confirm_or_abort_assumable() {
 # ============================================================================
 # 일회성 GUI autostart 항목을 등록/제거 → reboot 후 install.sh 가 자동으로 이어지게 함.
 #
-# 동작 방식: GNOME autostart (.desktop) 가 로그인 시 터미널을 열어 install-resume-launcher.sh 실행
-# → install.sh 재실행. install.sh 가 재개로 다시 진입하면 즉시 autostart 제거(일회성)
+# 동작 방식: GNOME autostart (.desktop) 가 로그인 시 터미널에서 install.sh --resume-terminal 실행.
+# install.sh 가 재개로 다시 진입하면 즉시 autostart 제거(일회성)
 # — 그래야 로그인할 때마다 또 실행 안 됨.
 
 RESUME_AUTOSTART_DIR="${HOME}/.config/autostart"
 RESUME_AUTOSTART_FILE="${RESUME_AUTOSTART_DIR}/ros2-jazzy-install-resume.desktop"
 
 #######################################
-# reboot 후 자동 재개 등록: 로그인 시 터미널에서 install-resume-launcher.sh 를 실행.
+# reboot 후 자동 재개 등록: 로그인 시 터미널에서 install.sh --resume-terminal 를 실행.
 # 터미널 에뮬레이터가 없으면 등록을 건너뛰고 수동 재실행을 안내.
 # Globals:
 #   RESUME_AUTOSTART_DIR, RESUME_AUTOSTART_FILE (읽기)
@@ -419,12 +419,12 @@ RESUME_AUTOSTART_FILE="${RESUME_AUTOSTART_DIR}/ros2-jazzy-install-resume.desktop
 #######################################
 register_resume_autostart() {
     local repo="$1"
-    local launcher="${repo}/resources/install-resume-launcher.sh"
+    local entry="${repo}/install.sh"
     local exec_line=""
     if command -v gnome-terminal >/dev/null; then
-        exec_line="gnome-terminal -- bash \"${launcher}\""
+        exec_line="gnome-terminal -- bash \"${entry}\" --resume-terminal"
     elif command -v x-terminal-emulator >/dev/null; then
-        exec_line="x-terminal-emulator -e bash \"${launcher}\""
+        exec_line="x-terminal-emulator -e bash \"${entry}\" --resume-terminal"
     else
         echo "[install] no terminal emulator — auto-resume not possible." >&2
         echo "             after reboot, run 'bash install.sh' manually." >&2

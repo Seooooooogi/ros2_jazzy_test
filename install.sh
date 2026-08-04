@@ -102,6 +102,17 @@ case "${1:-}" in
         echo "install: state reset complete (deleted $STATE_FILE)."
         exit 0
         ;;
+    --resume-terminal)
+        # 재부팅 뒤 GUI 자동시작이 부르는 내부 플래그. 설치를 다시 돌리고 결과를 볼 수 있게
+        # 터미널을 열어 둔다. 도움말에는 안 보인다 — 사람이 직접 칠 일이 없다.
+        cd "${SCRIPT_DIR}"
+        rc=0; bash "$0" || rc=$?
+        echo
+        echo "[resume] install.sh exited (${rc}). Keeping this terminal open so you can review the result."
+        # heartbeat 나 비밀번호 입력이 터미널 입력 상태를 흐트러뜨렸을 수 있어 되돌린다.
+        stty sane 2>/dev/null || true
+        exec bash
+        ;;
     --help|-h) usage; exit 0 ;;
     "") : ;;
     *) echo "install: unknown option '$1'" >&2; usage; exit 2 ;;
