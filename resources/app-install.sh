@@ -15,105 +15,80 @@ source "${SCRIPT_DIR}/config.sh"
 source "${SCRIPT_DIR}/lib.sh"
 config_assert_set
 
-# ROKEY-SPARK fork 를 커밋으로 고정해 clone 하므로 upstream 이 force-push/삭제돼도 흔들리지 않고,
-# 에뮬레이터 이미지도 config.sh 의 태그 하나로 고정해 latest 로 조용히 drift 하는 것을 막는다.
+# Doosan 로봇 드라이버 소스 clone + DSR 전용 apt 패키지 + 에뮬레이터 이미지.
+# 소스는 커밋으로, 이미지는 태그로 고정한다 — 설치 시점마다 다른 것이 깔리면 재현이 안 된다.
 app_dsr() {
     local WS_SRC="${DSR_WORKSPACE}/src"
-    # 소스는 upstream doosan-robotics/doosan-robot2 가 아니라 ROKEY-SPARK fork 를 쓴다 — upstream 이
-    # force-push/삭제해도 살아남고, 호환 패치를 얹을 수 있기 때문. 리비전 핀(DSR_COMMIT)은 config.sh.
 
     # 1) 워크스페이스 src 디렉토리.
     mkdir -p "${WS_SRC}"
 
-    # 2) doosan-robot2 clone (멱등 — .git 이 있으면 건너뜀).
+    # 2) doosan-robot2 clone — .git 이 있으면 건너뛴다.
     if [[ -d "${WS_SRC}/doosan-robot2/.git" ]]; then
         echo "dsr: doosan-robot2 already cloned (skip)"
-        # 기존 작업본은 checkout 으로 덮어쓰지 않는다 — 개발 중 변경을 날리지 않기 위함(cobot2 / M0609 와
-        # 같은 원칙). 다만 핀과 어긋나면 알린다: 머신마다 다른 리비전으로 빌드되는 상태를 조용히 넘기면
-        # "저 머신에선 되는데" 를 추적할 방법이 없어진다.
+        # 이미 있는 작업본은 checkout 으로 덮어쓰지 않는다(개발 중 변경 보호). 대신 핀과 어긋나면
+        # 알린다 — 조용히 넘기면 "저 머신에선 되는데" 를 추적할 방법이 없어진다.
         DSR_HEAD="$(git -C "${WS_SRC}/doosan-robot2" rev-parse HEAD)"
         if [[ "${DSR_HEAD}" != "${DSR_COMMIT}" ]]; then
             echo "dsr: warning — 기존 clone 이 핀과 다름 (${DSR_HEAD:0:8} != ${DSR_COMMIT:0:8})" >&2
             echo "dsr:           핀에 맞추려면: git -C ${WS_SRC}/doosan-robot2 checkout --detach ${DSR_COMMIT}" >&2
         fi
     else
-        # fork 에는 'jazzy' 브랜치가 없으므로 -b "${DSR_BRANCH}" 를 주면 안 됨("Remote branch not found").
-        # 기본 브랜치로 받은 뒤 핀 커밋으로 detach — fork main 에 커밋이 얹혀도 설치 결과가 안 흔들린다.
+        # fork 에는 'jazzy' 브랜치가 없어 -b "${DSR_BRANCH}" 를 주면 clone 자체가 실패한다.
+        # 기본 브랜치로 받은 뒤 핀 커밋으로 detach — fork 에 커밋이 얹혀도 설치 결과가 안 흔들린다.
         git clone "${DSR_REPO_URL}" "${WS_SRC}/doosan-robot2"
         git -C "${WS_SRC}/doosan-robot2" checkout --detach "${DSR_COMMIT}"
     fi
 
-    # DSR_ROBOT2.py 호환 패치(서비스 클래스명 SetSingular[ity]HandlingForce, _srv_name_prefix)는
-    # 여기서 sed 로 하지 않는다 — fork 커밋 f1118a1 이 이미 반영본이라 이 스크립트의 패치는 항상 no-op 였다.
+    # cobot2 앱 소스는 이 레포가 제공하지 않는다 — 사용자가 ${WS_SRC}/cobot2 에 직접 두고,
+    # setup-app.sh 가 빌드 전에 존재를 확인한다.
 
-    # cobot2 앱 소스는 여기에 미러링 안 함 — 이 레포는 더 이상 미제공. 사용자가
-    # ${WS_SRC}/cobot2 에 직접 배치; setup-app.sh 가 colcon-build.sh 를 부르기 전에 존재 확인(없으면 곧바로 실패).
-
-    # 3) DSR 빌드에 필요한 apt 패키지 (a01 ros2-install.sh / desktop core 에 없는 DSR 전용 것만).
-    #    나머지 선언적(declarative) 의존성은 colcon-build.sh 의 rosdep install 이 자동 해결.
+    # 3) DSR 전용 apt 패키지만 여기서. 나머지 의존성은 colcon 단계의 rosdep 이 알아서 해결한다.
     sudo apt-get update
     sudo apt-get install -y \
         "ros-${ROS_DISTRO}-velocity-controllers" \
         "ros-${ROS_DISTRO}-eigen3-cmake-module"
 
-    # 3b) robot_control(host 클라이언트)의 런타임 Python 의존성 — 얇은 클라이언트라 system Python(apt)으로 설치.
-    #     이건 컨테이너 방식이라 앱 Python(torch/ultralytics/openwakeword)의 집은 yolo/voice 컨테이너지만,
-    #     robot_control 은 host 에서 도는 ROS2 노드라 scipy(좌표 변환)/numpy/pymodbus(그리퍼 Modbus 통신)는
-    #     host 에 있어야 함. ament_python 은 빌드할 때 import 하지 않아 colcon 은 통과하지만, ros2 run 은 런타임에 깨짐.
-    #     venv 대신 apt 를 쓰는 이유: host=system Python 책임을 지키고, 별도 activation 없이 ros2 run 이 이 패키지들을 보게 함.
-    #     noble apt 의 numpy(1.26, <2)면 충분(host 엔 ultralytics 없음); noble apt 의 pymodbus 는 3.x
-    #     (onrobot.py 를 3.x API 로 마이그레이션함).
+    # 3b) robot_control 노드가 런타임에 import 하는 Python 패키지 — scipy(좌표 변환) / numpy /
+    #     pymodbus(그리퍼 Modbus 통신). 이 노드는 host 에서 돌기 때문에 host 에 있어야 한다.
+    #     colcon 빌드는 import 를 하지 않아 없어도 통과하고, 실제로는 `ros2 run` 에서야 깨진다.
+    #     venv 가 아니라 apt 로 까는 이유: 별도 활성화 없이 system Python 이 그대로 보게 하려고.
     sudo apt-get install -y \
         python3-numpy python3-scipy python3-pymodbus
 
-    # 4) DSR 에뮬레이터 이미지 (명시 태그 — 이미 있으면 docker 가 자동으로 건너뜀).
+    # 4) DSR 에뮬레이터 이미지. 태그를 명시해 latest 로 조용히 밀리지 않게 한다.
     docker pull "doosanrobot/dsr_emulator:${DSR_EMULATOR_VERSION}"
 
     echo "dsr: success installing Doosan DSR (${DSR_BRANCH}) + emulator ${DSR_EMULATOR_VERSION}"
 }
 
-#######################################
-# librealsense2 SDK(DKMS 커널 모듈 + 유틸 + 헤더) 설치. apt repo·키링 등록 포함.
-# Globals:
-#   KEYRING_DIR, KERNEL_HEADERS_META, UBUNTU_CODENAME (읽기)
-# Outputs:
-#   성공 시 요약 한 줄을 stdout 으로 출력.
-#######################################
-# 배경/이유:
-#   - 2025-11 에 RealSense 가 Intel 에서 분사(spin-off)해 RealSense AI 가 되며 apt repo 도메인과 서명 키가 함께 바뀜.
-#     옛 librealsense.intel.com/.../librealsense.pgp 는 2018 년 Intel 키(C8B3A55A...)를 주지만, noble repo 는
-#     새 키(...FB0B24895113F120, @realsenseai.com)로 서명돼 있어 옛 키로는 검증 실패(NO_PUBKEY).
-#     현재 공식 방법(librealsense/doc/distribution_linux.md) = realsenseai.com 도메인 + .asc(armored) 키를
-#     gpg --dearmor 로 변환(dearmor = armored 텍스트 키를 바이너리 GPG 키로 변환).
-#   - 키링은 ${KEYRING_DIR}/librealsenseai.gpg + signed-by 로 지정(deprecated 된 apt-key 미사용).
-#   - repo codename 은 `lsb_release -cs` 대신 ${UBUNTU_CODENAME}(config 단일 소스) 사용.
-#   - DKMS 커널 모듈 빌드에는 커널 헤더가 필요 → HWE 커널(Ubuntu 하드웨어 지원 커널) 헤더 메타(${KERNEL_HEADERS_META})와
-#     현재 커널 헤더를 함께 설치. 메타가 있으면 커널 업데이트 뒤에도 헤더가 자동으로 따라와서 librealsense2-dkms
-#     재빌드가 깨지지 않음(헤더가 없으면 카메라 커널 모듈 빌드 실패).
-#   - 제거됨: `apt remove --purge libgtk-3-dev`(되돌릴 수 없는 purge, noble 에선 불필요),
-#              `realsense-viewer` 자동 실행(GUI 가 떠서 진행이 막힘).
+# RealSense 카메라의 librealsense2 SDK(커널 모듈 + 유틸 + 헤더) 설치. apt 저장소·키링 등록 포함.
+# RealSense 가 Intel 에서 분사하며 저장소 도메인과 서명 키가 함께 바뀌었다 — 옛 Intel 키로는 지금
+# 저장소의 서명을 검증하지 못해 apt update 가 NO_PUBKEY 로 막힌다. 그래서 새 도메인의 armored 키를 쓴다.
+# 커널 모듈은 DKMS(커널이 바뀔 때마다 모듈을 자동 재빌드하는 구조)로 빌드되고 그때 커널 헤더가 필요해,
+# HWE 헤더 메타와 현재 커널 헤더를 함께 깐다 — 메타가 있어야 커널이 올라가도 재빌드가 안 깨진다.
 realsense_sdk() {
     local RS_KEY="${KEYRING_DIR}/librealsenseai.gpg"
     local RS_LIST=/etc/apt/sources.list.d/librealsenseai.list
     local RS_KEY_URL="https://librealsense.realsenseai.com/Debian/librealsenseai.asc"
     local RS_REPO="https://librealsense.realsenseai.com/Debian/apt-repo"
 
-    # 0) 분사(spin-off) 이전 Intel 키/소스가 남아 있으면 제거 — apt-get update 전에 안 지우면
-    #    옛 repo 의 NO_PUBKEY 때문에 첫 update 가 막힘. 이 파일은 이 프로젝트가 만든 산출물이라 다시 생성 가능.
+    # 0) 예전 Intel 키/소스가 남아 있으면 먼저 지운다 — 그대로 두면 그 저장소의 NO_PUBKEY 때문에
+    #    아래 첫 apt update 부터 막힌다. 이 파일들은 이 설치기가 만든 것이라 다시 생성된다.
     sudo rm -f /etc/apt/sources.list.d/librealsense.list "${KEYRING_DIR}/librealsense.pgp"
 
-    # 1) 사전 도구 + 키링 디렉터리 + 커널 헤더(DKMS 빌드용 — HWE 커널 헤더 메타 + 현재 커널).
+    # 1) 사전 도구 + 커널 헤더(DKMS 빌드용 — HWE 헤더 메타 + 지금 부팅된 커널).
     sudo apt-get update
     sudo apt-get install -y curl ca-certificates gnupg apt-transport-https \
         "${KERNEL_HEADERS_META}" "linux-headers-$(uname -r)"
-    # 2) 키링 + apt 소스(add_apt_repo — armored 키를 dearmor 변환, 멱등(여러 번 실행해도 결과 동일)).
+    # 2) 키링 + apt 소스.
     add_apt_repo \
         --mode dearmor --downloader curl-sSf --key-write tee \
         --key-url "${RS_KEY_URL}" --key-file "${RS_KEY}" \
         --list-file "${RS_LIST}" \
         --list-line "deb [signed-by=${RS_KEY}] ${RS_REPO} ${UBUNTU_CODENAME} main"
 
-    # 4) librealsense2 SDK(커널 DKMS 모듈 + 유틸 + 헤더 + 디버그 심볼).
+    # 4) SDK 본체 — 커널 모듈 + 유틸 + 헤더 + 디버그 심볼.
     sudo apt-get install -y \
         librealsense2-dkms \
         librealsense2-utils \
@@ -123,29 +98,16 @@ realsense_sdk() {
     echo "realsense-sdk: success installing RealSense librealsense2 SDK (${UBUNTU_CODENAME} apt repo)"
 }
 
-#######################################
-# ROS2 realsense2 wrapper 패키지(camera + description) 설치. SDK 가 먼저 설치돼 있다고 가정.
-# Globals:
-#   ROS_DISTRO (읽기)
-# Outputs:
-#   성공 시 요약 한 줄을 stdout 으로 출력.
-#######################################
-# 배경/이유:
-#   - ros-humble-realsense2-* → ros-${ROS_DISTRO}-realsense2-* 로 옮김.
-#   - 원래의 glob(`ros-humble-realsense2-*`) 대신 패키지를 명시 — 설치 결과가 항상 같도록(deterministic).
-#     camera 는 realsense2-camera-msgs 를 의존성으로 함께 끌어옴.
-#   - rosdep init/update + colcon build 는 a02 의 colcon-build.sh 로 옮겨 중복 제거.
+# RealSense 를 ROS2 토픽으로 내보내는 wrapper 패키지(camera + description). SDK 가 먼저 깔려 있어야 한다.
+# glob 대신 패키지 이름을 명시해 어느 머신에서 돌려도 같은 것이 깔리게 한다.
 realsense_ros() {
     sudo apt-get update
 
-    # ROS2 바이너리 패키지들은 하나의 동기화된 snapshot 을 이룸. 패키지 간 의존이 느슨하고(loose) SONAME 도
-    # 안 올라가서, 서로 다른 snapshot 을 섞으면 dlopen 시점에 ABI 가 깨짐. 그러면 realsense2_camera 가
-    # undefined symbol(diagnostic_updater::Updater::Updater(NodeBaseInterface, ... , double, uint8))로 죽음 —
-    # 이미 깔린 diagnostic_updater 가 realsense2_camera snapshot 보다 오래된 경우. 의존이 느슨해서 apt 가
-    # 이미 설치된 옛 diagnostic_updater 를 자동으로 올려주지 않기 때문. 그래서 먼저 설치된 ROS 패키지들을 현재
-    # snapshot 으로 다시 맞춰(re-sync), realsense 가 요구하는 ABI 의존을 wrapper 가 빌드된 버전과 일치시킴.
-    # 범위를 ros-${ROS_DISTRO}-* 네임스페이스로 일부러 한정: 여기서 전체 `apt upgrade` 는 피함(hold 로 잡아둔
-    # docker/nvidia 핀(버전 고정)을 흔들기 때문). 그 패키지들은 이 glob 밖이고 어차피 hold 돼 있어 핀 안전(pin-safe).
+    # ROS2 바이너리 패키지들은 통째로 한 snapshot 이다. 패키지 간 의존 표기가 느슨해 서로 다른 시점의
+    # 패키지가 섞이면, 먼저 깔려 있던 diagnostic_updater 가 더 오래돼 realsense2_camera 가 로드
+    # 시점에 undefined symbol 로 죽는다. apt 는 그 옛 패키지를 알아서 올려주지 않으므로, 이미 설치된
+    # ROS 패키지만 현재 snapshot 으로 다시 맞춘다. 전체 apt upgrade 를 안 쓰고 ros-${ROS_DISTRO}-*
+    # 로 범위를 좁히는 이유는 hold 로 고정해 둔 docker/nvidia 버전을 건드리지 않기 위해서다.
     local ros_installed
     ros_installed="$(dpkg-query -W -f='${db:Status-Status} ${Package}\n' "ros-${ROS_DISTRO}-*" 2>/dev/null \
         | awk '$1 == "installed" { print $2 }' || true)"
@@ -161,13 +123,13 @@ realsense_ros() {
     echo "realsense-ros: success installing ROS2 ${ROS_DISTRO} realsense2 wrapper"
 }
 
-# 마이크가 하드웨어에 종속돼 컨테이너 오디오 전달이 머신마다 깨지므로 voice 스택은 컨테이너 대신 host 에
-# 직접 깐다 — apt 로 되는 system C 라이브러리는 apt, apt 미제공 스택만 pip(PEP 668 우회 --break-system-packages).
+# 음성 노드가 쓰는 Python 스택(langchain / openai / 호출어 감지)을 host 에 직접 설치한다.
+# 컨테이너에 넣지 않는 이유: 마이크가 하드웨어에 묶여 컨테이너로 오디오를 넘기는 방식이 머신마다 깨졌다.
 app_voice() {
     local OWW_SRC="${SCRIPT_DIR}/oww_models"
     local WAKEWORD_MODEL="${VOICE_WS}/resource/hello_rokey_8332_32.tflite"
 
-    # Python 3.12 단언 — ai-edge-litert(openwakeword tflite 대체)의 cp312 wheel 전제. fail-loud.
+    # 아래에서 쓰는 ai-edge-litert 가 Python 3.12 wheel 만 있어서, 다른 버전이면 여기서 바로 멈춘다.
     local PYVER
     PYVER="$(python3 -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')"
     if [[ "${PYVER}" != "3.12" ]]; then
@@ -175,57 +137,51 @@ app_voice() {
         exit 1
     fi
 
-    # 1) 시스템 라이브러리(apt — 멱등: 이미 설치면 no-op).
-    #    portaudio = PyAudio·sounddevice, libsndfile = scipy/soundfile, ffmpeg = 오디오 디코드.
-    #    (-dev 는 pyaudio 컴파일용. numpy 는 dsr-project-install.sh 가 apt python3-numpy 로 이미 설치.)
+    # 1) 오디오 시스템 라이브러리 — portaudio 는 PyAudio/sounddevice 가, libsndfile 은 soundfile 이,
+    #    ffmpeg 은 오디오 디코드가 쓴다(-dev 는 pyaudio 컴파일용).
     echo "[voice-host-install] 1/6 시스템 라이브러리(apt)"
     sudo apt-get update
     sudo apt-get install -y --no-install-recommends \
         python3-dev python3-pip \
         portaudio19-dev libportaudio2 libsndfile1 libasound2-dev ffmpeg
 
-    # system pip(--break-system-packages: PEP 668 externally-managed 우회). sudo = system site-packages 에
-    # 설치 → 모든 셸의 `ros2 run`(system python)이 봄. non-root pip 는 버전별로 ~/.local 폴백 여부가 갈려
-    # 예측 불가 → sudo 로 설치 위치 확정. apt numpy 등 이미 만족하는 핀은 pip 가 no-op(dpkg 파일 미클로버).
+    # sudo 로 system site-packages 에 설치해야 모든 셸의 `ros2 run` 이 그대로 본다. non-root pip 는
+    # ~/.local 로 빠질지가 버전마다 갈려 설치 위치를 확정할 수 없다.
+    # Ubuntu 는 system Python 을 apt 가 관리한다며 pip 설치를 막으므로 --break-system-packages 로 연다.
     local PIP=(sudo python3 -m pip install --break-system-packages --no-cache-dir)
 
-    # 2) 음성/LLM 스택(voice 컨테이너 핀 미러링). scipy 는 1.18 부터 런타임이 numpy>=2 를 요구(np.long)
-    #    → 마지막 numpy<2 재핀과 충돌하므로 <1.18 로 상한.
+    # 2) 음성/LLM 스택. scipy 는 1.18 부터 numpy>=2 를 요구해 마지막의 numpy<2 고정과 충돌하므로 상한을 둔다.
     echo "[voice-host-install] 2/6 langchain / openai / 음성 스택"
-    # openai(>=4.14)가 apt 설치본 python3-typing-extensions(4.10)를 업그레이드하려 하지만 dpkg 설치분은
-    # RECORD 파일이 없어 pip uninstall 이 실패한다("Cannot uninstall typing_extensions ... RECORD file not
-    # found. Hint: installed by debian"). --ignore-installed --no-deps 로 상위본을 /usr/local(sys.path 우선)에
-    # 먼저 얹어 apt 본을 shadow → 이후 스텝은 이미 충족으로 보고 uninstall 시도 자체를 안 한다.
-    # ponytail: 지금 apt 파이썬 패키지 중 pip 상향이 필요한 건 typing-extensions 뿐. 다른 게 같은 식으로
-    #           걸리면(같은 RECORD 에러) 그 패키지도 여기에 한 줄 추가.
+    # openai 가 apt 로 깔린 typing-extensions 를 올리려 하는데, dpkg 로 설치된 것은 pip 가 지울 수
+    # 없어("RECORD file not found") 그대로 두면 실패한다. 상위 버전을 먼저 얹어 apt 본을 가리면
+    # 이후 단계는 이미 충족으로 보고 삭제를 시도하지 않는다.
+    # ponytail: 이런 식으로 걸리는 apt 파이썬 패키지는 지금 typing-extensions 뿐. 늘어나면 여기 한 줄 추가.
     "${PIP[@]}" --ignore-installed --no-deps "typing-extensions>=4.14,<5"
     "${PIP[@]}" \
         "langchain<2" "langchain-openai<2" "openai<3" \
         pyaudio sounddevice "scipy<1.18" python-dotenv
 
-    # 3) openwakeword 0.6.0 — 의존으로 tflite-runtime(3.12 wheel 없음)을 강제 → --no-deps 로 설치.
+    # 3) openwakeword(호출어 감지). 의존성에 3.12 wheel 이 없는 tflite-runtime 이 걸려 있어 --no-deps 로 깐다.
     echo "[voice-host-install] 3/6 openwakeword(--no-deps)"
     "${PIP[@]}" --no-deps "openwakeword==0.6.0"
 
-    # 4) openwakeword 실제 의존 명시 설치 + tflite-runtime 자리에 ai-edge-litert(cp312 wheel, 동일 API).
+    # 4) 그래서 빠진 실제 의존성을 직접 깔고, tflite-runtime 자리에는 API 가 같은 ai-edge-litert 를 넣는다.
     echo "[voice-host-install] 4/6 openwakeword 의존 + ai-edge-litert"
     "${PIP[@]}" \
         "onnxruntime<2,>=1.10.0" "tqdm<5,>=4.0" "scikit-learn<2,>=1" "requests<3,>=2.0" \
         "ai-edge-litert>=2.0.2,<3"
-    # openwakeword 코드는 `import tflite_runtime.interpreter` 를 하드 호출 → ai_edge_litert 로 잇는 최소 shim
-    # 을 site-packages 에 생성(root 소유 system site-packages 에 쓰므로 sudo. 위치는 ai_edge_litert 에서 동적 해석).
+    # openwakeword 코드가 `import tflite_runtime.interpreter` 를 그대로 부르므로, 그 이름을
+    # ai_edge_litert 로 이어 주는 최소 모듈을 site-packages 에 만들어 둔다.
     sudo python3 -c "import os,ai_edge_litert as a; d=os.path.join(os.path.dirname(os.path.dirname(a.__file__)),'tflite_runtime'); os.makedirs(d,exist_ok=True); open(os.path.join(d,'__init__.py'),'w').close(); open(os.path.join(d,'interpreter.py'),'w').write('from ai_edge_litert.interpreter import Interpreter  # noqa: F401\n')"
 
-    # 5) 모델 provisioning: bundled feature 모델 복사 → stock wakeword 모델 다운로드 → 전체 TFL3 검증.
-    #    feature(melspec/embedding/VAD)는 wheel 미동봉 → 동봉본(resources/oww_models)을 openwakeword 설치
-    #    경로로 복사(네트워크 우회, 동봉본 authoritative). stock 모델(alexa 등)은 corecode 튜토리얼이 런타임에
-    #    openwakeword.utils.download_models() 로 받는데, 이 경로가 sudo 설치라 root 소유 → 비-root 런타임이
-    #    write 못 함(PermissionError). 설치 때 root 로 미리 받아 채우면 download_models 는 존재-가드라 이미 있는
-    #    파일을 skip → 런타임 호출이 no-op 이 되어 권한 오류가 사라진다. 과거 download_models 는 transient 504 시
-    #    에러 HTML 을 .tflite 로 저장해 런타임 크래시 → 받은 뒤 'TFL3' 매직(offset 4)을 검증하고 손상본은 삭제 후
-    #    중단(fail-loud) → 재실행 시 재다운로드로 자가치유(손상본이 존재-가드에 걸려 영구 캐시되는 poison-pill 차단).
+    # 5) 모델 채워 넣기: 동봉 모델 복사 → 나머지 모델 다운로드 → 전부 온전한지 검증.
+    #    openwakeword 설치 경로는 root 소유라 일반 사용자로 도는 런타임이 여기에 쓰지 못한다. 그래서
+    #    런타임이 받으려 할 모델을 설치할 때 미리 채워 둔다 — 이미 있는 파일은 건너뛰므로 런타임의
+    #    다운로드 호출이 아무 일도 하지 않게 된다.
+    #    다운로드가 일시적으로 실패하면 에러 HTML 이 .tflite 이름으로 저장돼 런타임에서야 터졌다.
+    #    그래서 받은 뒤 파일 시그니처를 확인하고, 깨진 것은 지우고 여기서 멈춘다(다시 실행하면 새로 받는다).
     echo "[voice-host-install] 5/6 feature 복사 + stock 모델 다운로드 + TFL3 검증"
-    # root 소유 openwakeword 경로에 쓰므로 sudo. sudo 는 env 를 지우므로 OWW_SRC 는 `env` 로 전달.
+    # sudo 는 환경변수를 지우므로 OWW_SRC 는 env 로 넘긴다.
     sudo env "OWW_SRC=${OWW_SRC}" python3 - <<'PY'
 import os, shutil, openwakeword, openwakeword.utils
 src = os.environ["OWW_SRC"]
@@ -246,13 +202,13 @@ if bad:
 print("  models OK:", sorted(f for f in os.listdir(dst) if f.endswith(".tflite")))
 PY
 
-    # 6) numpy<2 보장(검증본 규율). 이미 <2(apt python3-numpy 1.26)면 pip 가 no-op → apt 패키지 클로버 안 함.
-    #    pip 스텝 중 하나가 numpy>=2 를 끌어왔으면 여기서 다운핀. force-reinstall 은 쓰지 않음(불필요 클로버 방지).
+    # 6) numpy 를 1.x 로 되돌린다 — 앞의 pip 단계 중 하나가 2.x 를 끌어왔을 수 있고, 이 스택은 1.x 로만
+    #    검증돼 있다. 이미 1.x 면 아무 일도 일어나지 않는다.
     echo "[voice-host-install] 6/6 numpy<2 보장 + import 검증"
     "${PIP[@]}" "numpy<2"
 
-    # import 검증 게이트 — openwakeword 는 import 만으론 부족(런타임에만 .tflite 로드)하므로
-    # 실제 wakeword 모델을 Model 로 인스턴스화 + predict 1회까지 확증(fail-loud).
+    # 검증 — openwakeword 는 import 만으론 부족하다(모델을 런타임에야 읽는다). 실제 모델을 올려
+    # 한 번 추론까지 돌려 봐야 여기서 실패를 잡을 수 있다.
     if [[ ! -f "${WAKEWORD_MODEL}" ]]; then
         echo "voice-host-install: wakeword 모델 없음 — ${WAKEWORD_MODEL}" >&2
         echo "           cobot2 소스가 먼저 배치돼야 함(setup-app.sh obtain_cobot2 선행)." >&2
@@ -273,25 +229,23 @@ PY
     echo "success installing host voice application Python (system, --break-system-packages)"
 }
 
-# DSR/RealSense 설치가 끝난 뒤 딱 한 번만 빌드해 중복 빌드를 막고, 컨테이너 전용 object_detection 은
-# --packages-skip 으로 건너뛰어 host 에 없는 torch 의존을 피한다.
+# 워크스페이스를 colcon 으로 빌드한다.
+# DSR 과 RealSense 설치가 모두 끝난 뒤 한 번만 부른다 — 앞 단계마다 빌드하면 같은 일을 여러 번 한다.
 app_colcon() {
     if [[ ! -d "${DSR_WORKSPACE}/src" ]]; then
         echo "colcon-build: ${DSR_WORKSPACE}/src missing — the DSR install step must run first" >&2
         exit 1
     fi
 
-    # ROS2 환경 로드 (set -u 상태에서 setup.bash 가 미정의 변수(unbound var)로 터지는 문제 회피).
+    # ROS2 환경 로드. setup.bash 는 미정의 변수를 건드려서 set -u 를 잠시 꺼야 한다.
     set +u
     # shellcheck disable=SC1090,SC1091
     source "/opt/ros/${ROS_DISTRO}/setup.bash"
     set -u
 
-    # CycloneDDS RMW(ROS 미들웨어 구현) 패키지 반드시 깔아 둠 — config.sh 가 기본 RMW 를 cyclonedds 로 핀(고정)해
-    # 둠 → colcon 이 패키지의 기본 RMW 를 찾을 때 rmw_cyclonedds_cpp 설치돼 있어야 함 (없으면 dsr_msgs2 등이
-    # CMake configure 단계에서 "Could not find ROS middleware implementation 'rmw_cyclonedds_cpp'" 로 실패).
-    # ROS desktop 은 fastrtps 만 깔고 cyclonedds 는 별도 패키지 → 빌드 전제 조건으로 여기서 설치.
-    # 이미 깔려 있으면 dpkg 로 확인해 apt 를 통째로 건너뜀 (멱등 + 재개 시 네트워크 불필요).
+    # CycloneDDS RMW 패키지가 빌드 전제 조건이다 — config.sh 가 기본 RMW 를 cyclonedds 로 고정해 둬서,
+    # 이게 없으면 dsr_msgs2 같은 패키지가 CMake 단계에서 미들웨어를 못 찾아 실패한다.
+    # ROS desktop 은 Fast-DDS 만 깔아 주므로 별도 패키지인 이것을 여기서 챙긴다.
     if ! dpkg -s "ros-${ROS_DISTRO}-rmw-cyclonedds-cpp" >/dev/null 2>&1; then
         sudo apt-get update
         sudo apt-get install -y "ros-${ROS_DISTRO}-rmw-cyclonedds-cpp"
@@ -299,27 +253,22 @@ app_colcon() {
 
     cd "${DSR_WORKSPACE}"
 
-    # rosdep: 워크스페이스 패키지들이 선언해 둔 의존성을 자동 설치 (init 은 a01 에서 이미 끝냄).
+    # rosdep 이 워크스페이스 패키지들의 선언된 의존성을 대신 깔아 준다(init 은 앞 설치에서 끝났다).
     rosdep update
-    # skip-keys 사유:
-    #   librealsense2                      — apt 로 까는 네이티브 SDK. ROS rosdep 키가 아니다.
-    #   message_generation/message_runtime — onrobot_rg_control/package.xml 의 ROS1 잔재. jazzy 에 해당
-    #                                        rosdep 규칙이 없어 그대로 두면 이 단계가 통째로 실패한다
-    #                                        (이 스크립트는 set -e). 실제 빌드에는 쓰이지 않는 키다.
-    # `-r`(오류 무시하고 계속)은 쓰지 않는다 — 모든 해결 실패를 삼켜 진짜 누락 의존까지 가린다.
+    # 건너뛰는 키: librealsense2 는 apt 로 직접 깐 네이티브 SDK 라 rosdep 키가 아니고,
+    # message_generation/message_runtime 은 그리퍼 패키지에 남은 ROS1 잔재라 jazzy 에 규칙이 없다 —
+    # 그대로 두면 실제로 쓰이지도 않는 키 때문에 이 단계가 통째로 실패한다.
+    # 오류를 무시하고 진행하는 `-r` 은 쓰지 않는다 — 진짜 누락된 의존성까지 함께 가려진다.
     rosdep install --from-paths src --ignore-src --rosdistro "${ROS_DISTRO}" \
         --skip-keys="librealsense2 message_generation message_runtime" -y
 
-    # colcon 빌드. object_detection(yolo)은 host 에서 실행 불가(torch 가 yolo 이미지 안에만) → --packages-skip.
-    # voice_processing 은 host 직접 실행이라 여기서 빌드(voice-host-install.sh 가 langchain/openwakeword 를
-    # host 에 깔아 둠 → console_script 의 system python 이 그대로 봄).
+    # object_detection 은 host 에서 못 돈다(torch 가 yolo 이미지 안에만 있다) → 빌드에서 뺀다.
+    # voice_processing 은 host 에서 그대로 실행되므로 여기서 함께 빌드한다.
     colcon build --packages-skip object_detection
 
-    # wakeword 모델이 설치 트리(install/)에 들어갔는지 확인.
-    # 런타임의 voice_processing 은 모델을 get_package_share_directory() 로 찾는다 — 소스 트리가 아니다.
-    # voice-host-install.sh 의 검증 게이트는 이 빌드보다 먼저 돌기 때문에 소스 경로만 볼 수 있다.
-    # 그래서 setup.py 의 data_files 가 resource/ 를 설치하지 않는 경우를 여기서만 잡을 수 있다.
-    # 안 잡으면 첫 `ros2 run voice_processing get_keyword` 에서야 드러난다.
+    # wakeword 모델이 빌드 산출물(install/)에도 들어갔는지 확인한다. 런타임은 소스 트리가 아니라
+    # 설치된 패키지 경로에서 모델을 찾고, 앞의 voice 단계는 소스 트리만 볼 수 있었다 — setup.py 가
+    # resource/ 를 설치하지 않는 경우를 잡을 수 있는 곳이 여기뿐이다.
     voice_share="${DSR_WORKSPACE}/install/voice_processing/share/voice_processing/resource"
     if [[ -d "${DSR_WORKSPACE}/install/voice_processing" ]] \
         && ! compgen -G "${voice_share}/*.tflite" >/dev/null; then
@@ -332,15 +281,15 @@ app_colcon() {
     echo "colcon-build: success building colcon workspace at ${DSR_WORKSPACE}"
 }
 
-# 컨테이너 안 CUDA 런타임은 PyTorch wheel 에 이미 포함돼 있으므로, 이 toolkit 은 host 드라이버
-# 라이브러리와 /dev/nvidia* 장치를 컨테이너에 주입하는 역할만 한다 — 없으면 yolo 컨테이너가 GPU 를 못 잡는다.
+# NVIDIA Container Toolkit 설치 + docker 에 nvidia runtime 등록.
+# 이 도구는 host 의 드라이버 라이브러리와 GPU 장치를 컨테이너 안으로 넣어 준다(CUDA 런타임 자체는
+# 이미 PyTorch wheel 안에 있다) — 없으면 yolo 컨테이너가 GPU 를 못 잡는다.
 app_toolkit() {
     local TOOLKIT_LIST=/etc/apt/sources.list.d/nvidia-container-toolkit.list
     local TOOLKIT_KEY="${KEYRING_DIR}/nvidia-container-toolkit.gpg"
 
-    # 0) 사전 조건 확인 — 드라이버·docker 없으면 크게 실패(fail-loud — 조용히 넘어가지 않고 바로 에러로 멈춰 반쪽 설치 방지).
-    #    SKIP_IF_NO_GPU=1 (install.sh 통합 흐름): GPU 없는 host 전용 머신 = toolkit 불필요 →
-    #    드라이버 없어도 에러 아닌 정상 skip 으로 취급(단계 = DONE 표시). 단독 실행 기본값 = fail-loud.
+    # 0) 사전 조건 — 드라이버나 docker 가 없으면 반쪽 설치로 넘어가지 않고 바로 멈춘다.
+    #    단 SKIP_IF_NO_GPU=1 이면 GPU 없는 머신으로 보고 에러가 아니라 정상 건너뛰기로 처리한다.
     if ! command -v nvidia-smi >/dev/null 2>&1; then
         if [[ "${SKIP_IF_NO_GPU:-0}" == "1" ]]; then
             echo "nvidia-toolkit: no nvidia-smi — treating as a GPU-less host-only configuration and skipping."
@@ -358,8 +307,7 @@ app_toolkit() {
     sudo apt-get update
     sudo apt-get install -y ca-certificates curl gnupg
 
-    # 2) 키링 + apt source 등록 (add_apt_repo — 원본 list 를 받아 signed-by 를 끼워 넣고, cat 으로 여러 줄 비교).
-    #    설치 직전 update 는 아래 3) 에서 하므로 여기선 --no-update.
+    # 2) 키링 + apt source 등록. 설치 직전 update 는 아래 3) 에서 하므로 여기선 --no-update.
     add_apt_repo --no-update \
         --mode dearmor --downloader curl --key-write gpg-o \
         --key-url "https://nvidia.github.io/libnvidia-container/gpgkey" --key-file "${TOOLKIT_KEY}" \
@@ -372,11 +320,10 @@ app_toolkit() {
     sudo apt-get update
     sudo apt-get install -y nvidia-container-toolkit
 
-    # 4) docker runtime 등록 (멱등 — nvidia-ctk 가 /etc/docker/daemon.json 갱신).
+    # 4) docker 에 nvidia runtime 등록 — nvidia-ctk 가 /etc/docker/daemon.json 을 갱신한다.
     sudo nvidia-ctk runtime configure --runtime=docker
 
-    # 5) runtime 적용 — daemon.json 변경 = docker 재시작 후에야 반영. 이미 적용돼 있으면 재시작 skip.
-    #    docker 데몬 재시작 = 되돌릴 수 없는 작업 → 명시적 동의 필요(ASSUME_YES=1 로 자동화 가능).
+    # 5) 그 변경은 docker 재시작 후에야 반영된다. 재시작은 돌던 컨테이너를 멈추므로 동의를 받는다.
     if docker info --format '{{json .Runtimes}}' 2>/dev/null | grep -q '"nvidia"'; then
         echo "nvidia-toolkit: the nvidia runtime is already registered with docker (skipping restart)."
     else
