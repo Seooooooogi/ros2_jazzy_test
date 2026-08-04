@@ -268,19 +268,19 @@ do_reset() {
 do_workspace() {
     step "cobot2 source (verify)"; obtain_cobot2   # 빠른 확인 — 콘솔에 그대로 표시(로그로 안 보냄)
     step "m0609 bringup + onrobot-ros2"; obtain_m0609
-    run "doosan-robot2 driver + DSR deps" bash "${RESOURCE_DIR}/dsr-project-install.sh"
-    run "RealSense SDK"                   bash "${RESOURCE_DIR}/realsense-install.sh" sdk
-    run "RealSense ROS2 wrapper"          bash "${RESOURCE_DIR}/realsense-install.sh" ros
+    run "doosan-robot2 driver + DSR deps" bash "${RESOURCE_DIR}/app-install.sh" dsr
+    run "RealSense SDK"                   bash "${RESOURCE_DIR}/app-install.sh" realsense-sdk
+    run "RealSense ROS2 wrapper"          bash "${RESOURCE_DIR}/app-install.sh" realsense-ros
     # voice-host: colcon 앞에 둠 — obtain_cobot2 뒤라 wakeword 모델이 있어 import 게이트가 돌고,
     # colcon 이 voice_processing 을 system python 으로 빌드하면 그 shebang 이 여기서 깐 deps 를 본다.
-    run "host voice Python (direct)"      bash "${RESOURCE_DIR}/voice-host-install.sh"
-    run "colcon build"                    bash "${RESOURCE_DIR}/colcon-build.sh"
+    run "host voice Python (direct)"      bash "${RESOURCE_DIR}/app-install.sh" voice
+    run "colcon build"                    bash "${RESOURCE_DIR}/app-install.sh" colcon
     # OPENAI_API_KEY 는 인스톨러가 다루지 않음 — voice_processing 노드가 자기 패키지 resource/.env
     # (colcon 빌드 내장)를 직접 읽는다. 사용자가 별도 안내에 따라 그 위치에 직접 배치.
 }
 
 do_containers() {
-    run "NVIDIA Container Toolkit" env ASSUME_YES=1 SKIP_IF_NO_GPU=1 bash "${RESOURCE_DIR}/nvidia-container-toolkit-install.sh"
+    run "NVIDIA Container Toolkit" env ASSUME_YES=1 SKIP_IF_NO_GPU=1 bash "${RESOURCE_DIR}/app-install.sh" toolkit
     # yolo 이미지만 빌드(voice 는 host 실행 — do_workspace 참조). ROS_DOMAIN_ID 은 묻지도 주입하지도
     # 않음 — 학생이 자기 ~/.bashrc 에 `export ROS_DOMAIN_ID=<n>`(학습 과제). 안 하면 기본 0 이라 host↔컨테이너 일치.
     run "build container image (yolo dev-builder)" bash "${SCRIPT_DIR}/containers/build-all.sh"
