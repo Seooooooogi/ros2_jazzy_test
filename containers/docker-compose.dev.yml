@@ -37,8 +37,14 @@ services:
       - yolo_build:/ws/build
       - yolo_install:/ws/install
       - ./dev/bashrc:/root/.bashrc:ro
+      # 컨테이너 안 YOLO 학습 작업 디렉토리 — 데이터셋과 ultralytics runs/ 산출물을 host 에
+      # 직접 쓰게 해 compose down 후에도 보존. 소스 트리(/ws/src)에 데이터셋을 섞지 않기 위한 분리.
+      - ${YOLO_TRAIN_DIR:-${HOME}/yolo_train}:/train
     # $$ROS_DISTRO — compose 가 $ 한 개로 축약해 컨테이너 안 bash 가 런타임에 확장(이미지 ENV=jazzy).
     command: ["bash", "-c", "set +u; source /opt/ros/$$ROS_DISTRO/setup.bash; find /ws/build /ws/install -mindepth 1 -delete 2>/dev/null || true; colcon build --symlink-install --merge-install; sleep infinity"]
+    # 컨테이너 안 YOLO 학습용 — PyTorch DataLoader worker 가 배치를 /dev/shm 로 주고받는데
+    # Docker 기본 64MB 로는 worker 가 죽는다. 상한 캡이라 실사용분만 RAM 점유(추론 시 무비용).
+    shm_size: "8gb"
     restart: "no"
 
 # colcon 빌드 산출물 영속화 — /ws/build·/ws/install 을 named volume 에 둬 컨테이너 재생성(down→up)
