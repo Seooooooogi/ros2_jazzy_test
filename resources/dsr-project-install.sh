@@ -8,8 +8,9 @@
 # resources/dsr-project-install.sh — Doosan DSR(doosan-robot2) 드라이버 clone + 의존성 + 에뮬레이터 설치.
 #
 # backup/dsr-project-install{,_25}.sh 를 jazzy 로 옮기고 멱등(여러 번 실행해도 결과 동일)하게 만든 버전.
-#   - ROKEY-SPARK fork 의 기본 브랜치(main = 버전 고정한 jazzy 스냅샷)를 clone. 이미 clone 돼 있으면
-#     건너뜀(재현성 — git pull 안 함). fork 가 버전을 핀(고정)해 두어 upstream 이 push 해도 흔들리지 않음.
+#   - ROKEY-SPARK fork 를 clone 한 뒤 DSR_COMMIT(config.sh) 으로 detach — fork main 은 동결본이
+#     아니라 우리가 호환 패치를 얹는 곳이라 브랜치만으론 리비전이 고정되지 않는다. 이미 clone 돼
+#     있으면 건너뜀(재현성 — git pull 안 함, 작업본 보호). 핀과 어긋나면 경고만 낸다.
 #   - 워크스페이스 = ${DSR_WORKSPACE}(=~/cobot2_ws). 이 스크립트 = DSR 드라이버만 설치, doosan-robot2 는
 #     ${DSR_WORKSPACE}/src 로 clone 됨. cobot2 앱 소스는 이 레포가 미제공 — 사용자가
 #     ${DSR_WORKSPACE}/src/cobot2 에 직접 배치(setup-app.sh 가 colcon 빌드 전에 존재 확인).
@@ -26,11 +27,8 @@ source "${SCRIPT_DIR}/config.sh"
 config_assert_set
 
 WS_SRC="${DSR_WORKSPACE}/src"
-# 소스 고정(pin): upstream doosan-robotics/doosan-robot2 대신 ROKEY-SPARK fork 사용. fork 의
-# 기본 브랜치(main)가 검증된 jazzy 스냅샷(upstream jazzy commit 816ecb5d) — 버전을 고정해서
-# upstream 이 push 해도 설치가 흔들리지 않음, upstream 이 force-push/삭제해도 살아남음.
-DSR_REPO_URL="https://github.com/ROKEY-SPARK/doosan-robot2_jazzy.git"
-
+# 소스는 upstream doosan-robotics/doosan-robot2 가 아니라 ROKEY-SPARK fork 를 쓴다 — upstream 이
+# force-push/삭제해도 살아남고, 호환 패치를 얹을 수 있기 때문. 리비전 핀(DSR_COMMIT)은 config.sh.
 
 # 1) 워크스페이스 src 디렉토리.
 mkdir -p "${WS_SRC}"
@@ -38,34 +36,23 @@ mkdir -p "${WS_SRC}"
 # 2) doosan-robot2 clone (멱등 — .git 이 있으면 건너뜀).
 if [[ -d "${WS_SRC}/doosan-robot2/.git" ]]; then
     echo "dsr: doosan-robot2 already cloned (skip)"
+    # 기존 작업본은 checkout 으로 덮어쓰지 않는다 — 개발 중 변경을 날리지 않기 위함(cobot2 / M0609 와
+    # 같은 원칙). 다만 핀과 어긋나면 알린다: 머신마다 다른 리비전으로 빌드되는 상태를 조용히 넘기면
+    # "저 머신에선 되는데" 를 추적할 방법이 없어진다.
+    DSR_HEAD="$(git -C "${WS_SRC}/doosan-robot2" rev-parse HEAD)"
+    if [[ "${DSR_HEAD}" != "${DSR_COMMIT}" ]]; then
+        echo "dsr: warning — 기존 clone 이 핀과 다름 (${DSR_HEAD:0:8} != ${DSR_COMMIT:0:8})" >&2
+        echo "dsr:           핀에 맞추려면: git -C ${WS_SRC}/doosan-robot2 checkout --detach ${DSR_COMMIT}" >&2
+    fi
 else
-    # fork 의 기본 브랜치(main = 버전 고정한 jazzy 스냅샷)를 clone. fork 에는 'jazzy' 브랜치가 없으므로
-    # -b "${DSR_BRANCH}" 를 주면 안 됨("Remote branch not found" 로 실패).
+    # fork 에는 'jazzy' 브랜치가 없으므로 -b "${DSR_BRANCH}" 를 주면 안 됨("Remote branch not found").
+    # 기본 브랜치로 받은 뒤 핀 커밋으로 detach — fork main 에 커밋이 얹혀도 설치 결과가 안 흔들린다.
     git clone "${DSR_REPO_URL}" "${WS_SRC}/doosan-robot2"
+    git -C "${WS_SRC}/doosan-robot2" checkout --detach "${DSR_COMMIT}"
 fi
 
-# 2b) doosan-robot2 (jazzy) 소스 호환 패치 — DSR_ROBOT2.py 의 이름 불일치 2곳 수정(이 distro clone 대상).
-#     둘 다 멱등(이미 올바르면 아무 것도 안 함) → 다시 실행하거나 다시 clone 해도 안전.
-DSR_IMP_PY="${WS_SRC}/doosan-robot2/dsr_common2/imp/DSR_ROBOT2.py"
-if [[ -f "${DSR_IMP_PY}" ]]; then
-    # (1) 존재하지 않는 서비스 클래스 'SetSingularityHandlingForce'(Singular+ity)를 참조하고 있어서 →
-    #     모듈을 로드하는 순간 NameError 가 나고 `import DSR_ROBOT2` 자체가 깨짐. dsr_msgs2 가 실제로 만드는
-    #     클래스 이름 'SetSingularHandlingForce'(Singular)에 맞춤.
-    if grep -q 'SetSingularityHandlingForce' "${DSR_IMP_PY}"; then
-        sed -i 's/SetSingularityHandlingForce/SetSingularHandlingForce/g' "${DSR_IMP_PY}"
-        echo "dsr: patched DSR_ROBOT2.py service class name (SetSingularityHandlingForce → SetSingularHandlingForce)"
-    fi
-    # (2) 서비스/토픽 이름 prefix 가 비어('') 있어서, 클라이언트는 '/<ns>/aux_control/...' 를 부르는데
-    #     실제 컨트롤러(dsr_controller2)는 '/<ns>/dsr_controller2/...' 를 광고(advertise).
-    #     → 그 이름의 서버가 없어서 get_current_posj 같은 호출이 영원히 대기. prefix 에 'dsr_controller2/' 를 채워
-    #     클라이언트가 진짜 서버를 향하게 함(모듈 레벨만; 들여쓴 클래스 안쪽 버전은 미변경).
-    if grep -qE "^_srv_name_prefix[[:space:]]*=[[:space:]]*''" "${DSR_IMP_PY}"; then
-        sed -i -E "s|^_srv_name_prefix([[:space:]]*)=[[:space:]]*''|_srv_name_prefix\1= 'dsr_controller2/'|" "${DSR_IMP_PY}"
-        echo "dsr: patched DSR_ROBOT2.py service prefix ('' → 'dsr_controller2/')"
-    fi
-else
-    echo "dsr: DSR_ROBOT2.py missing — patch skipped (verify the clone)" >&2
-fi
+# DSR_ROBOT2.py 호환 패치(서비스 클래스명 SetSingular[ity]HandlingForce, _srv_name_prefix)는
+# 여기서 sed 로 하지 않는다 — fork 커밋 f1118a1 이 이미 반영본이라 이 스크립트의 패치는 항상 no-op 였다.
 
 # cobot2 앱 소스는 여기에 미러링 안 함 — 이 레포는 더 이상 미제공. 사용자가
 # ${WS_SRC}/cobot2 에 직접 배치; setup-app.sh 가 colcon-build.sh 를 부르기 전에 존재 확인(없으면 곧바로 실패).

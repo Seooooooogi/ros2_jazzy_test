@@ -48,6 +48,12 @@ export ROS2_JAZZY_TEST_REPO
 : "${DSR_EMULATOR_VERSION:=3.0.1}"
 : "${DSR_WORKSPACE:=${HOME}/cobot2_ws}"
 
+# doosan-robot2 = ROKEY-SPARK fork. 브랜치가 아니라 커밋으로 핀 — fork main 은 동결본이 아니라
+# 우리가 커밋을 얹는 곳이라(호환 패치 등), 기본 브랜치를 그대로 받으면 설치 시점마다 다른
+# 리비전이 깔리고 어느 머신이 무엇으로 빌드됐는지 추적할 수 없다. ONROBOT_COMMIT 과 같은 방식.
+: "${DSR_REPO_URL:=https://github.com/ROKEY-SPARK/doosan-robot2_jazzy.git}"
+: "${DSR_COMMIT:=31750d68ed2855c780a8169c39aadb0a2cd80e1f}"
+
 # --- M0609 + RG2 통합 bringup ------------------------------------------
 # 로봇 드라이버 · 그리퍼 · RealSense 브라켓을 한 URDF / 한 launch 로 올리는 패키지.
 # containers/bringup.sh 의 진입점이 이 launch 다 (구 cobot2_bringup 대체).
