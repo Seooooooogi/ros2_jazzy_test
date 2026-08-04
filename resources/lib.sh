@@ -111,12 +111,13 @@ step_should_skip() {
 step_begin() {
     local n="$1" total="$2" name="$3"
     __current_step="$name"
-    _state_ensure_file
     echo
     echo "============================================================"
     echo "[${n}/${total}] step: ${name}"
     echo "============================================================"
+    # STEP_STATE=0 이면 state 파일을 만들지도, 기록하지도 않는다(setup-app.sh 전용 경로).
     if [[ "${STEP_STATE}" == 1 ]]; then
+        _state_ensure_file
         _state_set "${name}" RUNNING
     fi
 }

@@ -87,76 +87,15 @@ print_copyright
 TOTAL=0
 [[ ${DO_WORKSPACE} -eq 1 ]] && TOTAL=$(( TOTAL + 7 ))   # 7개: cobot2 확인 + m0609/onrobot + dsr + rs-sdk + rs-ros + voice-host + colcon
 [[ ${DO_CONTAINERS} -eq 1 ]] && TOTAL=$(( TOTAL + 2 ))  # 2개: toolkit + yolo image
-STEP_N=0
-#######################################
-# 단계 배너 출력 + 단계 카운터 1 증가.
-# install.sh 와 같은 [n/total] 틀 포맷 사용.
-# Globals:
-#   STEP_N (1 증가), TOTAL (읽기)
-# Arguments:
-#   $* - 단계 이름(배너에 표시)
-#######################################
-step() {
-    STEP_N=$(( STEP_N + 1 ))
-    echo
-    echo "============================================================"
-    echo "[${STEP_N}/${TOTAL}] ${*}"
-    echo "============================================================"
-}
 
-#######################################
-# 라우팅된 단계가 도는 동안 "살아있음" 신호(heartbeat)를 화면에 표시.
-# 콘솔이 조용해서 멈춘 것처럼 보이는 것 방지. 첫 출력은 2초 지연 —
-# 단계 시작 때 뜨는 sudo 비밀번호 프롬프트(/dev/tty 사용) 덮어쓰기 방지.
-# Arguments:
-#   $1 - 단계 이름(경과 시간과 함께 표시)
-# Outputs:
-#   stderr 에 같은 줄을 갱신하며 진행 표시(캐리지 리턴 사용)
-#######################################
-_hb() {
-    local name="$1" start="$SECONDS" e
-    while :; do
-        sleep 2
-        e=$(( SECONDS - start ))
-        printf '\r  ⋯ %s (%02d:%02d)\033[K' "$name" $(( e / 60 )) $(( e % 60 )) >&2
-    done
-}
+# 컨테이너만 돌 때는 워크스페이스 7단계가 빠지므로 번호를 앞으로 당긴다.
+STEP_OFF=0
+[[ ${DO_WORKSPACE} -eq 1 ]] || STEP_OFF=-7
 
-#######################################
-# 단계 배너 찍고 명령 실행. 상세 출력은 로그로,
-# 콘솔에는 배너 + heartbeat 만 남김. VERBOSE=1 / --verbose 면
-# 상세 출력을 콘솔에도 함께(tee) 표시.
-# 실패하면 [FAIL] 한 줄 + 로그 경로 찍고 종료.
-# (대화형·짧은 단계는 run 대신 step 을 직접 호출.)
-# Globals:
-#   VERBOSE, LOG (읽기)
-# Arguments:
-#   $1  - 단계 라벨
-#   $2… - 실행할 명령과 인자
-# Returns:
-#   명령이 실패하면 그 종료코드로 스크립트를 종료
-#######################################
-run() {
-    local label="$1"; shift
-    step "${label}"
-    { echo; echo "===== setup-app: ${label} — $(date '+%F %T') ====="; } >>"${LOG}"
-    local rc=0 hb=""
-    if [[ "${VERBOSE}" == 1 ]]; then
-        set +e; "$@" 2>&1 | tee -a "${LOG}"; rc=${PIPESTATUS[0]}; set -e
-    else
-        if [[ -t 2 ]]; then _hb "${label}" & hb=$!; fi
-        "$@" >>"${LOG}" 2>&1 || rc=$?
-        if [[ -n "${hb}" ]]; then
-            kill "${hb}" 2>/dev/null || true
-            wait "${hb}" 2>/dev/null || true
-            printf '\r\033[K' >&2
-        fi
-    fi
-    if [[ ${rc} -ne 0 ]]; then
-        echo "[setup-app] FAILED: ${label} (rc=${rc}) — see ${LOG}" >&2
-        exit "${rc}"
-    fi
-}
+# setup-app 은 재개 개념이 없다 — 단계 결과를 state 에 남기지 않고 배너와 로그만 쓴다.
+STEP_STATE=0
+STEPS_TOTAL="${TOTAL}"
+LOG_FILE="${LOG}"
 
 #######################################
 # cobot2 애플리케이션 소스를 ${DSR_WORKSPACE}/src/cobot2 로 가져옴.
@@ -266,24 +205,25 @@ do_reset() {
 }
 
 do_workspace() {
-    step "cobot2 source (verify)"; obtain_cobot2   # 빠른 확인 — 콘솔에 그대로 표시(로그로 안 보냄)
-    step "m0609 bringup + onrobot-ros2"; obtain_m0609
-    run "doosan-robot2 driver + DSR deps" bash "${RESOURCE_DIR}/app-install.sh" dsr
-    run "RealSense SDK"                   bash "${RESOURCE_DIR}/app-install.sh" realsense-sdk
-    run "RealSense ROS2 wrapper"          bash "${RESOURCE_DIR}/app-install.sh" realsense-ros
+    # 빠른 확인 두 개는 run_step 대신 step_begin/step_end 로 — 출력을 로그로 돌리지 않고 콘솔에 그대로 표시.
+    step_begin 1 "${TOTAL}" "cobot2 source (verify)"; obtain_cobot2; step_end DONE
+    step_begin 2 "${TOTAL}" "m0609 bringup + onrobot-ros2"; obtain_m0609; step_end DONE
+    run_step 3 "doosan-robot2 driver + DSR deps" bash "${RESOURCE_DIR}/app-install.sh" dsr
+    run_step 4 "RealSense SDK"                   bash "${RESOURCE_DIR}/app-install.sh" realsense-sdk
+    run_step 5 "RealSense ROS2 wrapper"          bash "${RESOURCE_DIR}/app-install.sh" realsense-ros
     # voice-host: colcon 앞에 둠 — obtain_cobot2 뒤라 wakeword 모델이 있어 import 게이트가 돌고,
     # colcon 이 voice_processing 을 system python 으로 빌드하면 그 shebang 이 여기서 깐 deps 를 본다.
-    run "host voice Python (direct)"      bash "${RESOURCE_DIR}/app-install.sh" voice
-    run "colcon build"                    bash "${RESOURCE_DIR}/app-install.sh" colcon
+    run_step 6 "host voice Python (direct)"      bash "${RESOURCE_DIR}/app-install.sh" voice
+    run_step 7 "colcon build"                    bash "${RESOURCE_DIR}/app-install.sh" colcon
     # OPENAI_API_KEY 는 인스톨러가 다루지 않음 — voice_processing 노드가 자기 패키지 resource/.env
     # (colcon 빌드 내장)를 직접 읽는다. 사용자가 별도 안내에 따라 그 위치에 직접 배치.
 }
 
 do_containers() {
-    run "NVIDIA Container Toolkit" env ASSUME_YES=1 SKIP_IF_NO_GPU=1 bash "${RESOURCE_DIR}/app-install.sh" toolkit
+    run_step $((8 + STEP_OFF)) "NVIDIA Container Toolkit" env ASSUME_YES=1 SKIP_IF_NO_GPU=1 bash "${RESOURCE_DIR}/app-install.sh" toolkit
     # yolo 이미지만 빌드(voice 는 host 실행 — do_workspace 참조). ROS_DOMAIN_ID 은 묻지도 주입하지도
     # 않음 — 학생이 자기 ~/.bashrc 에 `export ROS_DOMAIN_ID=<n>`(학습 과제). 안 하면 기본 0 이라 host↔컨테이너 일치.
-    run "build container image (yolo dev-builder)" bash "${SCRIPT_DIR}/containers/build-all.sh"
+    run_step $((9 + STEP_OFF)) "build container image (yolo dev-builder)" bash "${SCRIPT_DIR}/containers/build-all.sh"
 }
 
 echo "[setup-app] workspace=${DSR_WORKSPACE} | workspace:$([[ ${DO_WORKSPACE} -eq 1 ]] && echo on || echo off) containers:$([[ ${DO_CONTAINERS} -eq 1 ]] && echo on || echo off)$([[ ${RESET} -eq 1 ]] && echo ' | reset')"
