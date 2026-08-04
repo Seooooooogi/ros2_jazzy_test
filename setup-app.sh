@@ -83,7 +83,7 @@ STEP_OFF=0
 [[ ${DO_WORKSPACE} -eq 1 ]] || STEP_OFF=-7
 
 # setup-app 은 재개 개념이 없다 — 단계 결과를 state 에 남기지 않고 배너와 로그만 쓴다.
-# 이 아래 run_step/step_begin 호출은 두 번째 인자로 "cobot2 source (verify)" 같은 사람이 읽는
+# 이 아래 run_step/step_begin 호출은 단계 이름 자리에 "cobot2 source (verify)" 같은 사람이 읽는
 # 문구를 쓴다 — install.sh 의 state 키(a01_docker 같은 식별자)와 달리 공백·괄호가 그대로 들어간다.
 # 이 값은 STEP_STATE=1 일 때만 state 파일 기록/조회에 쓰이는데(_state_set 의 grep -qE / sed -i),
 # 그때는 괄호가 정규식 그룹으로 해석돼 깨진다. 여길 1로 켜려면 라벨을 전부 state-safe 키로 먼저 바꿔야 한다.
