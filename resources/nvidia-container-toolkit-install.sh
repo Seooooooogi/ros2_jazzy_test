@@ -22,11 +22,9 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=./config.sh
 source "${SCRIPT_DIR}/config.sh"
-# confirm_or_abort_assumable = interaction.sh 소재(docker 재시작 동의 받는 함수).
-# shellcheck source=./interaction.sh
-source "${SCRIPT_DIR}/interaction.sh"
-# shellcheck source=./apt-repo.sh
-source "${SCRIPT_DIR}/apt-repo.sh"
+# confirm_or_abort_assumable = lib.sh 소재(docker 재시작 동의 받는 함수).
+# shellcheck source=./lib.sh
+source "${SCRIPT_DIR}/lib.sh"
 config_assert_set
 
 TOOLKIT_LIST=/etc/apt/sources.list.d/nvidia-container-toolkit.list

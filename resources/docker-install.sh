@@ -17,8 +17,8 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=./config.sh
 source "${SCRIPT_DIR}/config.sh"
-# shellcheck source=./apt-repo.sh
-source "${SCRIPT_DIR}/apt-repo.sh"
+# shellcheck source=./lib.sh
+source "${SCRIPT_DIR}/lib.sh"
 config_assert_set
 
 DOCKER_LIST=/etc/apt/sources.list.d/docker.list

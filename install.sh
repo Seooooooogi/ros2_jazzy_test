@@ -40,10 +40,8 @@ fi
 # 단계 엔진(state + run_step + 단계 정의) + 설치 UX(confirm + env 로드 + 자동 재개).
 # shellcheck source=resources/config.sh
 source "${RESOURCE_DIR}/config.sh"
-# shellcheck source=resources/orchestrate.sh
-source "${RESOURCE_DIR}/orchestrate.sh"
-# shellcheck source=resources/interaction.sh
-source "${RESOURCE_DIR}/interaction.sh"
+# shellcheck source=resources/lib.sh
+source "${RESOURCE_DIR}/lib.sh"
 config_assert_set
 STEPS_TOTAL="$(install_steps_total)"
 
@@ -77,20 +75,8 @@ output on the console.
 EOF
 }
 
-# 프로젝트 저작권 배너 — 실제 설치 실행 때마다 콘솔에 출력. step 6 reboot 이후 자동 재개된
-# 터미널에서도 출력되므로 저작권 표기 항상 노출. 무조건 stdout 으로 나감. 단계별 출력이 아니라서
-# 로그 라우팅/조용한 콘솔 규칙(진행률만 표시) 여기엔 미적용.
-print_copyright() {
-    cat <<'EOF'
-============================================================
- Cobot2 Jazzy Installer
- Copyright (c) 2026 ROKEY bootcamp. All rights reserved.
-============================================================
-EOF
-}
-
 # --verbose/-v 는 서브커맨드와 직교(independent — 서로 영향 없음) → 먼저 VERBOSE 로 분리, 나머지 인자만 남김.
-# orchestrate.sh 의 run_step 은 같은 셸에서 VERBOSE 를 읽음(export 는 하위 resource 스크립트용).
+# lib.sh 의 run_step 은 같은 셸에서 VERBOSE 를 읽음(export 는 하위 resource 스크립트용).
 VERBOSE="${VERBOSE:-0}"
 # --no-nvidia-driver 도 서브커맨드와 직교하는 modifier → 여기서 분리(스트립 후 --status/--reset/빈
 # 서브커맨드 판정 그대로). 드라이버가 이미 별도 설치됐다고 상정하고 nvidia 단계만 건너뜀(비타깃 머신).
@@ -142,7 +128,7 @@ if [[ "$host_codename" != "$UBUNTU_CODENAME" ]]; then
     exit 1
 fi
 # sudo 비밀번호 처음에 한 번 받고 keepalive 시작(60초마다 캐시 갱신 → 긴 단계나 자동 재개
-# 흐름에서 다시 안 묻게 함). resources/interaction.sh 를 통해 setup-app.sh 와 공유.
+# 흐름에서 다시 안 묻게 함). resources/lib.sh 를 통해 setup-app.sh 와 공유.
 sudo_prime install
 
 # 하위 본문 안에서 예상치 못한 실패가 난 위치를 확실히 알림(run_step 의 step_end_fail 과는 별개).
@@ -180,7 +166,7 @@ if ! step_should_skip a01_reboot; then
     # reboot 동의는 위의 시작 confirm 에서 이미 받음(tty 실행) — 다시 안 물음. 비대화 첫 실행은
     # 그 confirm 을 경고를 로그에 남기고 건너뛴 뒤, 여기서 자동으로 진행.
     echo "[install] prerequisites (kernel/driver/Docker/ROS2) complete — rebooting to apply the driver and docker group."
-    step_end_ok
+    step_end DONE
     echo
     echo ">>> Rebooting. It auto-resumes on return (login) — no manual run needed."
     sudo reboot

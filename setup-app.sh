@@ -29,8 +29,8 @@ RESOURCE_DIR="${SCRIPT_DIR}/resources"
 
 # shellcheck source=resources/config.sh
 source "${RESOURCE_DIR}/config.sh"
-# shellcheck source=resources/interaction.sh
-source "${RESOURCE_DIR}/interaction.sh"   # sudo_prime 제공
+# shellcheck source=resources/lib.sh
+source "${RESOURCE_DIR}/lib.sh"   # sudo_prime 제공
 config_assert_set
 
 # 단계별 상세 출력 = 여기로(install.sh 와 같은 install_log). --verbose 아니면 콘솔은 깔끔하게 유지.
@@ -59,16 +59,6 @@ setup-app.sh — set up the cobot2 application (workspace + containers) on top o
 The cobot2 application source is NOT shipped by this repo — place it at ${DSR_WORKSPACE}/src/cobot2 before running.
 The m0609 bringup repo is cloned to ${M0609_REPO_DIR} when missing (override M0609_REPO_DIR / M0609_REF),
 and only its m0609_rg2_bringup package is symlinked into ${DSR_WORKSPACE}/src.
-EOF
-}
-
-# 저작권 배너 — 실제 실행 시작할 때마다 콘솔에 출력(install.sh 와 동일).
-print_copyright() {
-    cat <<'EOF'
-============================================================
- Cobot2 Jazzy Installer
- Copyright (c) 2026 ROKEY bootcamp. All rights reserved.
-============================================================
 EOF
 }
 
