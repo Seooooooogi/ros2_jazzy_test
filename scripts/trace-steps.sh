@@ -38,46 +38,40 @@ for c in sudo apt-get apt-key add-apt-repository curl wget gpg nmcli rosdep colc
     chmod +x "${STUB}/${c}"
 done
 
-# 병합 후 레이아웃인지 병합 전 레이아웃인지는 새 파일 존재로 판별한다.
-if [[ -f "${REPO}/resources/base-install.sh" ]]; then
-    STEPS=(
-        "kernel|base-install.sh kernel"
-        "nvidia|base-install.sh nvidia"
-        "docker|base-install.sh docker"
-        "ros2_desktop|base-install.sh ros2-desktop"
-        "ros2_extras|base-install.sh ros2-extras"
-        "vscode|base-install.sh vscode"
-        "dds|hostcfg.sh dds"
-        "network|hostcfg.sh network"
-        "dsr|app-install.sh dsr"
-        "realsense_sdk|app-install.sh realsense-sdk"
-        "realsense_ros|app-install.sh realsense-ros"
-        "voice|app-install.sh voice"
-        "colcon|app-install.sh colcon"
-        "toolkit|app-install.sh toolkit"
-    )
-else
-    STEPS=(
-        "kernel|kernel-baseline.sh"
-        "nvidia|nvidia-driver-install.sh"
-        "docker|docker-install.sh"
-        "ros2_desktop|ros2-packages.sh desktop"
-        "ros2_extras|ros2-packages.sh extras"
-        "vscode|vscode-install.sh"
-        "dds|dds-tuning.sh"
-        "network|network-static-ip.sh"
-        "dsr|dsr-project-install.sh"
-        "realsense_sdk|realsense-install.sh sdk"
-        "realsense_ros|realsense-install.sh ros"
-        "voice|voice-host-install.sh"
-        "colcon|colcon-build.sh"
-        "toolkit|nvidia-container-toolkit-install.sh"
-    )
-fi
+# 18→6 병합은 태스크 여러 개에 걸쳐 순차로 일어난다(base-install.sh 는 Task 3,
+# app-install.sh 는 Task 4, hostcfg.sh 는 Task 5) — 그래서 레이아웃 판별을 전체 실행
+# 한 번이 아니라 스텝 단위로 한다. 각 항목이 신·구 명령을 둘 다 들고 있다가, 신 명령이
+# 가리키는 파일이 그 레포에 실제로 있으면 신 명령을, 없으면 구 명령을 쓴다. 이러면 병합이
+# 절반만 끝난 중간 상태에서도 아직 안 옮겨진 스텝은 구 파일로 계속 트레이스되어
+# "No such file or directory" 로 무너지지 않는다.
+STEPS=(
+    "kernel|base-install.sh kernel|kernel-baseline.sh"
+    "nvidia|base-install.sh nvidia|nvidia-driver-install.sh"
+    "docker|base-install.sh docker|docker-install.sh"
+    "ros2_desktop|base-install.sh ros2-desktop|ros2-packages.sh desktop"
+    "ros2_extras|base-install.sh ros2-extras|ros2-packages.sh extras"
+    "vscode|base-install.sh vscode|vscode-install.sh"
+    "dds|hostcfg.sh dds|dds-tuning.sh"
+    "network|hostcfg.sh network|network-static-ip.sh"
+    "dsr|app-install.sh dsr|dsr-project-install.sh"
+    "realsense_sdk|app-install.sh realsense-sdk|realsense-install.sh sdk"
+    "realsense_ros|app-install.sh realsense-ros|realsense-install.sh ros"
+    "voice|app-install.sh voice|voice-host-install.sh"
+    "colcon|app-install.sh colcon|colcon-build.sh"
+    "toolkit|app-install.sh toolkit|nvidia-container-toolkit-install.sh"
+)
 
 for entry in "${STEPS[@]}"; do
     name="${entry%%|*}"
-    cmd="${entry#*|}"
+    rest="${entry#*|}"
+    new_cmd="${rest%%|*}"
+    old_cmd="${rest#*|}"
+    new_file="${new_cmd%% *}"
+    if [[ -f "${REPO}/resources/${new_file}" ]]; then
+        cmd="${new_cmd}"
+    else
+        cmd="${old_cmd}"
+    fi
     rc=0
     # 레포 경로는 트레이스에 그대로 찍히므로 <REPO> 로 치환한다 — 두 worktree 경로가 다르기 때문.
     # stdin 은 /dev/null 로 고정 — 스텁의 `cat >/dev/null` 이 파이프가 아닌 단독 호출에서
