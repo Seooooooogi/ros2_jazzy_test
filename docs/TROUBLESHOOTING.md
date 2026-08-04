@@ -195,3 +195,34 @@ ros2 node info /img_node                         # 배선 누락 시 여기로 �
 - 노드·측정 셸 **모두** 같은 RMW + 같은 `CYCLONEDDS_URI` 를 export 해야 한다(쉘별 환경변수라 한 터미널의 export 가 다른 터미널로 전파 안 됨). 한쪽만 cyclonedds 면 topic 자체가 discovery 안 됨.
 - 검증: 노드 기동 로그에 `failed to increase socket ... buffer` 경고가 없어야 하고, 대용량 토픽 hz 는 작은 동반 토픽(`camera_info`)과 일치해야 한다(예: `color/image_raw` 30Hz ↔ `color/camera_info` 30Hz). `ros2 topic hz` 가 SIGTERM 으로 죽으면 파이프 버퍼가 유실되니 `stdbuf -oL ... | grep -m4 'average rate'` 로 받는다.
 - 주의: 대용량 토픽의 낮은 hz 가 항상 버퍼 문제는 아니다 — fastrtps + `ros2 topic hz`(rclpy 단일 스레드) 조합은 역직렬화가 publish 를 못 따라가 실제 30fps 여도 15Hz 안팎으로 출렁인다(측정 artifact). 작은 동반 토픽 hz 로 실제 프레임레이트를 교차검증할 것.
+
+---
+
+## `colcon build` 끝에 "2 packages had stderr output: dsr_controller2 dsr_hardware2" (정상 동작)
+
+**증상**: 빌드가 `Summary: 34 packages finished` 로 끝났는데 위 두 패키지에서 stderr 가 쏟아진다. CMake deprecation, `-Wdeprecated-declarations`, `-Wunused-variable` 등.
+
+**결론: 실패가 아니다.** colcon 은 stderr 로 나간 모든 것을 — 경고 포함 — 저 줄에 집계한다. 실패는 `N packages failed` 로 따로 표시된다. 이 목록이 없으면 빌드는 성공한 것이다.
+
+**경고 출처별 분류** (전부 우리 레포 밖):
+
+| 경고 | 출처 | 조치 |
+|---|---|---|
+| `tl_expected` CMake Deprecation | **ROS Jazzy 자체** (`/opt/ros/jazzy/share/tl_expected/`), `controller_manager`→`parameter_traits` 경유 | 없음. upstream ROS 가 다음 distro 전에 정리 |
+| `boost/bind.hpp` global placeholders | doosan `dsr_hw_interface2.cpp` 가 `<boost/thread/thread.hpp>` 를 include | 없음 |
+| `on_init(const HardwareInfo&)` deprecated | ros2_control 이 `on_init(HardwareComponentInterfaceParams&)` 로 이전 | **없음 — 단 다음 distro 마이그레이션 때 빌드 실패로 승격될 항목** |
+| `ManageAccessControl` / `GetRobotState` / `SetRobotMode` / `GetCurrentPose` / `PlayDrlPause` 등 deprecated | Doosan SDK(`DRFLEx.h`)가 자기 camelCase API 를 snake_case 로 이전 중인데 doosan 코드가 구 API 를 계속 호출 | 없음 |
+| `realtime_buffer.h` → `.hpp` | ros2_control `realtime_tools` 헤더 이름 변경 | 없음 |
+| `unused variable` / `set but not used` | doosan 소스 위생 | 없음 |
+
+**왜 고치지 않나**: clone 대상은 doosan 본가가 아니라 우리 쪽 fork(`ROKEY-SPARK/doosan-robot2_jazzy`)라 **고치는 것 자체는 가능하다**. 로컬 작업본 패치는 재clone·`--reset` 때 날아가지만 fork 에 커밋하면 남는다. 그럼에도 안 고치는 이유는 이득이 없어서다:
+
+- 위 표에서 기능에 영향 있는 항목이 **하나도 없다**. 전부 표시상의 노이즈.
+- `on_init` 만 미래 가치가 있는데, 새 시그니처(`HardwareComponentInterfaceParams`)는 ros2_control 의 **특정 버전 이후**에만 존재한다. 지금 갈아타면 apt `ros-jazzy-ros2-control` 이 더 오래된 머신에서 **빌드가 깨진다** — 경고보다 나쁜 실패 모드. 버전 분기(`#if`)로 양쪽을 지탱하는 건 경고 하나에 치르기엔 과한 값.
+- 컴파일러 플래그(`-Wno-deprecated-declarations`) 억제는 나중에 생길 **진짜** 경고까지 같이 가린다.
+
+(fork 커밋 `f1118a1` 의 `DSR_ROBOT2.py` 수정은 성격이 다르다 — 빌드/런타임이 실제로 깨지는 이름 불일치다.)
+
+**fork 을 고치기로 한다면**: 리비전 핀은 이미 걸려 있다 — `DSR_COMMIT`(`resources/config.sh`)이 clone 직후 detach 하는 SHA다. fork main 에 커밋을 얹은 뒤에는 **이 핀도 함께 올려야** 새 리비전이 설치에 반영된다. 핀을 안 올리면 fork 만 앞서가고 설치는 옛 커밋에 머문다(그게 의도된 기본값 — 설치 재현성이 fork 의 최신 상태보다 우선).
+
+**예방/모니터링**: `on_init` deprecation 만 추적 대상. jazzy → 다음 distro 마이그레이션 시 이 시그니처가 제거되면 `dsr_hardware2` 가 빌드 실패한다 — 그 시점에 fork 갱신이 선결 조건이 된다.
