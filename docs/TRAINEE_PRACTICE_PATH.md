@@ -25,7 +25,7 @@ docker-first 가 초급에 무리라는 판단에서, 하드웨어·GPU 작업�
 ## 공통 전제 (선행 — 이미 됐으면 skip)
 
 - base 환경: `bash install.sh` (kernel/NVIDIA/Docker/ROS2 + reboot + VS Code/DDS tuning/static IP, 9 step).
-- 애플리케이션: `bash setup-app.sh` (`~/cobot2_ws` 워크스페이스 + yolo 이미지 빌드 + host voice Python 설치 `app-install.sh voice`). voice 는 컨테이너 아님 — host 직접 실행(ADR-027). OPENAI 키는 사용자가 `~/.config/cobot2/.env` 직접 생성(ADR-028).
+- 애플리케이션: `bash setup-app.sh` (`~/cobot2_ws` 워크스페이스 + yolo 이미지 빌드 + host voice Python 설치 `app-install.sh voice`). voice 는 컨테이너 아님 — host 직접 실행(ADR-027). OPENAI 키는 인스톨러가 다루지 않는다 — 사용자가 `voice_processing` 패키지의 `resource/.env` 에 직접 배치(colcon 빌드 내장, 노드가 `load_dotenv` 로 로드).
 - corecode 위치: `~/corecode` (사용자가 corecode.zip 을 홈에 풀어 배치). 레포엔 미포함(ADR-029). **인스톨러는 이 배치를 확인하지 않는다** — 튜토리얼 전용 아티팩트라 base 설치의 검증 대상이 아니다(구 install.sh 배치 확인 단계는 폐기).
 - DDS: `resources/hostcfg.sh dds` 완료 (`~/.config/cyclonedds/cyclonedds.xml` — 컨테이너가 read-only mount).
 
@@ -94,7 +94,7 @@ docker-first 가 초급에 무리라는 판단에서, 하드웨어·GPU 작업�
 - **실행 순서**:
   1. `python3 mic_test.py` — 마이크 캡처 확인 (host `/dev/snd` + apt `libportaudio2`)
   2. `python3 wakeup_word.py` — wakeword 감지 (`hello_rokey_8332_32.tflite` corecode 동봉, `MODEL_NAME` 상대경로라 이 디렉토리서 실행)
-  3. `python3 STT.py` — 녹음 → OpenAI whisper (`OPENAI_API_KEY` 를 환경에 export — corecode 스크립트는 자체 dotenv 사용. 통합 cobot2 voice 노드는 `~/.config/cobot2/.env` 사용, ADR-028)
+  3. `python3 STT.py` — 녹음 → OpenAI whisper (`OPENAI_API_KEY` 를 환경에 export — corecode 스크립트는 자체 dotenv 사용. 통합 cobot2 voice 노드는 자기 패키지의 `resource/.env` 를 `load_dotenv` 로 사용)
   4. `python3 keyword_extraction.py` — langchain LLM 키워드 추출 (수정 후)
 - **핵심 교훈**: pyaudio/sounddevice 가 요구하는 **PortAudio(system C 라이브러리)** + 마이크 `/dev/snd` 는 **host-native** 라, 컨테이너로 감싸면 `asound.conf`·ALSA passthrough 를 머신마다 맞춰야 해 깨지기 쉽다 → voice 는 host 직접 실행이 정답(ADR-027). host 는 apt `portaudio19-dev`/`libportaudio2` + system pip 로 그 경계를 자연스럽게 넘는다.
 - **gotcha**: `wakeup_word.py` 는 `ament_index_python`(ROS2)도 import — host 에서 `source /opt/ros/jazzy/setup.bash` 후 실행해야 ROS overlay 가 보인다.

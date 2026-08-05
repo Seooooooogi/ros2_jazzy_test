@@ -14,9 +14,9 @@
 | **Python 책임** | 앱 라이브러리(torch/langchain/openai)를 **host 설치** | yolo 앱 Python 은 **컨테이너 안**, voice 앱 Python 은 **host 설치**(마이크 하드웨어 종속, ADR-027), robot_control 은 system Python+colcon | yolo=컨테이너 / voice=host pip 로 분리 서술 |
 | **실행 모델** | pick_and_place 3-패키지를 **host 노드**로 직접 | `object_detection` = **Docker 컨테이너**, `voice_processing`·`robot_control` = **host**(voice 는 ADR-027 로 host 환원) | 실행 섹션 재작성 |
 | **CUDA** | `/usr/local/cuda-12.4` host PATH | **12.8**, yolo **컨테이너 안**에만(host 미설치) | bashrc CUDA 줄 삭제 |
-| **OPENAI key** | `corecode/VoiceProcessing/.env` | 사용자가 `~/.config/cobot2/.env` 직접 생성 → host voice 노드가 로드(ADR-028) | 위치 갱신·인스톨러 자동생성 없음 |
-| **ROS_DOMAIN_ID** | `99` 하드코딩(화이트보드 조번호) | `setup-app` 이 prompt(기본 **42**), XDG 파일 영속 | 하드코딩 서술 삭제 |
-| **`.bashrc`** | 수동 편집(source/PATH/alias) | dds-tuning 이 관리 블록 자동 주입 | 수동 편집 절차 삭제 |
+| **OPENAI key** | `corecode/VoiceProcessing/.env` | 사용자가 `voice_processing` 패키지의 `resource/.env` 에 직접 배치 → 노드가 `load_dotenv` 로 로드(colcon 빌드 내장) | 위치 갱신·인스톨러는 키를 다루지 않음 |
+| **ROS_DOMAIN_ID** | `99` 하드코딩(화이트보드 조번호) | 인스톨러가 묻지도 주입하지도 않음 — 학생이 자기 `~/.bashrc` 에 직접 export(연습 과제). 아무 데도 설정 안 하면 ROS2 기본값 **0** | 하드코딩 서술 → 학생 직접 export 로 교체 |
+| **`.bashrc`** | 수동 편집(source/PATH/alias) | `hostcfg.sh dds` 가 관리 블록 자동 주입(`RMW_IMPLEMENTATION`/`CYCLONEDDS_URI` — 도메인은 제외) | 수동 편집 절차 삭제(도메인 export 는 예외로 유지) |
 | **Docker** | 별도 "이론" 섹션(외부 링크) | **런타임 그 자체**(빌드/compose/bringup) | 이론→실습 워크플로로 승격 |
 
 ---
@@ -32,8 +32,8 @@
 **After**
 - 단일 진입: `bash install.sh`(base 10 step, confirm 1회 후 자동, step 6 자동 reboot 후 GUI autostart 재개) → `bash setup-app.sh`(workspace + yolo 컨테이너 + host voice Python).
 - base = kernel/NVIDIA/Docker/**ROS2 Jazzy**/reboot/VS Code/DDS 튜닝/정적 IP/corecode 확인.
-- app = `obtain_cobot2` → DSR 드라이버 → RealSense(sdk/ros) → colcon → 컨테이너 toolkit/빌드 → host voice Python 설치(`voice-host-install.sh`). OPENAI 키는 사용자가 `~/.config/cobot2/.env` 직접 생성(ADR-028).
-- `.bashrc` **수동 편집 불필요** — dds-tuning 이 관리 블록 주입, 도메인은 파일에서 동적 로드.
+- app = `obtain_cobot2` → DSR 드라이버 → RealSense(sdk/ros) → colcon → 컨테이너 toolkit/빌드 → host voice Python 설치(`app-install.sh voice`). OPENAI 키는 인스톨러가 다루지 않는다 — 사용자가 `voice_processing` 패키지의 `resource/.env` 에 직접 배치.
+- `.bashrc` **수동 편집 대폭 축소** — `hostcfg.sh dds` 가 `RMW_IMPLEMENTATION`/`CYCLONEDDS_URI` 관리 블록을 주입한다. 단 `ROS_DOMAIN_ID` 는 예외로 학생이 자기 `~/.bashrc` 에 직접 export 한다(연습 과제).
 
 **조치**
 - **§1 설치 2경로 + `a0X`/`b0X` 절차 → `install.sh`/`setup-app.sh` 2단계로 전면 교체.**
@@ -65,12 +65,12 @@
 
 **After**
 - voice 는 **host 직접 실행**(ADR-027) — `ros2 run voice_processing get_keyword`(host). 마이크 하드웨어 종속(ALSA `/dev/snd` + PortAudio)이라 컨테이너 계획 철회. STT 트리거는 `ros2 service call /get_keyword std_srvs/srv/Trigger "{}"`.
-- OPENAI key = 사용자가 **`~/.config/cobot2/.env`** 직접 생성(인스톨러 자동생성 없음, ADR-028), `bringup.sh` 가 host voice 노드에 로드.
+- OPENAI key = 사용자가 **`voice_processing` 패키지의 `resource/.env`** 에 직접 배치(인스톨러는 키를 다루지 않음). 그 파일은 colcon 빌드에 포함되고, 노드가 `load_dotenv` 로 직접 읽는다.
 - LangChain **1.0** 반영 — `PromptTemplate` import 는 `langchain_core.prompts`(구 `langchain.prompts` 제거됨).
 
 **조치**
 - **host `python3 *.py` 직접 실행은 유지(ADR-027 로 컨테이너화 철회) + 통합 노드는 host `ros2 run` + service call.**
-- **.env 위치(corecode → `~/.config/cobot2/.env`) 갱신 + 인스톨러 자동생성 없음(ADR-028).**
+- **.env 위치(corecode → `voice_processing` 패키지 `resource/.env`) 갱신 + 인스톨러는 키를 다루지 않음.**
 - LangChain import 경로 갱신 문구.
 
 ---
@@ -136,8 +136,8 @@
 1. **설치 = `install.sh` → `setup-app.sh` 2단계** (resumable, 진행률, reboot 자동 재개).
 2. **컨테이너 워크플로** (빌드 → `bringup.sh` → `docker exec` → `ros2 run`, 소스 수정 반영 규칙).
 3. **cobot2 소스 취득/배치** (`~/cobot2_ws/src/cobot2`, 레포 외부).
-4. **OPENAI key = 사용자가 `~/.config/cobot2/.env` 직접 생성** (인스톨러 자동생성 없음, host voice 노드가 로드 — ADR-028).
-5. **ROS_DOMAIN_ID prompt(기본 42)** — 조별 하드코딩 폐기.
+4. **OPENAI key = 사용자가 `voice_processing` 패키지 `resource/.env` 에 직접 배치** (인스톨러는 키를 다루지 않음, 노드가 `load_dotenv` 로 로드 — colcon 빌드 내장).
+5. **ROS_DOMAIN_ID 는 학생이 자기 `~/.bashrc` 에 직접 export** (인스톨러가 묻지도 주입하지도 않음, 미설정 시 ROS2 기본값 0) — 조별 하드코딩 폐기.
 
 ---
 
@@ -164,9 +164,9 @@
 | 강의안 항목 | 상태 | 대체 |
 |---|---|---|
 | `Installfile_*.zip` + `a0X`/`b0X` | **삭제** | `install.sh` / `setup-app.sh` |
-| `.bashrc` 수동 편집(source/CUDA/PYTHONPATH/alias/도메인) | **삭제** | 자동(dds-tuning 블록 + XDG 도메인 파일) |
-| `a06-Voice`/`b04-Voice` host 음성 라이브러리 설치 | **대체** | host `voice-host-install.sh`(system pip, ADR-027) |
+| `.bashrc` 수동 편집(source/CUDA/PYTHONPATH/alias) | **삭제** | 자동(`hostcfg.sh dds` 관리 블록 — `RMW_IMPLEMENTATION`/`CYCLONEDDS_URI`) |
+| `a06-Voice`/`b04-Voice` host 음성 라이브러리 설치 | **대체** | host `app-install.sh voice`(system pip, ADR-027) |
 | host `python3 STT.py` 등 직접 실행 | **유지** | host 직접 실행(voice=host) + 통합 노드는 `ros2 run` + `ros2 service call` |
 | CUDA 12.4 host PATH | **대체** | 12.8, yolo 컨테이너 내부 |
-| `ROS_DOMAIN_ID=99` 하드코딩 | **대체** | prompt 기본 42 |
+| `ROS_DOMAIN_ID=99` 하드코딩 | **대체** | 학생이 `~/.bashrc` 에 직접 export(인스톨러 미관여, 미설정 시 기본값 0) |
 | Humble / `/opt/ros/humble` 문자열 전부 | **대체** | Jazzy / `/opt/ros/jazzy` |

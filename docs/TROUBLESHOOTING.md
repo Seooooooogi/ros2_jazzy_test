@@ -68,7 +68,7 @@
 
 **원인**: wakeword 모델이 `.tflite` 라 tflite 백엔드가 필요한데, openwakeword 0.6.0 이 의존으로 강제하는 `tflite-runtime` 은 **Python 3.12 wheel 이 없다**(최대 3.11). noble=3.12. (import smoke 만으론 안 잡힘 — `.tflite` 로드는 런타임에만 일어남.)
 
-**복구 / 예방**: 후속작 `ai-edge-litert`(cp312 wheel, 동일 `Interpreter` API)로 대체. `host-python-deps.sh` / voice Dockerfile 이 이미 적용 — (1) `openwakeword==0.6.0 --no-deps` (불가능한 tflite-runtime 의존 회피), (2) 실제 의존 명시 + `ai-edge-litert`, (3) `tflite_runtime → ai_edge_litert` shim 을 site-packages 에 생성, (4) feature 모델은 `download_models()`. 검증은 `import` 가 아닌 **`Model(.tflite)` 인스턴스화 + predict**. 상세 = ADR-014.
+**복구 / 예방**: 후속작 `ai-edge-litert`(cp312 wheel, 동일 `Interpreter` API)로 대체. `resources/app-install.sh voice` 가 이미 적용 — (1) `openwakeword==0.6.0 --no-deps` (불가능한 tflite-runtime 의존 회피), (2) 실제 의존 명시 + `ai-edge-litert`, (3) `tflite_runtime → ai_edge_litert` shim 을 site-packages 에 생성, (4) 모델 채우기 3단계 — `resources/oww_models/` 동봉본(melspectrogram/embedding/silero_vad)을 설치 경로에 먼저 복사하고, 그 다음 `download_models()` 로 나머지 stock 모델만 받은 뒤(이미 있는 것은 존재-가드로 skip), 모든 `.tflite` 의 offset 4 `TFL3` 매직을 검증해 손상본은 삭제하고 fail-loud(재실행 시 재다운로드). 검증은 `import` 가 아닌 **`Model(.tflite)` 인스턴스화 + predict**. 상세 = ADR-014.
 
 ---
 
