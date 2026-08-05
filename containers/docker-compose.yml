@@ -1,4 +1,4 @@
-# Phase 4 application 컨테이너 (yolo) — 서비스 base 정의. voice 는 컨테이너 아님 — host 실행(voice-host-install.sh).
+# Phase 4 application 컨테이너 (yolo) — 서비스 base 정의. voice 는 컨테이너 아님 — host 실행(app-install.sh voice).
 #
 # 기본 통합 실행은 이 base + dev override 를 머지한 dev-builder 경로다:
 #   bash containers/bringup.sh   (= -f docker-compose.yml -f docker-compose.dev.yml, live-mount + 컨테이너 안 colcon build)
@@ -18,7 +18,7 @@
 #  구독한다 — 기동 시 remap 인자가 필요 없다.)
 # 누락 시 aligned_depth_to_color 가 안 떠 object_detection 의 depth 계산이 실패한다.
 #
-# 전제: dds-tuning.sh(install.sh 마지막 step 또는 단독 실행)가 먼저 끝나 있어야 한다.
+# 전제: hostcfg.sh dds(install.sh 가 실행하거나 단독 실행)가 먼저 끝나 있어야 한다.
 # 그게 host 에 cyclonedds.xml 을 렌더하는데, 아래 서비스가 이 파일을 read-only mount 하므로
 # 없으면 mount 실패로 컨테이너가 안 뜬다.
 #
@@ -53,7 +53,7 @@ services:
       - RMW_IMPLEMENTATION=${RMW_IMPLEMENTATION:-rmw_cyclonedds_cpp}
       - CYCLONEDDS_URI=file:///cyclonedds.xml
     volumes:
-      # host 가 dds-tuning.sh 로 렌더한 cyclonedds 설정을 컨테이너에 read-only mount.
+      # host 가 hostcfg.sh dds 로 렌더한 cyclonedds 설정을 컨테이너에 read-only mount.
       - ${CYCLONEDDS_XML:-${HOME}/.config/cyclonedds/cyclonedds.xml}:/cyclonedds.xml:ro
     deploy:                     # GPU 예약 — 런타임 필드(빌드엔 무영향). nvidia-container-toolkit 필요(host).
       resources:

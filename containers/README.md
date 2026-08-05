@@ -1,6 +1,6 @@
 # containers — Phase 4 애플리케이션 컨테이너 (yolo)
 
-> voice(voice_processing)는 컨테이너가 아니라 **host 에서 직접 실행**한다 — 마이크 하드웨어 종속 때문. `resources/voice-host-install.sh` 로 설치하고 `ros2 run voice_processing get_keyword` 로 띄운다(최상위 `README.md`). 이 디렉토리는 yolo 컨테이너만 다룬다.
+> voice(voice_processing)는 컨테이너가 아니라 **host 에서 직접 실행**한다 — 마이크 하드웨어 종속 때문. `resources/app-install.sh voice` 로 설치하고 `ros2 run voice_processing get_keyword` 로 띄운다(최상위 `README.md`). 이 디렉토리는 yolo 컨테이너만 다룬다.
 
 - base 서비스 정의: `docker-compose.yml` — network/GPU/env. 단독 `up` 은 runtime(최종) 이미지·노드 자동 기동 경로(학습 기본 흐름은 이걸 빌드 안 함, 수동/publish 용 보존).
 - 기본 통합 실행: `bash containers/bringup.sh` = base + `docker-compose.dev.yml`(dev-builder) 머지 — live-mount + 컨테이너 안 colcon build 후 노드 자동 기동. 이미지 빌드/검증은 `containers/build-all.sh`(builder 스테이지 = `:dev-builder`). 최상위 `README.md` 참조.
@@ -49,6 +49,6 @@ voice 는 컨테이너가 아니다 — host 에서 `source resources/activate.s
 
 ### 전제 (프로덕션과 동일)
 
-- `~/.config/cyclonedds/cyclonedds.xml` 렌더 완료(dds-tuning) — base compose 가 read-only mount.
+- `~/.config/cyclonedds/cyclonedds.xml` 렌더 완료(hostcfg.sh dds) — base compose 가 read-only mount.
 - host voice: `.env` 의 `OPENAI_API_KEY`(bringup.sh 가 로드) + 데스크톱 마이크(PipeWire 기본).
 - yolo: host 가 RealSense 토픽(`/camera/*`)을 publish 중이어야 추론 입력 존재. 그 publish 는 이제 통합 bringup 이 맡는다 — `bash containers/bringup.sh`(= `camera:=true` 자동 부여) 또는 `ros2 launch m0609_rg2_bringup bringup.launch.py camera:=true`. **토픽 경로가 바뀌었다**(2026-07-21): 새 launch 는 realsense2_camera_node 를 `namespace='/'` + `name='camera'` 로 띄워 `/camera/*` 를 낸다(이전 `/camera/camera/*` 의 중복 한 단계 제거). 스트림 설정(align_depth·enable_rgbd·enable_sync·pointcloud)은 그대로다. 소비자(`ImgNode`)는 `/camera/color/image_raw` 등 **절대 경로**를 구독하므로 기동 인자가 필요 없다(2026-07-22 — 한때 상대 이름 + `-r img_node:__ns:=/camera` 였으나, 인자를 빠뜨리면 에러 없이 토픽만 비어 되돌렸다. 그 인자를 그대로 줘도 결과는 같다). 컨테이너를 개별 수동 기동할 때는 카메라가 먼저 떠 있어야 한다.

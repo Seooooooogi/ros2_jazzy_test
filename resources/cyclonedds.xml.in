@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  CycloneDDS 설정 템플릿. dds-tuning.sh 가 아래 인터페이스 placeholder 줄을 설치
+  CycloneDDS 설정 템플릿. hostcfg.sh dds 가 아래 인터페이스 placeholder 줄을 설치
   머신의 loopback (+ DDS_NETIF 로 명시 지정한 외부 NIC) 목록으로 치환해 ${CYCLONEDDS_XML}
   (기본 ~/.ros2_jazzy_test/cyclonedds.xml) 로 렌더한다. 렌더 결과는 머신 종속 산출물이라
   레포로 추적하지 않는다.

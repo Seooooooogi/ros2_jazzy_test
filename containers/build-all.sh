@@ -6,7 +6,7 @@
 #
 # containers/build-all.sh — yolo 앱 컨테이너 이미지 빌드 및 검증 게이트.
 #
-# host 설치와 독립 동작(Docker 엔진만 있으면 됨). voice 는 컨테이너가 아니라 host 실행(voice-host-install.sh)이라
+# host 설치와 독립 동작(Docker 엔진만 있으면 됨). voice 는 컨테이너가 아니라 host 실행(app-install.sh voice)이라
 # 여기서 빌드하지 않음 — yolo 이미지 하나만.
 # yolo 이미지를 `builder` 스테이지(:dev-builder 태그 — 소스를 live-mount 하는 dev 이미지,
 # bringup/docker-compose.dev.yml 로 실행)로 빌드 + "격리 검증(isolated verification)" 수행:
