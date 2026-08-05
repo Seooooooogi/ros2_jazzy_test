@@ -20,7 +20,7 @@ ROS2 Humble installer → ROS2 Jazzy installer 마이그레이션. Ubuntu + NVID
 
 4. **설치 진행률 시각화** — 모든 설치 단계는 `[n/total] <step name>` 형식으로 stdout에 명시. 사용자는 항상 "지금 어디인지, 얼마나 남았는지"를 알 수 있어야 한다. 진행률 없는 silent 실행 금지.
 
-5. **`set -euo pipefail` 필수 (실행 진입점 `.sh`)** — 직접 실행되는 `.sh`(install.sh / a0N / `resources/` 설치 본문 등)는 최상단(shebang 다음)에 `set -euo pipefail`. 중간 명령 실패 시 silent continue로 의존성 누락 상태로 다음 단계 진입하는 cascading failure를 차단. **예외: source 전용 라이브러리**(`resources/{config,lib,activate}.sh`)는 `set -e` 를 두지 않는다 — sourced 파일의 `set -e` 는 호출자 셸 옵션을 오염시키므로, 셸 옵션은 호출 진입점이 소유한다.
+5. **`set -euo pipefail` 필수 (실행 진입점 `.sh`)** — 직접 실행되는 `.sh`(`install.sh` / `setup-app.sh` / `resources/{base-install,app-install,hostcfg}.sh`)는 최상단(shebang 다음)에 `set -euo pipefail`. 중간 명령 실패 시 silent continue로 의존성 누락 상태로 다음 단계 진입하는 cascading failure를 차단. **예외: source 전용 라이브러리**(`resources/{config,lib,activate}.sh`)는 `set -e` 를 두지 않는다 — sourced 파일의 `set -e` 는 호출자 셸 옵션을 오염시키므로, 셸 옵션은 호출 진입점이 소유한다.
 
 6. **Docker 이미지 태그 핀 고정** — `FROM ros:latest` 또는 무태그 금지. `FROM ros:jazzy-ros-base-noble` 처럼 명시 태그만 사용. `docker pull` 시에도 태그 생략 금지. `latest`는 시간에 따라 silently drift 한다.
 

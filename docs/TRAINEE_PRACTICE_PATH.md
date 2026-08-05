@@ -24,9 +24,9 @@ docker-first 가 초급에 무리라는 판단에서, 하드웨어·GPU 작업�
 
 ## 공통 전제 (선행 — 이미 됐으면 skip)
 
-- base 환경: `bash install.sh` (kernel/NVIDIA/Docker/ROS2/DDS tuning/static IP/corecode check, 10 step).
+- base 환경: `bash install.sh` (kernel/NVIDIA/Docker/ROS2 + reboot + VS Code/DDS tuning/static IP, 9 step).
 - 애플리케이션: `bash setup-app.sh` (`~/cobot2_ws` 워크스페이스 + yolo 이미지 빌드 + host voice Python 설치 `app-install.sh voice`). voice 는 컨테이너 아님 — host 직접 실행(ADR-027). OPENAI 키는 사용자가 `~/.config/cobot2/.env` 직접 생성(ADR-028).
-- corecode 위치: `~/corecode` (사용자가 corecode.zip 을 홈에 풀어 배치 → install.sh step 10 이 확인). 레포엔 미포함(ADR-029).
+- corecode 위치: `~/corecode` (사용자가 corecode.zip 을 홈에 풀어 배치). 레포엔 미포함(ADR-029). **인스톨러는 이 배치를 확인하지 않는다** — 튜토리얼 전용 아티팩트라 base 설치의 검증 대상이 아니다(구 install.sh 배치 확인 단계는 폐기).
 - DDS: `resources/hostcfg.sh dds` 완료 (`~/.config/cyclonedds/cyclonedds.xml` — 컨테이너가 read-only mount).
 
 ---

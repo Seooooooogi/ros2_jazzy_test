@@ -48,14 +48,14 @@
 
 ---
 
-## `ros2 run <pkg> <node>` → ModuleNotFoundError (scipy / pymodbus / openwakeword 등) — application-shell
+## `ros2 run <pkg> <node>` → ModuleNotFoundError (scipy / pymodbus / openwakeword 등) — application-shell (폐기된 브랜치 기록)
 
 **증상**: `colcon build` 는 성공했는데 `ros2 run robot_control robot_control` 실행 시 `ModuleNotFoundError`. host venv 에는 패키지가 분명히 설치돼 있다.
 
 **원인**: ament_python 패키지는 **빌드 시 third-party 를 import 하지 않아** 빌드는 통과하지만, 런타임에 import 한다. host venv(`--system-site-packages`)는 venv→system 단방향만 열려, system Python 으로 실행되는 `ros2 run` 이 venv 의 app Python 을 못 본다.
 
 **복구 / 예방** (application-shell):
-- 핵심은 **colcon 빌드를 venv active 에서 수행**하는 것 — 그래야 entry_point console_script 의 shebang 이 venv python 으로 박혀 `ros2 run` 이 venv 를 본다(`resources/app-install.sh colcon` 가 `HOST_VENV` 있으면 자동 activate).
+- 핵심은 **colcon 빌드를 venv active 에서 수행**하는 것 — 그래야 entry_point console_script 의 shebang 이 venv python 으로 박혀 `ros2 run` 이 venv 를 본다. **활성화 자동화는 없다** — `HOST_VENV` 를 보고 자동 activate 하는 로직은 현행 `resources/app-install.sh colcon` 에 없고(`grep -rn HOST_VENV resources/` = 0) 폐기된 `feat/application-shell` 브랜치에만 있었다. venv 를 쓴다면 손으로 activate 한 뒤 빌드한다.
 - 이미 빌드했는데 깨졌다면 venv active 상태에서 재빌드: `source ~/cobot_ws/.venv/bin/activate && cd ~/cobot_ws && colcon build`.
 - 직접 `python3 ...` 실행/디버깅은 `source resources/activate.sh` (ROS + 워크스페이스 overlay + venv 함께 활성화).
 - 설치된 스크립트 shebang 확인: `head -1 ~/cobot_ws/install/robot_control/lib/robot_control/robot_control` → venv python 경로여야 함.
