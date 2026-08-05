@@ -1,34 +1,6 @@
 # 컨테이너 dev override · 코드 수정 live-mount + 노드 수동 기동(디버깅용)
-#
-# base(docker-compose.yml)와 병합해 사용:
-#   # 전제: setup-app.sh 완료 = 통합 ws ~/cobot2_ws (cobot2/yolo_container 서브디렉토리 포함)
-#   docker compose -f containers/docker-compose.yml -f containers/docker-compose.dev.yml build
-#   docker compose -f containers/docker-compose.yml -f containers/docker-compose.dev.yml up -d yolo-detection
-#   docker exec -it yolo-detection bash   # 안에서: colcon build --symlink-install --merge-install && ros2 run object_detection object_detection
-#
-# 프로덕션(docker-compose.yml 단독) 대비 차이:
-#   - build.target=builder = colcon·빌드도구·/ws/src 가 있는 스테이지로 빌드(runtime = colcon 없음)
-#   - 통합 ws 서브디렉토리(~/cobot2_ws/src/cobot2/yolo_container)를 /ws/src 에 bind-mount
-#     → 수정 즉시 반영
-#     서브디렉토리 자체가 패키지 보유(중첩 src 없음) → mount 대상
-#     소스 = 사용자가 ~/cobot2_ws/src/cobot2 에 직접 배치(레포 미포함, setup-app.sh 가 존재만 확인)
-#   - 노드 auto-run(CMD ros2 run) off → 기동 시 colcon build 1회 후 sleep (실행 = exec 진입 후 수동)
-#   - 빌드 전 /ws/build·/ws/install 비우기 → colcon build --symlink-install --merge-install
-#     builder 이미지 = 프로덕션용 merge-install(복사본) 산출물을 /ws/build·/ws/install 에 baked
-#     named volume = 최초 생성 시 그 내용을 복사 수령
-#     그 위에 --symlink-install 실행 → ament_cmake 패키지(od_msg)가
-#       'failed to create symbolic link ... existing path ... Is a directory' 충돌 → 빌드 실패
-#     `|| true` 로 감싸기 = 실패 은폐 → baked 복사본이 조용히 실행 → host 편집 미반영
-#     → 매 기동마다 이전 산출물 비워 clean symlink 빌드 보장(증분 캐시 포기, 두 패키지 = 수초)
-#     결과: egg-link/심링크가 /ws/src 지시 → .py 수정이 노드 재실행만으로 즉시 반영
-#     compose 없는 docker run 도 동일 명령
-#   - 별도 이미지 태그(dev-builder) = 프로덕션 이미지 tag clobber 방지
-#   - dev/bashrc 를 /root/.bashrc 로 mount → docker exec 셸이 ROS overlay 자동 source
-#     entrypoint = PID1 전용 → docker exec 로 띄운 셸엔 그 환경 미탑재
-#
-# base 상속 항목 = network_mode host · GPU(yolo) · cyclonedds.xml mount
-# 전제(base 와 동일): ~/.config/cyclonedds/cyclonedds.xml(hostcfg.sh dds)
-#   카메라 토픽 = host 소유
+#   base(docker-compose.yml) 와 병합: docker compose -f containers/docker-compose.yml -f containers/docker-compose.dev.yml up -d yolo-detection
+#   차이 = build.target=builder / 소스 live bind-mount / 노드 auto-run off / 별도 태그(dev-builder)
 
 services:
   yolo-detection:
@@ -41,24 +13,16 @@ services:
       - yolo_build:/ws/build
       - yolo_install:/ws/install
       - ./dev/bashrc:/root/.bashrc:ro
-      # 컨테이너 안 YOLO 학습 작업 디렉토리
-      #   데이터셋 + ultralytics runs/ 산출물을 host 에 직접 기록 → compose down 후에도 보존
-      #   분리 목적 = 소스 트리(/ws/src)에 데이터셋 미혼입
+      # 컨테이너 안 YOLO 학습 작업 디렉토리(데이터셋 + runs/ 산출물을 host 에 보존)
       - ${YOLO_TRAIN_DIR:-${HOME}/yolo_train}:/train
-    # $$ROS_DISTRO = compose 가 $ 한 개로 축약 → 컨테이너 안 bash 가 런타임 확장(이미지 ENV=jazzy)
+    # $$ROS_DISTRO = compose 가 $ 한 개로 축약 → 컨테이너 안에서 런타임 확장
     command: ["bash", "-c", "set +u; source /opt/ros/$$ROS_DISTRO/setup.bash; find /ws/build /ws/install -mindepth 1 -delete 2>/dev/null || true; colcon build --symlink-install --merge-install; sleep infinity"]
-    # 컨테이너 안 YOLO 학습용
-    #   PyTorch DataLoader worker = 배치를 /dev/shm 로 교환
-    #   Docker 기본 64MB → worker 사망
-    #   이 값 = 상한 캡 → 실사용분만 RAM 점유(추론 시 무비용)
+    # 컨테이너 안 YOLO 학습용 /dev/shm 상한(기본 64MB → DataLoader worker 사망)
     shm_size: "8gb"
     restart: "no"
 
-# colcon 빌드 산출물 영속화
-#   /ws/build·/ws/install = named volume 배치 → 컨테이너 재생성(down→up) 후에도 보존
-#   효과 = 증분 빌드, 풀 빌드 회피
-#   소스(/ws/src) = host bind-mount / 볼륨 대상 = 빌드 산출물만
-#   초기화 = 'docker compose ... down -v'(볼륨째 삭제 → 다음 up 은 풀 빌드)
+# colcon 빌드 산출물 영속화(소스 = host bind-mount, 볼륨 = 빌드 산출물만)
+#   초기화 = docker compose ... down -v
 volumes:
   yolo_build:
   yolo_install:
