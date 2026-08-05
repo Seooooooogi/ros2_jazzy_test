@@ -5,45 +5,31 @@
 # =============================================================
 #
 # shellcheck source-path=SCRIPTDIR
-# install.sh — 호스트 워크스테이션의 base 환경을 설치하는 단일 진입점(entry point).
+# install.sh — host 워크스테이션의 base 환경을 설치하는 단일 진입점.
 #
-# base 환경만 설치(커널/NVIDIA/Docker/ROS2 + reboot + VS Code + DDS 튜닝 + 정적
-# 네트워크 IP). 전부 하나의 연속 시퀀스([n/9])로 실행. cobot2 앱 계층
-# (DSR 드라이버 + RealSense + cobot2 colcon 빌드 + host voice Python + 컨테이너 toolkit/이미지)은
-# 여기 없음 — setup-app.sh 에 있고, base 설치 후 실행. 이 레포는 cobot2 소스·corecode 미포함
-# (둘 다 사용자가 별도로 배치).
-# 재실행 안전: state 파일 기준 — 이미 끝난 단계 자동 건너뜀 + 멈춘 지점부터 이어서 진행.
-# 특정 작업만 강제 재실행 = --reset(전체 초기화) 또는 resources/<step>.sh 직접 실행.
-#
-# 사용법:
-#   bash install.sh            전체 시퀀스 실행(이미 끝난 단계는 건너뜀)
-#   bash install.sh --status   현재 진행 상황(state) 출력
-#   bash install.sh --reset    state 초기화(confirm 후 — 모든 단계 다시 실행)
-#   bash install.sh --help
-#
-# 드라이버/docker 그룹 적용 위해 step 6 에서 한 번 reboot. 복귀(로그인) 후에는
-# 일회성 GUI autostart 항목으로 자동 재개(resume) — 수동 재실행 불필요(GUI 세션 가정). autostart
-# 등록 불가 시(터미널 에뮬레이터 없음) reboot 후 'bash install.sh' 재실행 → step 7 부터 이어감.
+# 커널 / NVIDIA / Docker / ROS2 → reboot → VS Code → DDS 튜닝 → 정적 IP 까지 9 단계.
+# cobot2 앱 계층(DSR 드라이버 / RealSense / colcon 빌드 / host voice / 컨테이너)은 여기 없다 —
+# base 설치가 끝난 뒤 setup-app.sh 가 올린다. cobot2 소스와 corecode 는 사용자가 직접 배치한다.
+# 몇 번을 다시 실행해도 안전하다 — 끝난 단계는 state 파일을 보고 건너뛰고 멈춘 지점부터 이어간다.
+# 한 단계만 다시 돌리려면 --reset(전체 초기화)하거나 resources/{base-install,hostcfg}.sh 의 해당
+# 서브커맨드를 직접 실행한다.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 RESOURCE_DIR="${SCRIPT_DIR}/resources"
 
-# root 로 직접 실행 금지 — HOME=/root 가 되면 state / docker 그룹 / 워크스페이스가 실수로 /root
-# 아래에 생겨 일반 사용자 환경에 전혀 미반영. 하위 스크립트가 필요한 명령을 알아서 sudo 로 호출.
+# root 로 실행하면 HOME=/root 가 되어 state · docker 그룹 · 워크스페이스가 전부 /root 아래에 생기고
+# 정작 쓸 사용자 계정에는 아무것도 반영되지 않는다. 필요한 명령은 하위 스크립트가 알아서 sudo 로 부른다.
 if [[ "$(id -u)" -eq 0 ]]; then
     echo "install: do not run with sudo. Run 'bash install.sh' as a regular user." >&2
     echo "         (the script calls the necessary commands via sudo on its own.)" >&2
     exit 1
 fi
 
-# 단계 엔진(state + run_step + 단계 정의) + 설치 UX(confirm + env 로드 + 자동 재개).
 # shellcheck source=resources/config.sh
 source "${RESOURCE_DIR}/config.sh"
-# shellcheck source=resources/orchestrate.sh
-source "${RESOURCE_DIR}/orchestrate.sh"
-# shellcheck source=resources/interaction.sh
-source "${RESOURCE_DIR}/interaction.sh"
+# shellcheck source=resources/lib.sh
+source "${RESOURCE_DIR}/lib.sh"
 config_assert_set
 STEPS_TOTAL="$(install_steps_total)"
 
@@ -77,23 +63,10 @@ output on the console.
 EOF
 }
 
-# 프로젝트 저작권 배너 — 실제 설치 실행 때마다 콘솔에 출력. step 6 reboot 이후 자동 재개된
-# 터미널에서도 출력되므로 저작권 표기 항상 노출. 무조건 stdout 으로 나감. 단계별 출력이 아니라서
-# 로그 라우팅/조용한 콘솔 규칙(진행률만 표시) 여기엔 미적용.
-print_copyright() {
-    cat <<'EOF'
-============================================================
- Cobot2 Jazzy Installer
- Copyright (c) 2026 ROKEY bootcamp. All rights reserved.
-============================================================
-EOF
-}
-
-# --verbose/-v 는 서브커맨드와 직교(independent — 서로 영향 없음) → 먼저 VERBOSE 로 분리, 나머지 인자만 남김.
-# orchestrate.sh 의 run_step 은 같은 셸에서 VERBOSE 를 읽음(export 는 하위 resource 스크립트용).
+# --verbose 와 --no-nvidia-driver 는 서브커맨드가 아니라 어느 서브커맨드에나 붙는 modifier 다.
+# 여기서 먼저 걷어내야 아래 case 가 --status / --reset / 빈 인자만 보고 판단할 수 있다.
+# run_step 은 같은 셸에서 VERBOSE 를 읽고, export 는 하위 resources 스크립트를 위한 것.
 VERBOSE="${VERBOSE:-0}"
-# --no-nvidia-driver 도 서브커맨드와 직교하는 modifier → 여기서 분리(스트립 후 --status/--reset/빈
-# 서브커맨드 판정 그대로). 드라이버가 이미 별도 설치됐다고 상정하고 nvidia 단계만 건너뜀(비타깃 머신).
 NO_NVIDIA_DRIVER=0
 __args=()
 for __a in "$@"; do
@@ -104,10 +77,10 @@ for __a in "$@"; do
     esac
 done
 export VERBOSE
-# 빈 배열 + set -u 조합에서 나는 unbound-var(정의 안 된 변수) 에러(bash<4.4)를 막는 확장 가드. "${__args[@]}" 로 단순화 금지.
+# "${__args[@]}" 로 줄이면 인자 없이 실행할 때 bash 4.4 미만에서 unbound 에러가 난다.
 set -- "${__args[@]+"${__args[@]}"}"
 
-# --- 인자 처리(argument dispatch) (set -u 에서는 ${1:-} 필요) ---
+# --- 인자 처리 ---
 case "${1:-}" in
     --status) state_dump; exit 0 ;;
     --reset)
@@ -116,21 +89,30 @@ case "${1:-}" in
         echo "install: state reset complete (deleted $STATE_FILE)."
         exit 0
         ;;
+    --resume-terminal)
+        # 재부팅 뒤 GUI autostart 가 부르는 내부 플래그 — 사람이 칠 일이 없어 도움말에 없다.
+        # 설치를 다시 돌린 뒤 결과를 볼 수 있도록 터미널을 닫지 않고 열어 둔다.
+        cd "${SCRIPT_DIR}"
+        rc=0; bash "$0" || rc=$?
+        echo
+        echo "[resume] install.sh exited (${rc}). Keeping this terminal open so you can review the result."
+        # heartbeat 나 비밀번호 입력이 터미널 입력 상태를 흐트러뜨렸을 수 있어 되돌린다.
+        stty sane 2>/dev/null || true
+        exec bash
+        ;;
     --help|-h) usage; exit 0 ;;
     "") : ;;
     *) echo "install: unknown option '$1'" >&2; usage; exit 2 ;;
 esac
 
-# $LOG_FILE 에 뭔가 쓰기 전에(아래 참고 경고 / ERR trap) 상세 로그 디렉토리 존재를 먼저 보장.
-# 그래야 LOG_FILE 을 아직 없는 디렉토리로 바꿔 지정해도 이런 초기 기록이 조용히 사라지지 않음.
-# 기본 경로(레포 루트 / install_log)면 dirname 이 레포 루트라, 이 명령은 아무 일도 안 하는 무해한 no-op.
+# 로그 디렉토리를 먼저 만든다 — 아래 경고와 ERR trap 이 LOG_FILE 에 쓰는데, LOG_FILE 을 아직 없는
+# 디렉토리로 바꿔 지정한 경우 그 초기 기록이 조용히 사라진다. 기본 경로에서는 아무 일도 하지 않는다.
 mkdir -p "$(dirname "$LOG_FILE")"
 
-# 실제 설치 실행에서 저작권 배너 출력(위 유틸리티 서브커맨드는 이미 exit 한 뒤).
-# 무조건 실행 → 첫 실행에서도, reboot 후 자동 재개된 터미널에서도 똑같이 보임.
+# 실제 설치일 때만 배너(위 유틸리티 서브커맨드는 이미 exit 했다). 자동 재개된 터미널에서도 똑같이 보인다.
 print_copyright
 
-# --- 사전 점검(preflight): 잘못된 환경에서 절반쯤 실행되다 실패하는 사고 사전 방지 ---
+# --- 사전 점검 — 엉뚱한 환경에서 절반쯤 깔리다 실패하는 사고를 막는다 ---
 if [[ ! -f /etc/os-release ]]; then
     echo "install: cannot read /etc/os-release — make sure this is an Ubuntu environment." >&2
     exit 1
@@ -141,77 +123,73 @@ if [[ "$host_codename" != "$UBUNTU_CODENAME" ]]; then
     echo "install: this installer targets Ubuntu '$UBUNTU_CODENAME' (current: '${host_codename:-unknown}')." >&2
     exit 1
 fi
-# sudo 비밀번호 처음에 한 번 받고 keepalive 시작(60초마다 캐시 갱신 → 긴 단계나 자동 재개
-# 흐름에서 다시 안 묻게 함). resources/interaction.sh 를 통해 setup-app.sh 와 공유.
+# sudo 비밀번호는 단계가 시작되기 전에 한 번만 받는다 — 단계 도중에 물으면 그 프롬프트가 heartbeat
+# 줄에 가려, 비밀번호를 다 치기도 전에 설치가 진행되는 것처럼 보인다.
 sudo_prime install
 
-# 하위 본문 안에서 예상치 못한 실패가 난 위치를 확실히 알림(run_step 의 step_end_fail 과는 별개).
-# 콘솔엔 한 줄 알림 + 로그 경로만 — 실패 상세는 로그에(콘솔은 깔끔하게 유지).
+# run_step 바깥에서 난 실패의 위치를 알린다(단계 안의 실패는 run_step 의 step_end FAIL 이 처리).
+# 콘솔에는 한 줄과 로그 경로만 남기고 상세는 로그로 보낸다.
 trap 'echo "[install] failed: line $LINENO — see ${LOG_FILE}" >&2' ERR
 
-# --- proceed-confirm 1회 + step 6 reboot 를 건너뛰는 자동 재개 등록 ----------------------------
-# 첫 실행(reboot 전): proceed-confirm 1회 + 복귀 시 자동 재개 등록. 여기 confirm 은 reboot 동의만 의미.
-# 재개(reboot 후): autostart 항목 즉시 제거(일회성 — 매 로그인마다 다시 뜨는 것 방지). sudo 는 위 sudo -v 로
-#   이 터미널에서 한 번 입력됨.
+# --- 시작 confirm 1회 + 재부팅 뒤 자동 재개 등록 ---
+# 첫 실행: confirm 을 한 번 받고(= 단계 6 의 재부팅 동의) 복귀용 autostart 를 등록한다.
+# 재개된 실행: 그 autostart 를 곧바로 지운다 — 일회성이라 로그인할 때마다 다시 뜨면 안 된다.
 if step_should_skip a01_reboot; then
     remove_resume_autostart
 elif [[ -t 0 ]]; then
     confirm_or_abort "The install reboots once midway and auto-continues on return (login) (terminal auto-opens, one sudo password). Continue?"
     register_resume_autostart "${SCRIPT_DIR}"
 else
-    # 참고 경고 → 로그에만 기록(콘솔은 깔끔하게 유지). 진단용으로 install_log 에 남음.
+    # 참고 경고는 콘솔이 아니라 로그에만 남긴다.
     { echo "[install] warning: non-interactive shell — cannot register auto-resume."
       echo "          Run it in a GUI session, or re-run 'bash install.sh' manually after reboot."; } >>"$LOG_FILE"
 fi
 
-# --- step 1~5: 사전 준비물(a01: 커널 기준선 / NVIDIA / Docker / ROS2 jazzy / 추가 도구) ---
-# nvidia 보다 커널 기준선을 먼저: HWE 커널(Ubuntu 하드웨어 지원 커널) 메타 + 헤더 + modules-extra 를 먼저
-# 보장 필요. 그래야 벽돌화(nvidia 모듈이 반쪽짜리 커널을 끌어오는 것)와 DKMS 헤더 누락을 둘 다 방지.
+# --- 단계 1~5: 커널 기준선 / NVIDIA / Docker / ROS2 / 추가 도구 ---
+# 커널을 NVIDIA 보다 먼저 세운다 — HWE 커널(최신 하드웨어 지원을 얹은 Ubuntu 커널 트랙) 메타 +
+# 헤더 + modules-extra 가 먼저 깔려 있어야 드라이버 모듈이 반쪽짜리 커널에 붙는 사고와
+# DKMS(커널이 바뀔 때마다 모듈을 자동 재빌드하는 구조) 헤더 누락을 둘 다 피한다.
 run_stage_a01 0 "$NO_NVIDIA_DRIVER"
 
-# --- step 6: reboot 경계(a01) ---
-# run_step 으로 감쌀 수 없음: reboot 는 프로세스를 끝내버리고, 이후 단계(7 이후)는 모두 reboot 뒤에
-# 실행돼야 함. reboot 전에 DONE 을 디스크에 기록 → reboot 후 재실행이 이 단계를 건너뛰게 함
-# (무한 reboot 루프 방지).
-# confirm 거절 / 비대화 중단 시엔 DONE 미기록 → a01_reboot 은 RUNNING 상태로 남음.
-# 건너뛰기 판단은 DONE 만 보므로, 다음 실행에서 reboot 를 다시 물음 — 아직 동의를 안 받았으니 의도된 동작.
+# --- 단계 6: 재부팅 경계 ---
+# run_step 으로 감싸지 않는다 — reboot 은 프로세스를 끝내 버려 단계 실행 틀에 맞지 않고, 7 단계부터는
+# 전부 재부팅 뒤에 돌아야 한다. 재부팅 전에 DONE 을 디스크에 기록해야 복귀 후 실행이 이 단계를
+# 건너뛴다(안 그러면 재부팅 무한 루프). 중단돼 DONE 이 안 남으면 다음 실행에서 다시 묻는데,
+# 아직 동의를 못 받은 것이므로 의도한 동작이다.
 if ! step_should_skip a01_reboot; then
     step_begin 6 "${STEPS_TOTAL}" a01_reboot
-    # reboot 동의는 위의 시작 confirm 에서 이미 받음(tty 실행) — 다시 안 물음. 비대화 첫 실행은
-    # 그 confirm 을 경고를 로그에 남기고 건너뛴 뒤, 여기서 자동으로 진행.
+    # 재부팅 동의는 위의 시작 confirm 에서 이미 받았다 — 여기서 다시 묻지 않는다.
     echo "[install] prerequisites (kernel/driver/Docker/ROS2) complete — rebooting to apply the driver and docker group."
-    step_end_ok
+    step_end DONE
     echo
     echo ">>> Rebooting. It auto-resumes on return (login) — no manual run needed."
     sudo reboot
 fi
 
-# reboot 복귀 직후 조기 점검: 부팅된 커널에 wifi/USB 드라이버(modules-extra) 존재 여부 확인.
-# 잘못된(반쪽) 커널로 부팅됐다면, 이후 단계(RealSense DKMS 등)로 넘어가기 전에 경고.
+# 재부팅 직후 점검 — 부팅된 커널에 wifi / USB 입력 드라이버 모듈이 들어 있는지 본다.
+# 재부팅 전과 달리 여기서 없으면 "새 커널을 아직 안 탔을 뿐" 이 아니라 진짜 반쪽 커널이다.
+# 콘솔에도 띄운다 — 로그에만 남기면 아무도 안 보는데, 이 경고가 사실상 유일한 안전망이다.
 __running="$(uname -r)"
 if [[ ! -d "/lib/modules/${__running}/kernel/drivers/net/wireless" ]]; then
-    # 참고 경고 → 로그에만 기록(콘솔은 깔끔하게 유지). 진단용으로 install_log 에 남음.
-    { echo "[install] warning: the current kernel (${__running}) appears to lack modules-extra — wifi/USB input may be missing."
-      echo "          Boot a kernel that has modules-extra from GRUB, or see the kernel-module section in docs/TROUBLESHOOTING.md."; } >>"$LOG_FILE"
+    { echo "[install] warning: the current kernel (${__running}) appears to lack its extra modules — wifi/USB input may be missing."
+      echo "          Reboot into a kernel that has them (GRUB > Advanced options), then run this installer again."
+      echo "          Check with: ls /lib/modules/\$(uname -r)/kernel/drivers/net/wireless"; } \
+        | tee -a "$LOG_FILE" >&2 || true
 fi
 
-# 참고: 앱 계층(DSR 드라이버 + RealSense + cobot2 colcon 빌드 + 컨테이너 toolkit/이미지)은 더 이상
-# install.sh 에 없음 — setup-app.sh 로 옮겼고, base 설치 후 실행.
-
-# --- step 7: 개발 도구(a03: VS Code) ---
+# --- 단계 7: VS Code ---
 run_stage_a03 6
 
-# --- step 8: DDS 튜닝(CycloneDDS 버퍼 + 유선 NIC 자동 화이트리스트) ---
-# 호스트 노드와 앱 컨테이너가 함께 쓰는 cyclonedds 환경을 결정론적으로(항상 같은 결과) 설정.
-# 스테이지 스크립트에 없음 — install.sh 에서만, 또는 단독(bash resources/dds-tuning.sh)으로 실행.
-run_step 8 dds_tuning bash "${RESOURCE_DIR}/dds-tuning.sh"
+# --- 단계 8: DDS 튜닝(CycloneDDS 소켓 버퍼 + 유선 NIC 화이트리스트) ---
+# host 노드와 앱 컨테이너가 같은 설정을 보게 맞춘다. 따로 돌리려면 bash resources/hostcfg.sh dds.
+run_step 8 dds_tuning bash "${RESOURCE_DIR}/hostcfg.sh" dds
 
-# --- step 9: 정적 이더넷 IP(로봇 LAN: .1 그리퍼 / .100 로봇 / .30 호스트) ---
-# 유선 NIC 을 로봇 LAN 정적 IP 로 설정(nmcli). gateway/DNS 없음 → wifi 인터넷은 그대로. 멱등(여러 번 실행해도 결과 동일).
-# confirm 없음(되돌릴 수 있고, 실행 시작의 단일 동의가 이걸 포함).
-run_step 9 network_static_ip bash "${RESOURCE_DIR}/network-static-ip.sh"
+# --- 단계 9: 정적 이더넷 IP(로봇 LAN: .1 그리퍼 / .100 로봇 / .30 host) ---
+# nmcli 로 유선 NIC 에 고정 IP 를 준다. gateway/DNS 를 비워 인터넷은 계속 wifi 로 나간다.
+# 되돌릴 수 있는 설정이라 여기서 따로 묻지 않는다(시작 confirm 에 포함).
+run_step 9 network_static_ip bash "${RESOURCE_DIR}/hostcfg.sh" network
 
-# 재개용 autostart 정리(재개 진입 때 이미 제거됐으면 아무 일 안 함 — 멱등).
+# 자동 재개 항목 정리 — 재개로 들어올 때 이미 지웠으면 아무 일도 하지 않는다.
 remove_resume_autostart 2>/dev/null || true
 
 state_dump
