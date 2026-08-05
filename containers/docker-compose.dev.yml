@@ -12,16 +12,14 @@
 #     → 수정 즉시 반영
 #     서브디렉토리 자체가 패키지 보유(중첩 src 없음) → mount 대상
 #     소스 = install.sh(DSR 단계)가 레포에서 복사 생성
-#   - 노드 auto-run(CMD ros2 run) off → 기동 시 colcon build 1회 후 sleep
-#     실행 = exec 진입 후 수동
+#   - 노드 auto-run(CMD ros2 run) off → 기동 시 colcon build 1회 후 sleep (실행 = exec 진입 후 수동)
 #   - 빌드 전 /ws/build·/ws/install 비우기 → colcon build --symlink-install --merge-install
 #     builder 이미지 = 프로덕션용 merge-install(복사본) 산출물을 /ws/build·/ws/install 에 baked
 #     named volume = 최초 생성 시 그 내용을 복사 수령
 #     그 위에 --symlink-install 실행 → ament_cmake 패키지(od_msg)가
 #       'failed to create symbolic link ... existing path ... Is a directory' 충돌 → 빌드 실패
 #     `|| true` 로 감싸기 = 실패 은폐 → baked 복사본이 조용히 실행 → host 편집 미반영
-#     → 매 기동마다 이전 산출물 비워 clean symlink 빌드 보장
-#       증분 캐시 포기(두 패키지 = 수초)
+#     → 매 기동마다 이전 산출물 비워 clean symlink 빌드 보장(증분 캐시 포기, 두 패키지 = 수초)
 #     결과: egg-link/심링크가 /ws/src 지시 → .py 수정이 노드 재실행만으로 즉시 반영
 #     compose 없는 docker run 도 동일 명령
 #   - 별도 이미지 태그(dev-builder) = 프로덕션 이미지 tag clobber 방지

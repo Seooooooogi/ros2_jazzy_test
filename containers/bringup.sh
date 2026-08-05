@@ -20,8 +20,7 @@
 #   → 컨테이너 미종료 + Up 상태 잔존(leak)
 #   대안 = 이 shell 이 compose + voice 프로세스를 직접 소유 + `trap … INT TERM EXIT` 설정
 #   → launch 종료 방식과 무관하게 정리 보장(재현 실험으로 확인)
-#   launch 자체 = 미관여
-#     컨테이너/voice 없이 로봇/카메라만 기동하려면 launch 직접 실행
+#   launch 자체 = 미관여(컨테이너/voice 없이 로봇/카메라만 기동하려면 launch 직접 실행)
 #
 # 사전 조건: `bash setup-app.sh` 선행
 #   m0609_rg2_bringup + 오버레이 빌드 / host voice Python 설치 / yolo dev-builder 이미지 빌드
@@ -38,8 +37,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 # base + dev override 병합 = dev-builder 이미지(소스 live-mount + 컨테이너 안 colcon build)
-# up / down = 반드시 같은 -f 조합 필요
-#   → trap 과 up 호출이 공유하도록 단일 배열로 묶음
+# up / down = 같은 -f 조합 필수 → trap 과 up 이 공유하는 단일 배열로 묶음
 COMPOSE_ARGS=(-f "${SCRIPT_DIR}/docker-compose.yml" -f "${SCRIPT_DIR}/docker-compose.dev.yml")
 
 # config.sh = compose 파일의 값 치환(interpolate)용 env 공급
@@ -83,8 +81,7 @@ cleanup() {
     _cleaned=1
     echo "[bringup] stopping application containers (docker compose down)…"
     docker compose "${COMPOSE_ARGS[@]}" down --timeout 5 || true
-    # host voice 노드 = 이 shell 이 백그라운드로 소유
-    #   VOICE_PID 평가 시점 = trap 발동 시 → 정의 전 발동돼도 안전
+    # host voice 노드 = 이 shell 이 백그라운드로 소유(VOICE_PID 평가 시점 = trap 발동 시 → 정의 전 발동돼도 안전)
     # `-- -PID` = 프로세스 그룹 전체에 신호
     #   기동부의 `set -m` → PGID == VOICE_PID
     #   → `ros2 run` 래퍼 + 그 자식인 실제 노드 + 노드가 띄운 자손까지 동시 종료
@@ -126,8 +123,7 @@ wait_build() {
         #   N=1 → package(단수) / N>1 → packages(복수) → 단·복수 무관 매칭
         # 빌드 실패 시에도 Summary 줄 출력("Summary: 0 packages finished")
         #   + "M package[s] failed/aborted" 동반
-        # → Summary 등장 시 failed/aborted 표시가 하나라도 있으면 빌드 실패 판정
-        #   "had stderr output" = 경고, 실패 아님
+        # → Summary 등장 시 failed/aborted 표시가 하나라도 있으면 빌드 실패 판정("had stderr output" = 경고, 실패 아님)
         if grep -qE 'Summary: [0-9]+ package' <<<"${logs}"; then
             if grep -qE 'package(s)? (failed|aborted)' <<<"${logs}"; then
                 echo "[bringup] ${svc} colcon build FAILED — see: docker logs ${svc}" >&2
@@ -173,13 +169,11 @@ docker exec -d yolo-detection bash -c 'source /root/.bashrc; exec ros2 run objec
 #
 # `set -m`(job control) 채택 이유
 #   `ros2 run` = 노드를 exec 하지 않고 자식 프로세스로 기동
-#     ros2run/api/__init__.py = subprocess.Popen 사용
-#   → $! = 래퍼 PID 일 뿐
-#   → 래퍼에 SIGTERM 전송 시 래퍼만 종료(SIGTERM 핸들러 없음) + 노드는 마이크를 쥔 채 생존
+#   ros2run/api/__init__.py = subprocess.Popen → $! = 래퍼 PID 일 뿐
+#   → 래퍼 SIGTERM = 래퍼만 종료(핸들러 없음) + 노드는 마이크를 쥔 채 생존
 #   job control on → 이 백그라운드 잡이 자기 프로세스 그룹의 리더(PGID == $!)
 #   → cleanup 이 그룹 전체에 신호 → 노드 + 자손까지 동시 종료
-# 대가
-#   노드가 스크립트의 포그라운드 그룹 이탈 → 터미널 Ctrl+C 가 노드에 직접 전달 안 됨
+# 대가 = 노드가 스크립트의 포그라운드 그룹 이탈 → 터미널 Ctrl+C 가 노드에 직접 전달 안 됨
 #   → cleanup 의 그룹 kill = 유일한 종료 경로
 #   두 변경 = 반드시 함께 유지
 echo "[bringup] launching host voice node (ros2 run voice_processing get_keyword)…"
@@ -204,8 +198,7 @@ echo "[bringup] host voice node up (pgid ${VOICE_PID})"
 
 echo "[bringup] launching robot driver + gripper + camera — Ctrl+C tears everything down."
 # camera 기본값 반전
-#   m0609_rg2_bringup launch 의 camera 기본 = false
-#     이유: standalone 개발 시 USB 카메라 미점유
+#   m0609_rg2_bringup launch 의 camera 기본 = false (이유: standalone 개발 시 USB 카메라 미점유)
 #   이 스크립트 = yolo 컨테이너 동반 기동 + 그 노드는 /camera/* 토픽 부재 시 조용히 대기만
 #   → 사용자가 camera 미명시인 경우에만 camera:=true 부착
 #   launch 의 중복 인자 우선순위에 의존하지 않고 직접 검사

@@ -116,13 +116,11 @@ obtain_cobot2() {
 
 # 통합 bringup(m0609_rg2_bringup) + 그 외부 의존(onrobot-ros2) 워크스페이스 준비
 #
-# M0609 레포 clone 조건 = 부재 시에만
-#   기존 존재 = 개발 중 작업본 가능성 → 불건드림
+# M0609 레포 clone 조건 = 부재 시에만(기존 존재 = 개발 중 작업본 가능성 → 불건드림)
 # 워크스페이스 링크 대상 = 레포 전체 아님, bringup 패키지 하나만 심볼릭 링크
 #   같은 레포의 m0609_rg2_moveit = rosdep 으로 moveit 스택 전체 유입 + 이 설치에서 미사용
 #   colcon 의 심볼릭 링크 패키지 디렉토리 인식 = 실측 확인
-# onrobot-ros2 = M0609 레포가 추적하지 않는 외부 패키지
-#   → 커밋 SHA 핀 고정 + 별도 clone
+# onrobot-ros2 = M0609 레포가 추적하지 않는 외부 패키지 → 커밋 SHA 핀 고정 + 별도 clone
 obtain_m0609() {
     local ws_src="${DSR_WORKSPACE}/src"
     local link="${ws_src}/m0609_rg2_bringup"
@@ -156,8 +154,7 @@ obtain_m0609() {
     else
         git clone "${ONROBOT_REPO_URL}" "${onrobot}"
     fi
-    # clone skip 경로에서도 핀 재적용
-    #   → 브랜치가 옮겨져 있어도 같은 커밋으로 수렴
+    # clone skip 경로에서도 핀 재적용 → 브랜치가 옮겨져 있어도 같은 커밋으로 수렴
     git -C "${onrobot}" checkout --quiet "${ONROBOT_COMMIT}"
     echo "setup-app: onrobot-ros2 pinned at ${ONROBOT_COMMIT}"
 }
@@ -187,8 +184,7 @@ do_reset() {
 }
 
 do_workspace() {
-    # 앞의 두 단계 = 즉시 끝나는 확인 → run_step 아님, step_begin/step_end 사용
-    #   출력 = 로그 우회 없이 콘솔에 그대로 노출
+    # 앞의 두 단계 = 즉시 끝나는 확인 → run_step 아님, step_begin/step_end 사용(출력 = 로그 우회 없이 콘솔에 그대로 노출)
     step_begin 1 "${TOTAL}" "cobot2 source (verify)"; obtain_cobot2; step_end DONE
     step_begin 2 "${TOTAL}" "m0609 bringup + onrobot-ros2"; obtain_m0609; step_end DONE
     run_step 3 "doosan-robot2 driver + DSR deps" bash "${RESOURCE_DIR}/app-install.sh" dsr
@@ -206,8 +202,7 @@ do_workspace() {
 
 do_containers() {
     run_step $((8 + STEP_OFF)) "NVIDIA Container Toolkit" env ASSUME_YES=1 SKIP_IF_NO_GPU=1 bash "${RESOURCE_DIR}/app-install.sh" toolkit
-    # 이미지 = yolo 하나뿐
-    #   voice = 컨테이너 아님, host 직접 실행
+    # 이미지 = yolo 하나뿐(voice = 컨테이너 아님, host 직접 실행)
     run_step $((9 + STEP_OFF)) "build container image (yolo dev-builder)" bash "${SCRIPT_DIR}/containers/build-all.sh"
 }
 

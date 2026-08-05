@@ -97,8 +97,7 @@ case "${1:-}" in
         exit 0
         ;;
     --resume-terminal)
-        # 재부팅 뒤 GUI autostart 전용 내부 플래그
-        #   사람이 직접 입력할 일 없음 → 도움말 미노출
+        # 재부팅 뒤 GUI autostart 전용 내부 플래그(사람이 직접 입력할 일 없음 → 도움말 미노출)
         # 설치 재실행 후 결과 확인용 → 터미널 미종료 상태로 유지
         cd "${SCRIPT_DIR}"
         rc=0; bash "$0" || rc=$?
@@ -139,15 +138,13 @@ fi
 #   → 비밀번호 입력 완료 전에 설치가 진행되는 것처럼 보임
 sudo_prime install
 
-# run_step 바깥 실패의 위치 통지
-#   단계 안의 실패 = run_step 의 step_end FAIL 담당
+# run_step 바깥 실패의 위치 통지(단계 안의 실패 = run_step 의 step_end FAIL 담당)
 # 콘솔 = 한 줄 + 로그 경로 / 상세 = 로그행
 trap 'echo "[install] failed: line $LINENO — see ${LOG_FILE}" >&2' ERR
 
 # --- 시작 confirm 1회 + 재부팅 뒤 자동 재개 등록 ---
 # 첫 실행 = confirm 1회 수령(= 단계 6 의 재부팅 동의) + 복귀용 autostart 등록
-# 재개된 실행 = 그 autostart 즉시 삭제
-#   일회성 → 로그인할 때마다 재등장 금지
+# 재개된 실행 = 그 autostart 즉시 삭제(일회성 → 로그인할 때마다 재등장 금지)
 if step_should_skip a01_reboot; then
     remove_resume_autostart
 elif [[ -t 0 ]]; then
@@ -175,8 +172,7 @@ run_stage_a01 0 "$NO_NVIDIA_DRIVER"
 # 재부팅 전 DONE 디스크 기록 필수
 #   → 복귀 후 실행이 이 단계 skip
 #   미기록 시 재부팅 무한 루프
-# 중단으로 DONE 미기록 → 다음 실행에서 재질문
-#   아직 동의 미수령 상태 → 의도된 동작
+# 중단으로 DONE 미기록 → 다음 실행에서 재질문(아직 동의 미수령 상태 → 의도된 동작)
 if ! step_should_skip a01_reboot; then
     step_begin 6 "${STEPS_TOTAL}" a01_reboot
     # 재부팅 동의 = 위의 시작 confirm 에서 수령 완료 → 여기서 재질문 없음
@@ -187,8 +183,7 @@ if ! step_should_skip a01_reboot; then
     sudo reboot
 fi
 
-# 재부팅 직후 점검 = 부팅된 커널의 wifi / USB 입력 드라이버 모듈 포함 여부
-#   재부팅 전과 차이: 여기서 부재 = "새 커널 미적용" 아님, 실제 반쪽 커널
+# 재부팅 직후 점검 = 부팅된 커널의 wifi / USB 입력 드라이버 모듈 포함 여부(재부팅 전과 차이: 여기서 부재 = "새 커널 미적용" 아님, 실제 반쪽 커널)
 # 출력 대상 = 콘솔에도
 #   로그 전용 → 아무도 확인 안 함
 #   이 경고 = 사실상 유일한 안전망
@@ -214,8 +209,7 @@ run_step 8 dds_tuning bash "${RESOURCE_DIR}/hostcfg.sh" dds
 # 가역 설정 → 여기서 별도 질문 없음(시작 confirm 에 포함)
 run_step 9 network_static_ip bash "${RESOURCE_DIR}/hostcfg.sh" network
 
-# 자동 재개 항목 정리
-#   재개 진입 시 이미 삭제된 상태 → 무동작
+# 자동 재개 항목 정리(재개 진입 시 이미 삭제 → 무동작)
 remove_resume_autostart 2>/dev/null || true
 
 state_dump

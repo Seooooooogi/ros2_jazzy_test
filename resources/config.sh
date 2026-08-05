@@ -6,16 +6,14 @@
 #
 # resources/config.sh · source 전용
 #   distro / 버전 핀(version pin)의 단일 진실 소스
-#   정의는 이 파일 한 곳뿐
-#     스크립트마다 하드코딩 → 다음 distro 이관 때 전부 찾아 고쳐야 함
+#   정의는 이 파일 한 곳뿐(스크립트마다 하드코딩 → 다음 distro 이관 때 전부 찾아 고쳐야 함)
 #
 # 사용법(어느 설치 스크립트에서든):
 #   source "$(dirname "${BASH_SOURCE[0]}")/config.sh"   # resources/ 안에서
 #   source "$(dirname "$0")/resources/config.sh"        # 최상위(install.sh)에서
 #
 # 대입 방식
-#   distro/OS 핀 = `=` 강제 설정
-#     이유: 사용자 셸에 남은 ROS_DISTRO=humble 도 덮어써야 함
+#   distro/OS 핀 = `=` 강제 설정(이유: 사용자 셸에 남은 ROS_DISTRO=humble 도 덮어써야 함)
 #   나머지 경로/버전 변수 = `:=` → 환경변수 override 가능(테스트 / CI)
 
 # --- distro / OS (강제 설정) -----------------------------------------------
@@ -44,8 +42,7 @@ export ROS2_JAZZY_TEST_REPO
 : "${DSR_EMULATOR_VERSION:=3.0.1}"
 : "${DSR_WORKSPACE:=${HOME}/cobot2_ws}"
 
-# doosan-robot2 = upstream 아님, ROKEY-SPARK fork
-#   fork 이유: 호환 패치를 얹을 수 있음
+# doosan-robot2 = upstream 아님, ROKEY-SPARK fork (fork 이유: 호환 패치를 얹을 수 있음)
 # 핀 대상 = 브랜치 아님, 커밋
 #   fork 에 커밋이 계속 얹힘 → 브랜치로 받으면 설치 시점마다 다른 리비전
 #   → 어느 머신이 무엇으로 빌드됐는지 추적 불가
@@ -81,8 +78,7 @@ export ROS2_JAZZY_TEST_REPO
 # meta 패키지 설치 필수
 #   meta = 커널 이미지 + headers + modules-extra 한 묶음
 #   modules-extra 누락 → 부팅은 되나 wifi / 일부 USB 입력이 죽는 반쪽 커널
-# base-install.sh 의 nvidia 단계 = KERNEL_META 에서 'linux-' 제거 → 커널 모듈 meta 이름 생성
-#   → 이름 형식 변경 시 그쪽도 함께 확인
+# base-install.sh 의 nvidia 단계 = KERNEL_META 에서 'linux-' 제거 → 커널 모듈 meta 이름 생성 → 이름 형식 변경 시 그쪽도 함께 확인
 : "${KERNEL_META:=linux-generic-hwe-24.04}"
 : "${KERNEL_HEADERS_META:=linux-headers-generic-hwe-24.04}"
 
@@ -103,8 +99,7 @@ export ROS2_JAZZY_TEST_REPO
 
 # --- Docker --------------------------------------------------------------
 # 빈 문자열 = base-install.sh 의 docker 단계가 noble 용 최신 stable 설치 + apt-mark hold 고정
-# 현재 이 값을 읽는 코드 없음
-#   용도 = 버전 직접 지정용 자리
+# 현재 이 값을 읽는 코드 없음(용도 = 버전 직접 지정용 자리)
 : "${DOCKER_VERSION_STRING:=}"
 
 # --- state 파일 (설치가 끊긴 지점부터 이어서 진행) ----
@@ -112,8 +107,7 @@ export ROS2_JAZZY_TEST_REPO
 : "${STATE_FILE:=${STATE_DIR}/state}"
 
 # --- 상세 설치 로그 (append-only, 덮어쓰기 금지) ------------------------
-# 각 단계 명령의 stdout+stderr 전체 = 여기 축적
-#   콘솔 = [n/total] 진행률만 → 경고·에러 확인처 = 이 파일뿐
+# 각 단계 명령의 stdout+stderr 전체 = 여기 축적(콘솔 = [n/total] 진행률만 → 경고·에러 확인처 = 이 파일뿐)
 # 위치 = 레포 루트의 `install_log`(git 추적 제외, 수십 MB 까지 증가 가능)
 # 절단·회전(rotate) 없음
 # 경로 = 이 파일 위치에서 계산 → cwd 무관
@@ -139,8 +133,7 @@ export RMW_IMPLEMENTATION="${RMW_IMPLEMENTATION:-rmw_cyclonedds_cpp}"
 # URI = XML 에서 강제 파생
 #   셸에 남은 낡은 CYCLONEDDS_URI 가 우선 → 양쪽이 조용히 다른 파일 참조
 #   → discovery 가 에러 한 줄 없이 깨짐
-# 위치 = STATE_DIR 아님, XDG config 아래
-#   이유: 설치 state 디렉토리를 지워도 생존
+# 위치 = STATE_DIR 아님, XDG config 아래(이유: 설치 state 디렉토리를 지워도 생존)
 export CYCLONEDDS_XML="${CYCLONEDDS_XML:-${XDG_CONFIG_HOME:-${HOME}/.config}/cyclonedds/cyclonedds.xml}"
 export CYCLONEDDS_URI="file://${CYCLONEDDS_XML}"
 
@@ -176,8 +169,7 @@ export ROS_DOMAIN_ID="${ROS_DOMAIN_ID:-0}"
 : "${TOTAL_STEPS:=9}"
 
 # --- 자체 점검 ----------------------------------------------------------
-# 필수 변수 비어 있지 않은지 확인
-#   호출 시점 = 각 설치 스크립트 진입 직후 → 누락 즉시 검출
+# 필수 변수 비어 있지 않은지 확인(호출 시점 = 각 설치 스크립트 진입 직후 → 누락 즉시 검출)
 config_assert_set() {
     local var missing=0
     for var in ROS_DISTRO UBUNTU_CODENAME STATE_FILE KEYRING_DIR KERNEL_META KERNEL_HEADERS_META DSR_WORKSPACE RMW_IMPLEMENTATION CYCLONEDDS_XML; do

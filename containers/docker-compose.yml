@@ -6,8 +6,7 @@
 # 이 base 단독 `up` = runtime(최종) 이미지·노드 auto-run 경로
 #   학습 기본 흐름 = 그것을 빌드하지 않음(수동 runtime/publish 용으로만 보존)
 #   빌드 게이트 = build-all.sh 가 builder 스테이지 빌드/검증
-# install.sh = 이 파일 자동 호출 없음
-#   이유: host(설치) / application(컨테이너) 책임 분리
+# install.sh = 이 파일 자동 호출 없음(이유: host(설치) / application(컨테이너) 책임 분리)
 #
 # 카메라 = host 소유
 #   yolo 컨테이너 기동 전에 host 의 realsense2_camera 노드가 떠서 /camera/* 토픽 publish 중이어야 함
@@ -16,7 +15,8 @@
 #     ros2 launch m0609_rg2_bringup bringup.launch.py camera:=true
 #   `bash containers/bringup.sh` = 사용자가 camera:= 미지정 시 camera:=true 자동 부착
 #   이 진입점 = 기존 `rs_launch.py align_depth.enable:=true` 대체
-#   토픽 경로 = realsense2_camera_node 를 namespace='/' + name='camera' 로 기동한 /camera/*
+#   구 rs_launch.py 기본 = /camera/camera/*(드라이버 private 토픽 + upstream 이 노드 기본 ns 를 /camera 로 고정 → 중복)
+#   토픽 경로 = realsense2_camera_node 를 namespace='/' + name='camera' 로 기동해 그 중복을 제거한 /camera/*
 #     동시에 align_depth·enable_rgbd·enable_sync·pointcloud on
 #   소비자 = 그 경로를 절대 이름으로 구독 → 기동 시 remap 인자 불필요
 #   누락 시 aligned_depth_to_color 미기동 → object_detection 의 depth 계산 실패

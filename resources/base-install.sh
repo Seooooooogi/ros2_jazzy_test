@@ -20,8 +20,7 @@ source "${SCRIPT_DIR}/config.sh"
 source "${SCRIPT_DIR}/lib.sh"
 config_assert_set
 
-# HWE 커널 meta + headers + modules-extra 를 한 세트로 정렬
-#   커널 이미지 단독 설치 → wifi + 일부 USB 입력 드라이버 누락 상태로 부팅
+# HWE 커널 meta + headers + modules-extra 를 한 세트로 정렬(커널 이미지 단독 설치 → wifi + 일부 USB 입력 드라이버 누락 상태로 부팅)
 base_kernel() {
 
     # 1) HWE 커널 meta + headers meta
@@ -37,8 +36,7 @@ base_kernel() {
     #      커널 계열에 따라 별도 패키지 없음 + linux-modules-<버전> 안에 포함(7.0.0 계열)
     #      없는 이름 전달 → apt 실패 → 설치 전체 정지
     #    판단 기준 = "apt 에 그 이름이 있나" 아님, "모듈이 실제로 있나"
-    #      apt 인덱스가 낡거나 비면 존재하는 패키지도 부재로 보고
-    #        (apt-get update = 모든 저장소 불통이어도 성공 종료)
+    #      apt 인덱스가 낡거나 비면 존재하는 패키지도 부재로 보고 (apt-get update = 모든 저장소 불통이어도 성공 종료)
     #      그 상태에서 조용히 skip → 반쪽 커널 미검출
     #      디스크 직접 확인 = 인덱스 상태와 무관
     #      모듈 부재 시 아래 apt 가 시끄럽게 실패 = 의도한 결과
@@ -86,19 +84,16 @@ base_nvidia() {
     sudo add-apt-repository -y universe
     sudo add-apt-repository -y multiverse
 
-    # 빌드 도구 + ubuntu-drivers
-    #   DKMS = 커널 교체 시마다 드라이버 모듈을 자동 재빌드하는 구조
+    # 빌드 도구 + ubuntu-drivers (DKMS = 커널 교체 시마다 드라이버 모듈을 자동 재빌드하는 구조)
     sudo apt-get update
     sudo apt-get install -y build-essential gcc ubuntu-drivers-common dkms nvidia-modprobe
 
-    # 드라이버 설치 분기
-    #   기설치 → skip / 버전 지정 → 그 버전 / 그 외 → 자동 선택 폴백
+    # 드라이버 설치 분기(기설치 → skip / 버전 지정 → 그 버전 / 그 외 → 자동 선택 폴백)
     driver_pkg="$(_resolve_driver_pkg)"
     if [[ -n "${driver_pkg}" ]]; then
         echo "nvidia: already installed (${driver_pkg}) — skipping the install step"
     elif [[ -n "${NVIDIA_DRIVER_VERSION}" ]]; then
-        # 드라이버 유저스페이스 + 커널 모듈 메타 동시 설치
-        #   커널 업그레이드 시 모듈 메타가 맞는 nvidia 모듈 자동 취득 → 짝 유지
+        # 드라이버 유저스페이스 + 커널 모듈 메타 동시 설치(커널 업그레이드 시 모듈 메타가 맞는 nvidia 모듈 자동 취득 → 짝 유지)
         pin_pkg="nvidia-driver-${NVIDIA_DRIVER_VERSION}${NVIDIA_DRIVER_FLAVOR}"
         module_meta="linux-modules-nvidia-${NVIDIA_DRIVER_VERSION}${NVIDIA_DRIVER_FLAVOR}-${KERNEL_META#linux-}"
         echo "nvidia: pin install ${pin_pkg} (+ kernel-module meta ${module_meta})"
@@ -118,8 +113,7 @@ base_nvidia() {
     fi
 
     # hold 대상 = 드라이버 유저스페이스만 → apt upgrade 가 고정을 풀지 못함
-    # 커널 모듈 메타 hold 금지
-    #   커널 업데이트 추종 불가 → 다음 커널에서 nvidia 모듈 누락
+    # 커널 모듈 메타 hold 금지(커널 업데이트 추종 불가 → 다음 커널에서 nvidia 모듈 누락)
     if apt-mark showhold | grep -qx "${driver_pkg}"; then
         echo "nvidia: ${driver_pkg} already held"
     else
@@ -132,8 +126,7 @@ base_nvidia() {
     # 확인 대상 = 다음에 부팅될 커널의 nvidia 커널 모듈 실재 여부
     #   구동 중 커널 아님, '부팅될 커널' 기준
     #   이유: 방금 새 커널이 설치됐을 수 있음
-    # 모듈 부재 상태로 재부팅 → 디스플레이 드라이버 없음 → 검은 화면
-    #   → 조용한 통과 금지, 여기서 정지
+    # 모듈 부재 상태로 재부팅 → 디스플레이 드라이버 없음 → 검은 화면 → 조용한 통과 금지, 여기서 정지
     # 부팅될 커널 = 설치된 것 중 최신으로 간주(GRUB 기본 설정 기준)
     target_kernel="$(find /lib/modules -mindepth 1 -maxdepth 1 -type d -printf '%f\n' | grep -E '^[0-9]+\.' | sort -V | tail -n1)"
     if find "/lib/modules/${target_kernel}" -name 'nvidia.ko*' 2>/dev/null | grep -q .; then
@@ -148,8 +141,7 @@ base_nvidia() {
 }
 
 # Docker 엔진 설치 + 현재 사용자 docker 그룹 추가
-# 설치 후 hold 고정
-#   미고정 시 apt upgrade 마다 엔진 버전이 조용히 밀림
+# 설치 후 hold 고정(미고정 시 apt upgrade 마다 엔진 버전이 조용히 밀림)
 base_docker() {
 
     local DOCKER_LIST=/etc/apt/sources.list.d/docker.list
@@ -159,8 +151,7 @@ base_docker() {
     sudo apt-get update
     sudo apt-get install -y ca-certificates curl
 
-    # 2) 키링 + apt 소스 등록
-    #    설치 직전 apt update = 아래 4) 담당 → 여기선 --no-update
+    # 2) 키링 + apt 소스 등록. 설치 직전 apt update = 아래 4) 담당 → 여기선 --no-update
     arch="$(dpkg --print-architecture)"
     add_apt_repo --no-update \
         --mode raw \
@@ -180,8 +171,7 @@ base_docker() {
         sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
     fi
 
-    # 5) 엔진 패키지 버전 고정
-    #    이미 hold 상태 → skip
+    # 5) 엔진 패키지 버전 고정(이미 hold 상태 → skip)
     for pkg in docker-ce docker-ce-cli containerd.io; do
         if apt-mark showhold | grep -qx "${pkg}"; then
             echo "docker: ${pkg} already held"
@@ -201,8 +191,7 @@ base_docker() {
         echo "docker: added ${user} to the docker group (applied after reboot/re-login)"
     fi
 
-    # 7) 검증
-    #    그룹 변경 = 이 셸에 미반영 → sudo 로 실행
+    # 7) 검증(그룹 변경 = 이 셸에 미반영 → sudo 로 실행)
     sudo docker run --rm hello-world
 
     # 8) 실제 설치 버전 기록용 출력
@@ -291,8 +280,7 @@ ros2_desktop() {
     echo "ros2-desktop: success installing ROS2 ${ROS_DISTRO}"
 }
 
-# ROS2 extras = robot/control 패키지 + Gazebo Harmonic
-#   desktop 핵심 = 앞 단계가 이미 설치 완료
+# ROS2 extras = robot/control 패키지 + Gazebo Harmonic (desktop 핵심 = 앞 단계가 이미 설치 완료)
 # Gazebo = Classic/Fortress 아님, Harmonic
 #   Classic/Fortress = jazzy 빌드 없음
 #   Harmonic = packages.ros.org 가 벤더 패키지로 배포 → 별도 저장소 추가 불필요
@@ -319,8 +307,7 @@ ros2_extras() {
         "ros-${ROS_DISTRO}-ros2launch" \
         "ros-${ROS_DISTRO}-ament-pep257"
 
-    # Gazebo Harmonic
-    #   ros_gz 메타 패키지 = sim/bridge/image/interfaces 동반 설치
+    # Gazebo Harmonic (ros_gz 메타 패키지 = sim/bridge/image/interfaces 동반 설치)
     sudo apt-get install -y "ros-${ROS_DISTRO}-ros-gz"
 
     echo "ros2-extras: success installing ROS2 ${ROS_DISTRO} extras (robot/control + Gazebo Harmonic)"

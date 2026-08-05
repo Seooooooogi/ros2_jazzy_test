@@ -10,8 +10,7 @@
 set -euo pipefail
 
 # /opt/ros/${ROS_DISTRO}/setup.bash + 오버레이 setup.bash = 둘 다 미설정(unset) 변수 참조
-# set -u = 미설정 변수 사용 시 에러 → 스크립트 사망
-#   → source 하는 이 구간에서만 -u 일시 해제
+# set -u = 미설정 변수 사용 시 에러 → 스크립트 사망 → source 하는 이 구간에서만 -u 일시 해제
 set +u
 # shellcheck source=/dev/null
 source "/opt/ros/${ROS_DISTRO}/setup.bash"

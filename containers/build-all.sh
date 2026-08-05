@@ -7,8 +7,7 @@
 # containers/build-all.sh · yolo 앱 컨테이너 이미지 빌드 + 검증 게이트
 #
 # host 설치와 독립 동작(Docker 엔진만 필요)
-# voice = 컨테이너 아님, host 실행(app-install.sh voice) → 여기서 미빌드
-#   → 빌드 대상 = yolo 이미지 하나뿐
+# voice = 컨테이너 아님, host 실행(app-install.sh voice) → 여기서 미빌드 → 빌드 대상 = yolo 이미지 하나뿐
 # 빌드 대상 스테이지 = yolo 이미지의 `builder`
 #   :dev-builder 태그 = 소스를 live-mount 하는 dev 이미지
 #   실행 = bringup / docker-compose.dev.yml
@@ -17,8 +16,7 @@
 #   (2) secret 위생 = docker history 에 자격증명 흔적 없음
 #   (3) 컨테이너 안 import smoke = 가벼운 import 확인
 # 이 단계 요구사항 = GPU / 카메라 / 모델 가중치 불필요(모듈 import 만 확인)
-# 미검증 항목 = torch.cuda.is_available() / 서비스 왕복(round-trip) / od_msg 해시 일치
-#   → host e2e 이후 단계 소관
+# 미검증 항목 = torch.cuda.is_available() / 서비스 왕복(round-trip) / od_msg 해시 일치 → host e2e 이후 단계 소관
 #
 # 호출자 = setup-app.sh 의 컨테이너 단계(빌드 + 검증)
 # 단독 실행도 가능
@@ -39,8 +37,7 @@ source "${REPO_ROOT}/resources/config.sh"
 #   bringup = 그 override 를 병합해 바로 이 이미지들을 `up`
 YOLO_IMAGE="docker.io/${DOCKERHUB_USER}/ros2-jazzy-yolo:dev-builder"
 
-# 실제 사용 이미지 좌표 명시 출력
-#   목적 = 조용한 기본값 폴백 방지 + 실행 기록(run-manifest) 추적
+# 실제 사용 이미지 좌표 명시 출력(목적 = 조용한 기본값 폴백 방지 + 실행 기록(run-manifest) 추적)
 printf 'INFO: build target — YOLO=%s\n' "${YOLO_IMAGE}"
 if [[ "${DOCKERHUB_USER}" == "local" ]]; then
     printf 'INFO: DOCKERHUB_USER unset → using local dev tag (cannot publish, set coordinates via .env).\n'
@@ -61,8 +58,7 @@ step() { printf '\n[%d/%d] %s\n' "$1" "${TOTAL}" "$2"; }
 #######################################
 secret_scan() {
     local image="$1"
-    # 변수 이름만으로 판단 불가
-    #   `openai` = pip 패키지 이름이기도 함
+    # 변수 이름만으로 판단 불가(`openai` = pip 패키지 이름이기도 함)
     # 유출 판정 대상 = 값 대입 흔적(NAME=값) 또는 OpenAI 키 리터럴(sk-…) 만
     if docker history --no-trunc "${image}" \
         | grep -iE '(API_?KEY|TOKEN|SECRET|PASSWD|PASSWORD)[[:space:]]*=[[:space:]]*[^[:space:]]|sk-[A-Za-z0-9_-]{16,}'; then
@@ -77,8 +73,7 @@ secret_scan() {
 # builder 스테이지 = 런타임 ENTRYPOINT 없음
 #   → python 실행 전에 여기서 ROS2 + 오버레이(overlay) 직접 source
 #   준비 과정 = containers/entrypoint.sh + dev/bashrc 와 동일
-# pip 패키지 위치 = /usr/local/lib/python3.X/dist-packages = system python 기본 sys.path
-#   → 경로 주입 불필요
+# pip 패키지 위치 = /usr/local/lib/python3.X/dist-packages = system python 기본 sys.path → 경로 주입 불필요
 # `bash -c 'SCRIPT' "$pyexpr"` = pyexpr 를 컨테이너 안 $0 에 바인딩 후 python3 -c "$0" 로 전달
 #   목적 = 따옴표 중첩으로 깨지는 escaping 회피
 # Arguments:
@@ -106,8 +101,7 @@ COBOT2_CTX="${REPO_ROOT}/cobot_ws/src/cobot2"
 # yolo Dockerfile 이 COPY 하는 정확한 패키지 디렉토리 목록(빌드 컨텍스트 기준 경로)
 #   확인 대상 = yolo_container 상위 폴더 아님, 이 말단(leaf) 경로들 직접
 #   → 소스 부분 존재 시(예: od_msg 있음 + object_detection 없음) 여기서 즉시 크게 실패
-#   미확인 시 = 수 분 걸리는 torch 레이어를 다 받은 뒤에야
-#     BuildKit 이 알 수 없는 '<path>: not found' 로 폭발
+#   미확인 시 = 수 분 걸리는 torch 레이어를 다 받은 뒤에야 BuildKit 이 알 수 없는 '<path>: not found' 로 폭발
 #   이 목록 = yolo Dockerfile 의 COPY 줄과 항상 일치 필수
 COBOT2_REQUIRED=(
     yolo_container/od_msg

@@ -24,8 +24,7 @@
 # ============================================================================
 # 1) state · 단계 진행 상태 추적(재개 가능한 재실행 + [n/total] 진행률)
 # ============================================================================
-# state 파일 형식 = 단계마다 `step_<name>=DONE|FAIL|SKIPPED|RUNNING` 한 줄
-#   같은 단계 재기록 = 그 줄 교체 → 줄 수 불변
+# state 파일 형식 = 단계마다 `step_<name>=DONE|FAIL|SKIPPED|RUNNING` 한 줄(같은 단계 재기록 = 그 줄 교체 → 줄 수 불변)
 #
 # 사용법(설치 단계에서 호출):
 #   step_should_skip a01_prerequirements && return 0
@@ -37,10 +36,8 @@
 __current_step=""
 
 # STEP_STATE
-#   1 = 단계 결과를 state 파일에 기록 + 완료 단계 skip
-#       대상 install.sh: 재부팅 너머 재개 필요
-#   0 = 배너·로그·heartbeat 만, state 미변경
-#       대상 setup-app.sh: 재개 개념 없음
+#   1 = 단계 결과를 state 파일에 기록 + 완료 단계 skip (대상 install.sh: 재부팅 너머 재개 필요)
+#   0 = 배너·로그·heartbeat 만, state 미변경(대상 setup-app.sh: 재개 개념 없음)
 : "${STEP_STATE:=1}"
 
 # state 파일 없으면 생성
@@ -77,8 +74,7 @@ step_should_skip() {
     grep -qE "^step_${name}=(DONE|SKIPPED)$" "$STATE_FILE"
 }
 
-# 단계 시작
-#   [n/total] 배너 출력 + state 에 RUNNING 기록
+# 단계 시작([n/total] 배너 출력 + state 에 RUNNING 기록)
 step_begin() {
     local n="$1" total="$2" name="$3"
     __current_step="$name"
@@ -93,8 +89,7 @@ step_begin() {
     fi
 }
 
-# 현재 단계 종료 + state 에 결과 기록
-#   status = DONE | FAIL | SKIPPED
+# 현재 단계 종료 + state 에 결과 기록(status = DONE | FAIL | SKIPPED)
 step_end() {
     local status="${1:-DONE}"
     if [[ -z "${__current_step}" ]]; then
@@ -126,15 +121,13 @@ state_dump() {
 # 출력 정책
 #   기본 = 단계 명령의 stdout·stderr 모두 LOG_FILE 로만 → 콘솔 청결 유지
 #   VERBOSE=1 = 콘솔 + 로그 양쪽에 tee
-#   단계의 경고·에러도 로그에만 축적, 단 실패는 비공개 아님
-#     step_end FAIL = [FAIL] 한 줄 + 로그 경로 출력
+#   단계의 경고·에러도 로그에만 축적, 단 실패는 비공개 아님(step_end FAIL = [FAIL] 한 줄 + 로그 경로 출력)
 # 실패 처리 = FAIL 기록 후 즉시 exit
 #   → 호출자의 ERR trap 은 이 경로에서 미발동
 #   ERR trap 담당 범위 = run_step 바깥의 명령 실패뿐
 
 # 경과 시간 제자리 갱신 → 단계 진행 중 콘솔이 멈춘 것처럼 보이지 않게 함
-# 사용 조건 = 출력이 로그로 가는 기본 모드 + 대화형 터미널
-#   VERBOSE 모드 = 단계의 실제 출력이 콘솔로 흐름
+# 사용 조건 = 출력이 로그로 가는 기본 모드 + 대화형 터미널(VERBOSE 모드 = 단계의 실제 출력이 콘솔로 흐름)
 # 첫 출력 2초 지연 = 단계 초반의 sudo 비밀번호 프롬프트와 겹침 방지
 _step_heartbeat() {
     local name="$1" start="$SECONDS" e
@@ -165,16 +158,14 @@ run_step() {
         echo "[${n}/${total}] skip: ${name} (already $(_state_get "${name}" | tr '[:upper:]' '[:lower:]'))"
         return 0
     fi
-    # 상세 설치 로그에 단계 구분 배너 추가
-    #   LOG_FILE 없는 환경 = STATE_DIR 로 대체
+    # 상세 설치 로그에 단계 구분 배너 추가(LOG_FILE 없는 환경 = STATE_DIR 로 대체)
     local log="${LOG_FILE:-${STATE_DIR:?run-step: STATE_DIR not set}/install.log}"
     mkdir -p "$(dirname "$log")"
     { echo; echo "===== [${n}/${total}] ${name} — $(date '+%F %T') ====="; } >>"$log"
 
     step_begin "${n}" "${total}" "${name}"
 
-    # 출력 라우팅
-    #   기본 = 로그 전용 / VERBOSE=1 = 콘솔에도 tee
+    # 출력 라우팅(기본 = 로그 전용 / VERBOSE=1 = 콘솔에도 tee)
     # tee = 비동기 → 명령 종료 후에도 버퍼 flush 진행 중일 수 있음
     #   대응: 전용 fd 로 열고 배너 출력 전에 close(EOF) → flush 완료까지 대기
     #   미대응 시 [OK]/[FAIL] 이 명령의 마지막 줄과 뒤섞임
@@ -187,8 +178,7 @@ run_step() {
         wait "$teepid" 2>/dev/null || true
     else
         if [[ -t 2 && "$interactive" -eq 0 ]]; then
-            # 로그 경로 출력 없음
-            #   출력 시점 = 실패 시 + install.sh 맨 끝, 각 1회
+            # 로그 경로 출력 없음(출력 시점 = 실패 시 + install.sh 맨 끝, 각 1회)
             _step_heartbeat "${name}" & hbpid=$!
         fi
         "$@" >>"$log" 2>&1 || rc=$?
@@ -289,8 +279,7 @@ confirm_or_abort() {
     fi
 }
 
-# 위와 같은 확인 + ASSUME_YES=1 이면 질문 없이 동의 처리
-#   용도 = CI / 자동화가 동의를 표현하는 통로
+# 위와 같은 확인 + ASSUME_YES=1 이면 질문 없이 동의 처리(용도 = CI / 자동화가 동의를 표현하는 통로)
 confirm_or_abort_assumable() {
     local msg="$1"
     if [[ "${ASSUME_YES:-0}" == "1" ]]; then
@@ -304,14 +293,12 @@ confirm_or_abort_assumable() {
 # 5) resume · 재부팅 너머로 설치 자동 재개
 # ============================================================================
 # GNOME autostart 항목(.desktop) = 로그인 시 터미널에서 install.sh --resume-terminal 실행
-# 재개 진입 시 install.sh 가 그 항목 즉시 삭제
-#   목적: 로그인할 때마다 재등장 방지
+# 재개 진입 시 install.sh 가 그 항목 즉시 삭제(목적: 로그인할 때마다 재등장 방지)
 
 RESUME_AUTOSTART_DIR="${HOME}/.config/autostart"
 RESUME_AUTOSTART_FILE="${RESUME_AUTOSTART_DIR}/ros2-jazzy-install-resume.desktop"
 
-# 재부팅 후 자동 재개 등록
-#   터미널 에뮬레이터 부재 → 등록 생략 + 수동 재실행 안내
+# 재부팅 후 자동 재개 등록(터미널 에뮬레이터 부재 → 등록 생략 + 수동 재실행 안내)
 register_resume_autostart() {
     local repo="$1"
     local entry="${repo}/install.sh"
@@ -338,8 +325,7 @@ EOF
     echo "[install] registered auto-resume after reboot: ${RESUME_AUTOSTART_FILE}" >&2
 }
 
-# autostart 항목 제거
-#   호출 시점 = 재개 진입 시(일회성 보장) + 설치 완료 시
+# autostart 항목 제거 호출 시점 = 재개 진입 시(일회성 보장) + 설치 완료 시
 remove_resume_autostart() {
     if [[ -f "${RESUME_AUTOSTART_FILE}" ]]; then
         rm -f "${RESUME_AUTOSTART_FILE}"
@@ -366,14 +352,12 @@ sudo_prime() {
         echo "${prefix}: cannot verify sudo privileges. Run as a sudo-capable regular user." >&2
         exit 1
     fi
-    # 서브셸 안 set +e
-    #   목적: 일시적 sudo -n 실패 / sleep 인터럽트에 keepalive 가 조용히 죽지 않게
+    # 서브셸 안 set +e (목적: 일시적 sudo -n 실패 / sleep 인터럽트에 keepalive 가 조용히 죽지 않게)
     # 서브셸이 자기 teardown 을 trap 으로 포착 → 진행 중인 sleep 까지 종료
     #   미처리 시 고아 sleep 이 터미널의 foreground 프로세스 그룹에 잔존 → 입력 차단
     ( set +e
       trap 'kill "${_ka_sleep:-0}" 2>/dev/null; exit 0' TERM EXIT
-      # ( ) & 서브셸 안의 $$ = 이 서브셸 아님, 호출자 스크립트의 PID
-      #   → 그 스크립트 종료 시 이 while 도 함께 종료
+      # ( ) & 서브셸 안의 $$ = 이 서브셸 아님, 호출자 스크립트의 PID → 그 스크립트 종료 시 이 while 도 함께 종료
       while kill -0 "$$" 2>/dev/null; do
           sudo -n true 2>/dev/null
           sleep 60 & _ka_sleep=$!
@@ -422,8 +406,7 @@ add_apt_repo() {
         esac
     done
 
-    # 키를 stdout 으로 내보내는 다운로더
-    #   vendor 가 쓰던 플래그 그대로 보존
+    # 키를 stdout 으로 내보내는 다운로더(vendor 가 쓰던 플래그 그대로 보존)
     local -a dl
     case "${downloader}" in
         curl)     dl=(curl -fsSL);;
@@ -432,8 +415,7 @@ add_apt_repo() {
         *) echo "add_apt_repo: unknown downloader '${downloader}'" >&2; return 2;;
     esac
 
-    # 1) 키링 디렉터리 + 키
-    #    다운로드 조건 = 키 부재 시에만 → N회 실행해도 결과 동일(멱등)
+    # 1) 키링 디렉터리 + 키(다운로드 조건 = 키 부재 시에만 → N회 실행해도 결과 동일, 멱등)
     sudo install -m 0755 -d "$(dirname "${key_file}")"
     if [[ ! -f "${key_file}" ]]; then
         case "${mode}" in
@@ -452,8 +434,7 @@ add_apt_repo() {
         sudo chmod a+r "${key_file}"
     fi
 
-    # 2) apt source list
-    #    내용 동일 → 재기록 없음(중복 추가·덮어쓰기 방지)
+    # 2) apt source list (내용 동일 → 재기록 없음, 중복 추가·덮어쓰기 방지)
     local desired
     if [[ -n "${list_url}" ]]; then
         # upstream 배포 list 수령 → signed-by 경로 삽입
@@ -473,15 +454,13 @@ add_apt_repo() {
         echo "${desired}" | sudo tee "${list_file}" >/dev/null
     fi
 
-    # 3) apt 캐시 갱신
-    #    직후 다른 update 가 이어지는 호출자 = --no-update 로 skip
+    # 3) apt 캐시 갱신(직후 다른 update 가 이어지는 호출자 = --no-update 로 skip)
     if [[ "${do_update}" == "1" ]]; then
         sudo apt-get update
     fi
 }
 
-# 설치 실행마다 콘솔에 출력하는 저작권 배너
-#   재부팅 후 자동 재개된 터미널에서도 출력
+# 설치 실행마다 콘솔에 출력하는 저작권 배너(재부팅 후 자동 재개된 터미널에서도 출력)
 print_copyright() {
     cat <<'EOF'
 ============================================================
