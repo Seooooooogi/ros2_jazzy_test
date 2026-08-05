@@ -166,12 +166,15 @@ if ! step_should_skip a01_reboot; then
     sudo reboot
 fi
 
-# 재부팅 직후 점검 — 부팅된 커널에 modules-extra(wifi / USB 드라이버)가 들어 있는지 본다.
-# 반쪽짜리 커널로 부팅됐다면 RealSense DKMS 같은 뒷단계로 넘어가기 전에 로그로 경고한다.
+# 재부팅 직후 점검 — 부팅된 커널에 wifi / USB 입력 드라이버 모듈이 들어 있는지 본다.
+# 재부팅 전과 달리 여기서 없으면 "새 커널을 아직 안 탔을 뿐" 이 아니라 진짜 반쪽 커널이다.
+# 콘솔에도 띄운다 — 로그에만 남기면 아무도 안 보는데, 이 경고가 사실상 유일한 안전망이다.
 __running="$(uname -r)"
 if [[ ! -d "/lib/modules/${__running}/kernel/drivers/net/wireless" ]]; then
-    { echo "[install] warning: the current kernel (${__running}) appears to lack modules-extra — wifi/USB input may be missing."
-      echo "          Boot a kernel that has modules-extra from GRUB, or see the kernel-module section in docs/TROUBLESHOOTING.md."; } >>"$LOG_FILE"
+    { echo "[install] warning: the current kernel (${__running}) appears to lack its extra modules — wifi/USB input may be missing."
+      echo "          Reboot into a kernel that has them (GRUB > Advanced options), then run this installer again."
+      echo "          Check with: ls /lib/modules/\$(uname -r)/kernel/drivers/net/wireless"; } \
+        | tee -a "$LOG_FILE" >&2 || true
 fi
 
 # --- 단계 7: VS Code ---

@@ -28,9 +28,21 @@ base_kernel() {
 
     # 2) 지금 부팅돼 있는 커널의 modules-extra / headers 를 따로 보강한다. HWE meta 는 자기가 추적하는
     #    커널만 책임지는데, 설치 시점에 돌고 있는 건 Ubuntu 기본 제공 커널일 수 있기 때문.
+    #    extra 를 조건부로 요청하는 이유: 커널 계열에 따라 별도 패키지가 없고 linux-modules-<버전>
+    #    안에 들어 있는 경우가 있다(7.0.0 계열이 그렇다). 없는 이름을 그냥 넘기면 apt 가 실패해
+    #    설치 전체가 멈춘다.
+    #    판단 기준을 "apt 에 그 이름이 있나" 가 아니라 "모듈이 실제로 있나" 로 둔다 — apt 인덱스가
+    #    낡거나 비면 있는 패키지도 없다고 나오는데(apt-get update 는 모든 저장소가 불통이어도
+    #    성공으로 끝난다), 그때 조용히 건너뛰면 반쪽 커널을 못 걸러낸다. 디스크를 직접 보면
+    #    인덱스 상태와 무관하고, 모듈이 없으면 아래 apt 가 시끄럽게 실패해 그게 맞는 결과다.
     local running
     running="$(uname -r)"
-    sudo apt-get install -y "linux-modules-extra-${running}" "linux-headers-${running}"
+    if [[ -d "/lib/modules/${running}/kernel/drivers/net/wireless" ]]; then
+        echo "kernel: extra modules already present for ${running} — installing headers only."
+        sudo apt-get install -y "linux-headers-${running}"
+    else
+        sudo apt-get install -y "linux-modules-extra-${running}" "linux-headers-${running}"
+    fi
 
     # 3) 검증 — wifi 드라이버가 들어 있는 net/wireless 모듈 디렉토리 확인.
     #    여기서는 경고만 하고 멈추지 않는다: 방금 새 커널이 깔렸다면 아직 돌고 있는 옛 커널에
