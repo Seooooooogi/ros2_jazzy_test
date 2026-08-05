@@ -5,21 +5,26 @@
 # =============================================================
 #
 # shellcheck source-path=SCRIPTDIR
-# install.sh — host 워크스테이션의 base 환경을 설치하는 단일 진입점.
+# install.sh · host 워크스테이션 base 환경 설치의 단일 진입점
 #
-# 커널 / NVIDIA / Docker / ROS2 → reboot → VS Code → DDS 튜닝 → 정적 IP 까지 9 단계.
-# cobot2 앱 계층(DSR 드라이버 / RealSense / colcon 빌드 / host voice / 컨테이너)은 여기 없다 —
-# base 설치가 끝난 뒤 setup-app.sh 가 올린다. cobot2 소스와 corecode 는 사용자가 직접 배치한다.
-# 몇 번을 다시 실행해도 안전하다 — 끝난 단계는 state 파일을 보고 건너뛰고 멈춘 지점부터 이어간다.
-# 한 단계만 다시 돌리려면 --reset(전체 초기화)하거나 resources/{base-install,hostcfg}.sh 의 해당
-# 서브커맨드를 직접 실행한다.
+# 9 단계 = 커널 / NVIDIA / Docker / ROS2 → reboot → VS Code → DDS 튜닝 → 정적 IP
+# cobot2 앱 계층(DSR 드라이버 / RealSense / colcon 빌드 / host voice / 컨테이너) = 여기 미포함
+#   담당 = base 설치 후의 setup-app.sh
+#   cobot2 소스 + corecode = 사용자가 직접 배치
+# 재실행 안전(N회 무해)
+#   완료 단계 = state 파일 기준 skip → 중단 지점부터 재개
+# 한 단계만 재실행하려면
+#   --reset(전체 초기화)
+#   또는 resources/{base-install,hostcfg}.sh 의 해당 서브커맨드 직접 실행
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 RESOURCE_DIR="${SCRIPT_DIR}/resources"
 
-# root 로 실행하면 HOME=/root 가 되어 state · docker 그룹 · 워크스페이스가 전부 /root 아래에 생기고
-# 정작 쓸 사용자 계정에는 아무것도 반영되지 않는다. 필요한 명령은 하위 스크립트가 알아서 sudo 로 부른다.
+# root 실행 → HOME=/root
+#   state · docker 그룹 · 워크스페이스가 전부 /root 아래 생성
+#   → 실제 사용할 사용자 계정에 무반영
+# 필요한 명령 = 하위 스크립트가 자체적으로 sudo 호출
 if [[ "$(id -u)" -eq 0 ]]; then
     echo "install: do not run with sudo. Run 'bash install.sh' as a regular user." >&2
     echo "         (the script calls the necessary commands via sudo on its own.)" >&2
@@ -63,9 +68,11 @@ output on the console.
 EOF
 }
 
-# --verbose 와 --no-nvidia-driver 는 서브커맨드가 아니라 어느 서브커맨드에나 붙는 modifier 다.
-# 여기서 먼저 걷어내야 아래 case 가 --status / --reset / 빈 인자만 보고 판단할 수 있다.
-# run_step 은 같은 셸에서 VERBOSE 를 읽고, export 는 하위 resources 스크립트를 위한 것.
+# --verbose / --no-nvidia-driver = 서브커맨드 아님, 모든 서브커맨드에 붙는 modifier
+#   선분리 필요 → 아래 case 가 --status / --reset / 빈 인자만 보고 판단 가능
+# VERBOSE 소비처
+#   run_step = 같은 셸에서 직접 읽음
+#   export = 하위 resources 스크립트용
 VERBOSE="${VERBOSE:-0}"
 NO_NVIDIA_DRIVER=0
 __args=()
@@ -77,7 +84,7 @@ for __a in "$@"; do
     esac
 done
 export VERBOSE
-# "${__args[@]}" 로 줄이면 인자 없이 실행할 때 bash 4.4 미만에서 unbound 에러가 난다.
+# "${__args[@]}" 로 축약 → 인자 없이 실행 시 bash 4.4 미만에서 unbound 에러
 set -- "${__args[@]+"${__args[@]}"}"
 
 # --- 인자 처리 ---
@@ -90,13 +97,14 @@ case "${1:-}" in
         exit 0
         ;;
     --resume-terminal)
-        # 재부팅 뒤 GUI autostart 가 부르는 내부 플래그 — 사람이 칠 일이 없어 도움말에 없다.
-        # 설치를 다시 돌린 뒤 결과를 볼 수 있도록 터미널을 닫지 않고 열어 둔다.
+        # 재부팅 뒤 GUI autostart 전용 내부 플래그
+        #   사람이 직접 입력할 일 없음 → 도움말 미노출
+        # 설치 재실행 후 결과 확인용 → 터미널 미종료 상태로 유지
         cd "${SCRIPT_DIR}"
         rc=0; bash "$0" || rc=$?
         echo
         echo "[resume] install.sh exited (${rc}). Keeping this terminal open so you can review the result."
-        # heartbeat 나 비밀번호 입력이 터미널 입력 상태를 흐트러뜨렸을 수 있어 되돌린다.
+        # heartbeat / 비밀번호 입력이 터미널 입력 상태를 훼손했을 가능성 → 복원
         stty sane 2>/dev/null || true
         exec bash
         ;;
@@ -105,14 +113,17 @@ case "${1:-}" in
     *) echo "install: unknown option '$1'" >&2; usage; exit 2 ;;
 esac
 
-# 로그 디렉토리를 먼저 만든다 — 아래 경고와 ERR trap 이 LOG_FILE 에 쓰는데, LOG_FILE 을 아직 없는
-# 디렉토리로 바꿔 지정한 경우 그 초기 기록이 조용히 사라진다. 기본 경로에서는 아무 일도 하지 않는다.
+# 로그 디렉토리 선생성
+#   아래 경고 + ERR trap = LOG_FILE 에 기록
+#   LOG_FILE 을 미존재 디렉토리로 지정한 경우 → 그 초기 기록이 조용히 소실
+#   기본 경로 = 무동작
 mkdir -p "$(dirname "$LOG_FILE")"
 
-# 실제 설치일 때만 배너(위 유틸리티 서브커맨드는 이미 exit 했다). 자동 재개된 터미널에서도 똑같이 보인다.
+# 배너 출력 조건 = 실제 설치일 때만(위 유틸리티 서브커맨드 = 이미 exit)
+#   자동 재개된 터미널에서도 동일 출력
 print_copyright
 
-# --- 사전 점검 — 엉뚱한 환경에서 절반쯤 깔리다 실패하는 사고를 막는다 ---
+# --- 사전 점검: 엉뚱한 환경에서 절반쯤 설치되다 실패하는 사고 차단 ---
 if [[ ! -f /etc/os-release ]]; then
     echo "install: cannot read /etc/os-release — make sure this is an Ubuntu environment." >&2
     exit 1
@@ -123,42 +134,52 @@ if [[ "$host_codename" != "$UBUNTU_CODENAME" ]]; then
     echo "install: this installer targets Ubuntu '$UBUNTU_CODENAME' (current: '${host_codename:-unknown}')." >&2
     exit 1
 fi
-# sudo 비밀번호는 단계가 시작되기 전에 한 번만 받는다 — 단계 도중에 물으면 그 프롬프트가 heartbeat
-# 줄에 가려, 비밀번호를 다 치기도 전에 설치가 진행되는 것처럼 보인다.
+# sudo 비밀번호 = 단계 시작 전 1회 수령
+#   단계 도중 질문 → 프롬프트가 heartbeat 줄에 가림
+#   → 비밀번호 입력 완료 전에 설치가 진행되는 것처럼 보임
 sudo_prime install
 
-# run_step 바깥에서 난 실패의 위치를 알린다(단계 안의 실패는 run_step 의 step_end FAIL 이 처리).
-# 콘솔에는 한 줄과 로그 경로만 남기고 상세는 로그로 보낸다.
+# run_step 바깥 실패의 위치 통지
+#   단계 안의 실패 = run_step 의 step_end FAIL 담당
+# 콘솔 = 한 줄 + 로그 경로 / 상세 = 로그행
 trap 'echo "[install] failed: line $LINENO — see ${LOG_FILE}" >&2' ERR
 
 # --- 시작 confirm 1회 + 재부팅 뒤 자동 재개 등록 ---
-# 첫 실행: confirm 을 한 번 받고(= 단계 6 의 재부팅 동의) 복귀용 autostart 를 등록한다.
-# 재개된 실행: 그 autostart 를 곧바로 지운다 — 일회성이라 로그인할 때마다 다시 뜨면 안 된다.
+# 첫 실행 = confirm 1회 수령(= 단계 6 의 재부팅 동의) + 복귀용 autostart 등록
+# 재개된 실행 = 그 autostart 즉시 삭제
+#   일회성 → 로그인할 때마다 재등장 금지
 if step_should_skip a01_reboot; then
     remove_resume_autostart
 elif [[ -t 0 ]]; then
     confirm_or_abort "The install reboots once midway and auto-continues on return (login) (terminal auto-opens, one sudo password). Continue?"
     register_resume_autostart "${SCRIPT_DIR}"
 else
-    # 참고 경고는 콘솔이 아니라 로그에만 남긴다.
+    # 참고 경고 = 콘솔 아님, 로그 전용
     { echo "[install] warning: non-interactive shell — cannot register auto-resume."
       echo "          Run it in a GUI session, or re-run 'bash install.sh' manually after reboot."; } >>"$LOG_FILE"
 fi
 
 # --- 단계 1~5: 커널 기준선 / NVIDIA / Docker / ROS2 / 추가 도구 ---
-# 커널을 NVIDIA 보다 먼저 세운다 — HWE 커널(최신 하드웨어 지원을 얹은 Ubuntu 커널 트랙) 메타 +
-# 헤더 + modules-extra 가 먼저 깔려 있어야 드라이버 모듈이 반쪽짜리 커널에 붙는 사고와
-# DKMS(커널이 바뀔 때마다 모듈을 자동 재빌드하는 구조) 헤더 누락을 둘 다 피한다.
+# 순서 = 커널 먼저, NVIDIA 나중
+#   HWE 커널 = 최신 하드웨어 지원을 얹은 Ubuntu 커널 트랙
+#   HWE 메타 + 헤더 + modules-extra 선설치 필요
+#   → 드라이버 모듈이 반쪽 커널에 붙는 사고 회피
+#   → DKMS 헤더 누락 회피
+#   DKMS = 커널 교체 시마다 모듈을 자동 재빌드하는 구조
 run_stage_a01 0 "$NO_NVIDIA_DRIVER"
 
 # --- 단계 6: 재부팅 경계 ---
-# run_step 으로 감싸지 않는다 — reboot 은 프로세스를 끝내 버려 단계 실행 틀에 맞지 않고, 7 단계부터는
-# 전부 재부팅 뒤에 돌아야 한다. 재부팅 전에 DONE 을 디스크에 기록해야 복귀 후 실행이 이 단계를
-# 건너뛴다(안 그러면 재부팅 무한 루프). 중단돼 DONE 이 안 남으면 다음 실행에서 다시 묻는데,
-# 아직 동의를 못 받은 것이므로 의도한 동작이다.
+# run_step 미사용
+#   reboot = 프로세스 종료 → 단계 실행 틀에 부적합
+#   7 단계 이후 = 전부 재부팅 뒤 실행 대상
+# 재부팅 전 DONE 디스크 기록 필수
+#   → 복귀 후 실행이 이 단계 skip
+#   미기록 시 재부팅 무한 루프
+# 중단으로 DONE 미기록 → 다음 실행에서 재질문
+#   아직 동의 미수령 상태 → 의도된 동작
 if ! step_should_skip a01_reboot; then
     step_begin 6 "${STEPS_TOTAL}" a01_reboot
-    # 재부팅 동의는 위의 시작 confirm 에서 이미 받았다 — 여기서 다시 묻지 않는다.
+    # 재부팅 동의 = 위의 시작 confirm 에서 수령 완료 → 여기서 재질문 없음
     echo "[install] prerequisites (kernel/driver/Docker/ROS2) complete — rebooting to apply the driver and docker group."
     step_end DONE
     echo
@@ -166,9 +187,11 @@ if ! step_should_skip a01_reboot; then
     sudo reboot
 fi
 
-# 재부팅 직후 점검 — 부팅된 커널에 wifi / USB 입력 드라이버 모듈이 들어 있는지 본다.
-# 재부팅 전과 달리 여기서 없으면 "새 커널을 아직 안 탔을 뿐" 이 아니라 진짜 반쪽 커널이다.
-# 콘솔에도 띄운다 — 로그에만 남기면 아무도 안 보는데, 이 경고가 사실상 유일한 안전망이다.
+# 재부팅 직후 점검 = 부팅된 커널의 wifi / USB 입력 드라이버 모듈 포함 여부
+#   재부팅 전과 차이: 여기서 부재 = "새 커널 미적용" 아님, 실제 반쪽 커널
+# 출력 대상 = 콘솔에도
+#   로그 전용 → 아무도 확인 안 함
+#   이 경고 = 사실상 유일한 안전망
 __running="$(uname -r)"
 if [[ ! -d "/lib/modules/${__running}/kernel/drivers/net/wireless" ]]; then
     { echo "[install] warning: the current kernel (${__running}) appears to lack its extra modules — wifi/USB input may be missing."
@@ -181,15 +204,18 @@ fi
 run_stage_a03 6
 
 # --- 단계 8: DDS 튜닝(CycloneDDS 소켓 버퍼 + 유선 NIC 화이트리스트) ---
-# host 노드와 앱 컨테이너가 같은 설정을 보게 맞춘다. 따로 돌리려면 bash resources/hostcfg.sh dds.
+# 목적 = host 노드 + 앱 컨테이너가 같은 설정 참조
+# 단독 실행: bash resources/hostcfg.sh dds
 run_step 8 dds_tuning bash "${RESOURCE_DIR}/hostcfg.sh" dds
 
 # --- 단계 9: 정적 이더넷 IP(로봇 LAN: .1 그리퍼 / .100 로봇 / .30 host) ---
-# nmcli 로 유선 NIC 에 고정 IP 를 준다. gateway/DNS 를 비워 인터넷은 계속 wifi 로 나간다.
-# 되돌릴 수 있는 설정이라 여기서 따로 묻지 않는다(시작 confirm 에 포함).
+# nmcli 로 유선 NIC 에 고정 IP 부여
+# gateway/DNS 공란 → 인터넷 경로는 계속 wifi
+# 가역 설정 → 여기서 별도 질문 없음(시작 confirm 에 포함)
 run_step 9 network_static_ip bash "${RESOURCE_DIR}/hostcfg.sh" network
 
-# 자동 재개 항목 정리 — 재개로 들어올 때 이미 지웠으면 아무 일도 하지 않는다.
+# 자동 재개 항목 정리
+#   재개 진입 시 이미 삭제된 상태 → 무동작
 remove_resume_autostart 2>/dev/null || true
 
 state_dump

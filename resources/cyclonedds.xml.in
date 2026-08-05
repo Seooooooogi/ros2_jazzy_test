@@ -1,23 +1,28 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  CycloneDDS 설정 템플릿. hostcfg.sh dds 가 아래 인터페이스 placeholder 줄을 설치
-  머신의 loopback (+ DDS_NETIF 로 명시 지정한 외부 NIC) 목록으로 치환해 ${CYCLONEDDS_XML}
-  (기본 ~/.ros2_jazzy_test/cyclonedds.xml) 로 렌더한다. 렌더 결과는 머신 종속 산출물이라
-  레포로 추적하지 않는다.
+  CycloneDDS 설정 템플릿
+    렌더 주체 = hostcfg.sh dds
+    치환 대상 = 아래 인터페이스 placeholder 줄
+    치환 값 = 설치 머신의 loopback (+ DDS_NETIF 로 명시 지정한 외부 NIC) 목록
+    출력 = ${CYCLONEDDS_XML}(기본 ~/.ros2_jazzy_test/cyclonedds.xml)
+    렌더 결과 = 머신 종속 산출물 → 레포 추적 제외
 
-  [인터페이스] 기본은 loopback(lo) 하나만 화이트리스트한다. 이 시스템의 ROS2 DDS
-  참여자는 전부 같은 호스트다(호스트 ↔ network_mode:host 컨테이너); 실 로봇은 DSR
-  드라이버의 TCP 로 붙지 DDS 참여자가 아니다. loopback 우선(priority 높음)이라 같은
-  호스트 노드끼리 127.0.0.1 로 주고받아, 외부 NIC 의 자기 IP 로 unicast 를 보내다 실패
-  하는 라우팅 이슈를 원천 회피한다. 물리 NIC 자동 고정은 제거했다(2026-07-23) — 머신에
-  따라 빈 NIC 이름을 렌더해 도메인 생성이 통째로 실패하는 사고를 냈기 때문. 다른 머신과
-  cross-host 로 토픽을 나눠야 하면 DDS_NETIF=<iface> 로 명시 지정하면 그 NIC 이
-  presence_required="false" 로 추가된다(포트가 down 이어도 노드 기동은 막지 않음).
+  [인터페이스]
+    기본 화이트리스트 = loopback(lo) 하나만
+    이 시스템의 ROS2 DDS 참여자 = 전부 같은 호스트(호스트 ↔ network_mode:host 컨테이너)
+      실 로봇 = DSR 드라이버의 TCP 접속, DDS 참여자 아님
+    loopback 우선(priority 높음) → 같은 호스트 노드끼리 127.0.0.1 로 송수신
+      → 외부 NIC 의 자기 IP 로 unicast 를 보내다 실패하는 라우팅 이슈 원천 회피
+    물리 NIC 자동 고정 = 제거됨
+      머신에 따라 빈 NIC 이름 렌더 → 도메인 생성 전면 실패 사고
+    cross-host 토픽 공유 필요 시 = DDS_NETIF=<iface> 명시 지정
+      → 그 NIC 이 presence_required="false" 로 추가(포트 down 이어도 노드 기동 미차단)
 
-  [버퍼] RealSense raw 같은 대용량 프레임(color ≈ 2.6MB)은 UDP fragment 로 쪼개져
-  전송된다. DDS 요청 버퍼는 커널 net.core.rmem_max / wmem_max 에 캡되므로
-  /etc/sysctl.d/60-cyclonedds.conf 와 반드시 세트로 적용해야 한다. 특히
-  SocketSendBufferSize 는 하드 최소값이라 wmem_max 가 부족하면 도메인 생성이 거부된다.
+  [버퍼]
+    RealSense raw 같은 대용량 프레임(color ≈ 2.6MB) = UDP fragment 로 분할 송신
+    DDS 요청 버퍼 = 커널 net.core.rmem_max / wmem_max 에 캡
+      → /etc/sysctl.d/60-cyclonedds.conf 와 세트 적용 필수
+    SocketSendBufferSize = 하드 최소값 → wmem_max 부족 시 도메인 생성 거부
 -->
 <CycloneDDS xmlns="https://cdds.io/config"
             xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
@@ -27,7 +32,7 @@
       <Interfaces>
 __DDS_INTERFACES__
       </Interfaces>
-      <!-- loopback 에서 SPDP discovery 가 동작하려면 멀티캐스트 허용이 필요. -->
+      <!-- loopback 의 SPDP discovery 동작 조건 = 멀티캐스트 허용 -->
       <AllowMulticast>true</AllowMulticast>
     </General>
     <Internal>
