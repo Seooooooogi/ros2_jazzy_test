@@ -203,7 +203,7 @@ os.makedirs(dst, exist_ok=True)
 # (a) bundled feature 모델 복사 (네트워크 우회 — 동봉본이 authoritative).
 for f in os.listdir(src):
     shutil.copy(os.path.join(src, f), dst)
-# (b) stock wakeword 모델 다운로드. feature 는 이미 존재 → 존재-가드로 skip, VAD+stock 만 네트워크에서.
+# (b) stock wakeword 모델 다운로드. feature + VAD 는 동봉본으로 이미 존재 → 존재-가드로 skip, stock 만 네트워크에서.
 openwakeword.utils.download_models()
 # (c) 전체 .tflite 'TFL3' 매직 검증. 손상본(504 HTML)은 삭제 후 fail-loud → 재실행 시 재다운로드.
 bad = [f for f in sorted(os.listdir(dst))
