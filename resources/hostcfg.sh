@@ -5,8 +5,9 @@
 # =============================================================
 #
 # shellcheck source-path=SCRIPTDIR
-# resources/hostcfg.sh — 설치가 끝난 호스트의 런타임 설정(DDS 버퍼 / 로봇 LAN 정적 IP).
-# 설치가 아니라 설정이라 언제든 단독으로 다시 돌려도 된다.
+# resources/hostcfg.sh · 설치 완료된 호스트의 런타임 설정
+#   대상 = DDS 버퍼 / 로봇 LAN 정적 IP
+#   성격 = 설치 아님, 설정 → 언제든 단독 재실행 가능
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -14,8 +15,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/config.sh"
 config_assert_set
 
-# CycloneDDS 설정 XML 을 렌더하고 커널 소켓 버퍼를 늘린다.
-# 버퍼를 sysctl 로 먼저 키워 두는 이유: cyclonedds 노드는 뜨는 순간의 버퍼 크기를 그대로 가져간다.
+# CycloneDDS 설정 XML 렌더 + 커널 소켓 버퍼 증설
 hostcfg_dds() {
 
     local TEMPLATE="${SCRIPT_DIR}/cyclonedds.xml.in"
@@ -26,13 +26,10 @@ hostcfg_dds() {
     [[ -f "${SYSCTL_SRC}" ]] || { echo "dds: sysctl source missing: ${SYSCTL_SRC}" >&2; exit 1; }
 
     # --- 1. 인터페이스 목록: loopback 기본, 물리 NIC 은 명시 지정만 --------------
-    # 이 시스템의 DDS 참여자는 전부 같은 호스트에 있다(host + network_mode:host 컨테이너) — 실 로봇은
-    # DSR 드라이버의 TCP 로 붙지 DDS 참여자가 아니다. 그래서 loopback 하나면 충분하다.
-    # 물리 NIC 자동 감지는 머신에 따라 빈 이름을 렌더해 cyclonedds 가 도메인 생성을 통째로 거부하고
-    # 모든 노드가 즉사한 적이 있어 없앴다. 다른 머신과 토픽을 나눌 때만 DDS_NETIF 로 직접 지정한다.
+    # 다른 머신과 토픽 공유 시에만 DDS_NETIF 로 직접 지정
     declare -a NICS=()
     if [[ -n "${DDS_NETIF}" ]]; then
-        # 쉼표로 여러 개 지정 가능. lo 는 렌더 단계에서 항상 따로 붙으므로 외부 NIC 만 적으면 된다.
+        # 쉼표로 복수 지정 가능(lo 는 렌더 단계에서 항상 별도 추가)
         IFS=',' read -r -a NICS <<< "${DDS_NETIF}"
         echo "[dds] DDS_NETIF override → external NIC(s): ${NICS[*]}"
     else
@@ -47,21 +44,19 @@ hostcfg_dds() {
 
     # --- 3. cyclonedds.xml 렌더링 (NIC 목록 채워 넣기) ------------------------------
     mkdir -p "$(dirname "${CYCLONEDDS_XML}")"
-    # 임시 파일은 /tmp 로 고정한다 — sed 의 `r` 은 파일명을 따옴표로 감쌀 수 없어 공백이 없어야 한다.
+    # 임시 파일 위치 = /tmp 고정(sed 의 r = 경로에 공백 불허)
     iface_block="$(TMPDIR=/tmp mktemp)"
     rendered_xml="$(TMPDIR=/tmp mktemp)"
     trap 'rm -f "${iface_block}" "${rendered_xml}"' EXIT
     {
-        # loopback 을 항상 맨 앞에. 우선순위를 높여 두면 같은 호스트끼리는 127.0.0.1 로 주고받는다.
+        # loopback = 항상 맨 앞
         printf '        <NetworkInterface name="lo" priority="default" multicast="true"/>\n'
         for nic in "${NICS[@]}"; do
             [[ "${nic}" == "lo" ]] && continue   # 위에서 이미 추가함 — DDS_NETIF 에 lo 가 들어와도 중복 방지
             printf '        <NetworkInterface name="%s" presence_required="false"/>\n' "${nic}"
         done
     } > "${iface_block}"
-    # 자리표시자 줄 하나만 NIC 블록으로 갈아 끼운다(줄 전체를 고정해 주석 본문과 오매칭하지 않게).
-    # 임시 파일에 먼저 렌더하고 mv 로 옮기는 이유: sed 가 도중에 실패해도 반쪽짜리 XML 이 남지
-    # 않게 하려는 것 — 깨진 XML 을 만나면 cyclonedds 노드가 그대로 죽는다.
+    # 자리표시자 줄 하나만 NIC 블록으로 교체
     sed -e "/^__DDS_INTERFACES__\$/{
     r ${iface_block}
     d
@@ -70,15 +65,15 @@ hostcfg_dds() {
     echo "[dds] render complete: ${CYCLONEDDS_XML} (loopback + ${#NICS[@]} external NIC)"
 
     # --- 4. ~/.bashrc 환경변수 주입 (관리 블록 하나로) ----------------------
-    # config.sh 는 source 될 때만 적용되는데 사용자가 여는 대화형 셸은 ~/.bashrc 만 읽는다 —
-    # 그래서 같은 export 를 여기에도 넣는다. 기존 줄을 지우고 마커 블록으로 다시 써서 중복을 막는다.
+    # config.sh 적용 범위 = source 된 셸뿐 → 같은 export 를 ~/.bashrc 에도 주입
+    # 기존 줄 삭제 후 마커 블록으로 재기록 → 중복 방지
     bashrc="${HOME}/.bashrc"
     BEGIN_MARK="# >>> ros2_jazzy_test cyclonedds env >>>"
     END_MARK="# <<< ros2_jazzy_test cyclonedds env <<<"
     if [[ -f "${bashrc}" ]]; then
         # 이전 관리 블록 제거
         sed -i "/${BEGIN_MARK}/,/${END_MARK}/d" "${bashrc}"
-        # 예전에 손으로 넣었을 수 있는 흩어진 export/주석도 함께 정리
+        # 손으로 넣었을 수 있는 흩어진 export/주석도 함께 정리
         sed -i \
             -e '/CycloneDDS receive-buffer tuning for large RealSense topics/d' \
             -e '/default RMW = CycloneDDS for all new shells/d' \
@@ -91,8 +86,7 @@ hostcfg_dds() {
         echo "# CycloneDDS standard + large-topic buffer/interface tuning (managed by hostcfg.sh dds, do not edit manually)"
         echo "export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp"
         echo "export CYCLONEDDS_URI=\"file://${CYCLONEDDS_XML}\""
-        # ROS_DOMAIN_ID 는 일부러 여기서 관리하지 않는다 — 학생이 직접 자기 ~/.bashrc 에 추가하는
-        # 연습 과제다. 아무 데도 없으면 host 와 컨테이너 모두 기본값 0 이라 서로 매칭된다.
+        # ROS_DOMAIN_ID = 여기서 의도적으로 미관리
         echo "${END_MARK}"
     } >> "${bashrc}"
     echo "[dds] updated the ~/.bashrc managed block (CYCLONEDDS_URI / RMW_IMPLEMENTATION)"
@@ -102,14 +96,13 @@ hostcfg_dds() {
     echo "[dds]       communication with other machines requires that external NIC to be up."
 }
 
-# 로봇 LAN 쪽 유선 NIC 에 고정 IP 를 잡는다.
-# gateway/DNS 를 비우고 never-default 로 두어 인터넷 기본 경로는 wifi 에 그대로 남긴다.
+# 로봇 LAN 쪽 유선 NIC 에 고정 IP 설정(gateway/DNS 공란 + never-default)
 hostcfg_network() {
 
     command -v nmcli >/dev/null || { echo "net: no nmcli — not a NetworkManager environment." >&2; exit 1; }
 
     # --- 1. 유선 NIC 결정 -----------------------------------------
-    # HOST_ETH_NETIF 가 있으면 그대로, 없으면 물리 유선 NIC 를 찾는다(무선/docker/가상 인터페이스 제외).
+    # HOST_ETH_NETIF 존재 → 그대로 사용 / 부재 → 물리 유선 NIC 탐색
     nic=""
     if [[ -n "${HOST_ETH_NETIF}" ]]; then
         nic="${HOST_ETH_NETIF}"
@@ -138,9 +131,7 @@ hostcfg_network() {
     fi
 
     # --- 2. NetworkManager 연결 결정 -------------------------
-    # 활성 연결 → 그 NIC 에 저장된 ethernet 프로필 → 없으면 새로 생성 순으로 찾는다(케이블이 빠져 있으면
-    # 활성 연결이 없다). 새로 만들지 않고 기존 프로필을 고치는 이유는, 남아 있는 DHCP 프로필이 자동으로
-    # 올라와 방금 넣은 고정 설정을 덮어쓰는 것을 막기 위해서다.
+    # 탐색 순서 = 활성 연결 → 저장된 ethernet 프로필 → 부재 시 신규 생성
     conn="$(nmcli -t -f NAME,DEVICE con show --active 2>/dev/null | awk -F: -v d="${nic}" '$2==d{print $1; exit}')"
     if [[ -z "${conn}" ]]; then
         while IFS= read -r name; do
@@ -158,7 +149,7 @@ hostcfg_network() {
     echo "[net] target connection: ${conn} (device ${nic})"
 
     # --- 3. 고정 IP 적용 (gateway/DNS 없음 → wifi 인터넷 보호) ------------
-    # interface-name 과 autoconnect 를 함께 고정해 이 프로필이 그 NIC 에서 확실히 올라오게 한다.
+    # interface-name + autoconnect 동시 고정 → 이 프로필이 그 NIC 에서 확실히 기동
     nmcli con modify "${conn}" \
         connection.interface-name "${nic}" \
         connection.autoconnect yes \
@@ -169,7 +160,7 @@ hostcfg_network() {
         ipv4.never-default yes
     echo "[net] configured: ${HOST_ETH_IP}/${HOST_ETH_PREFIX} (no gateway/DNS, never-default)"
 
-    # 케이블이 꽂혀 있지 않으면 활성화는 실패할 수 있다 — 설정 자체는 저장돼 있으니 그대로 진행한다.
+    # 케이블 미연결 → 활성화 실패 가능(설정은 저장 완료)
     if nmcli con up "${conn}" >/dev/null 2>&1; then
         echo "[net] connection activated."
     else
