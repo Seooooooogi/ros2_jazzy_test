@@ -41,7 +41,11 @@
 | `refactor/resources-merge` | `main` | `resources/*.sh`, `install.sh`, `setup-app.sh`, `containers/bringup.sh`, `containers/README.md`, `README.md` |
 | `fix/dsr-clone-pin` (dev) | 기존 | 이 spec, `scripts/trace-steps.sh`(§6.3), `docs/*` 참조 갱신, `CLAUDE.md` 갱신 |
 
-**통합 경로**: `refactor/resources-merge` → `main` 직접 머지(이미 main 기준이라 제외 경로가 섞이지 않는다) → dev 가 `git merge main` 으로 되받는다. 이 순서라면 dev 의 문서 갱신이 리팩토링된 파일명을 가리키게 된다.
+**통합 경로**: `refactor/resources-merge` → `main` 직접 머지(이미 main 기준이라 제외 경로가 섞이지 않는다) → dev 는 코드 경로의 **내용만** 가져온다. 이 순서라면 dev 의 문서 갱신이 리팩토링된 파일명을 가리키게 된다.
+
+> **정정 (2026-08-05, 실행 중 발견)**: 이 절은 원래 "dev 가 `git merge main` 으로 되받는다" 였는데 그 절차는 성립하지 않는다. `main` 의 히스토리에는 `merge-to-main.sh` 가 `docs/` · `scripts/` · `CLAUDE.md` · `.claude/` 를 `git rm` 한 커밋이 들어 있어서, dev 로 되받으면 그 삭제가 따라와 문서가 통째로 사라진다. 실제로 시도했을 때 dev 에서 수정한 8개만 충돌로 잡히고 나머지 36개는 조용히 삭제로 스테이징됐다.
+>
+> 올바른 절차는 히스토리 병합이 아니라 내용 동기화다 — dev 에서 옛 파일을 `git rm` 한 뒤 `git checkout <코드브랜치> -- resources install.sh setup-app.sh README.md containers/<변경파일>` 로 가져온다. 이때 `containers/template/` 과 `.gitignore` 는 제외한다: 전자는 main 제외 경로라 코드 브랜치에 없는 것이 정상이고, 후자는 두 브랜치가 각자 관리해 갈라져 있다.
 
 ### 3.1 착수 전 선행 조건
 
@@ -303,7 +307,7 @@ bash resources/hostcfg.sh dds             # XML 재렌더 → 기존 파일과 d
 | `setup-app.sh` 가 `run_step` 을 쓰면서 재개 동작이 새로 생길 수 있다 | `STEP_STATE=0` 으로 state 기록을 끈다. `~/.ros2_jazzy_test/state` 에 setup-app 키가 생기지 않는지 확인 |
 | 주석을 지우면서 근거가 사라진다 | 근거는 `docs/` 4개 문서에 이미 있다. 한 줄 Why 는 남긴다 |
 | 문서 참조 치환 누락 | 양쪽 브랜치에서 `grep -rnE "resources/[a-z0-9-]+\.sh"` 로 남은 옛 파일명 확인. 불변 기록(§2 비포함)은 제외 |
-| 두 브랜치로 나뉘어 문서가 코드보다 먼저 머지되면 죽은 참조가 생긴다 | §3 통합 순서를 지킨다 — 코드가 main 에 들어간 뒤 dev 가 `git merge main` 하고, 그다음 문서 참조를 고친다 |
+| 두 브랜치로 나뉘어 문서가 코드보다 먼저 머지되면 죽은 참조가 생긴다 | §3 통합 순서를 지킨다 — 코드가 main 에 들어간 뒤 dev 가 코드 경로 내용을 동기화하고, 그다음 문서 참조를 고친다(§3 정정 참고) |
 | main 승격을 건너뛰면 옛 `dsr-project-install.sh` 를 흡수하게 된다 | §3.1 선행 조건을 먼저 수행한다 |
 
 ## 10. 예상 결과

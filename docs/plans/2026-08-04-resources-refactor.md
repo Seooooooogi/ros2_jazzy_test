@@ -1453,15 +1453,29 @@ git push origin main
 
 Expected: `check-no-claude-on-main: 'main' clean`.
 
-- [ ] **Step 9: dev 가 main 을 되받는다**
+- [ ] **Step 9: dev 가 코드 경로 내용을 동기화한다**
+
+> **정정 (2026-08-05, 실행 중 발견)**: 이 단계는 원래 `git merge main` 이었는데 그 절차는 dev 의 문서를 지운다. `main` 히스토리에 `merge-to-main.sh` 가 `docs/` · `scripts/` · `CLAUDE.md` · `.claude/` 를 `git rm` 한 커밋이 있어, 되받으면 그 삭제가 따라온다. 실제로 dev 에서 수정한 8개만 충돌로 잡히고 나머지 36개는 조용히 삭제로 스테이징됐다. 히스토리를 병합하지 말고 내용만 맞춘다.
 
 ```bash
 cd ~/ros2_jazzy_test
 git checkout fix/dsr-clone-pin
-git merge main
+
+# 1) 합쳐져 사라진 옛 스크립트를 dev 에서도 지운다
+git rm -q resources/{apt-repo,colcon-build,dds-tuning,docker-install,dsr-project-install,\
+install-resume-launcher,interaction,kernel-baseline,network-static-ip,\
+nvidia-container-toolkit-install,nvidia-driver-install,orchestrate,\
+realsense-install,ros2-packages,voice-host-install,vscode-install}.sh
+
+# 2) 코드 경로 내용을 가져온다
+git checkout <코드브랜치> -- resources install.sh setup-app.sh README.md \
+    containers/README.md containers/bringup.sh containers/build-all.sh \
+    containers/docker-compose.yml containers/docker-compose.dev.yml
 ```
 
-충돌이 나면 `resources/` 쪽은 **main 것을 택한다**(리팩토링 결과가 정답).
+**`containers/template/` 과 `.gitignore` 는 동기화하지 않는다.** 전자는 main 제외 경로라 코드 브랜치에 없는 것이 정상이고(같이 가져오면 dev 에서 사라진다), 후자는 두 브랜치가 각자 관리해 이미 갈라져 있다.
+
+확인: `resources/*.sh` 가 6개, `containers/template/` 3개 보존, `git diff --cached --name-status -- docs CLAUDE.md scripts .claude` 가 비어 있을 것.
 
 - [ ] **Step 10: worktree 정리**
 
