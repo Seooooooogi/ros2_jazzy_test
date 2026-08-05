@@ -4,15 +4,11 @@
 #  Copyright (c) 2026 ROKEY bootcamp. All rights reserved.
 # =============================================================
 #
-# setup-app.sh — base 호스트 설치(install.sh) 위에 cobot2 애플리케이션 계층을 올린다.
-#
+# setup-app.sh · base 호스트 설치(install.sh) 위에 cobot2 애플리케이션 계층 적재
 #   workspace : cobot2 소스 확인 → m0609 bringup + onrobot → doosan-robot2 드라이버 + DSR 의존성 →
-#               RealSense SDK / ROS2 wrapper → host voice Python → colcon build.
-#   containers: nvidia-container-toolkit → yolo 이미지(:dev-builder — 소스를 live-mount 하는 개발용).
-#
-# install.sh 와 그 재부팅이 끝난 뒤에 실행한다.
-# 콘솔에는 [n/total] 배너와 heartbeat 만 보이고 apt / colcon / docker 의 상세 출력은 install_log 로
-# 간다(--verbose 면 콘솔에도 함께). sudo 프롬프트는 /dev/tty 로 가서 로그 라우팅에 삼켜지지 않는다.
+#               RealSense SDK / ROS2 wrapper → host voice Python → colcon build
+#   containers: nvidia-container-toolkit → yolo 이미지(:dev-builder = 소스 live-mount 개발용)
+#   실행 시점 = install.sh + 그 재부팅 완료 후
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -70,30 +66,25 @@ if [[ ${DO_WORKSPACE} -eq 0 && ${DO_CONTAINERS} -eq 0 ]]; then
     exit 2
 fi
 
-# 실제 실행일 때만 배너(--help 는 이미 exit 했다).
+# 배너 출력 조건 = 실제 실행일 때만
 print_copyright
 
-# 진행률 분모 — [n/total] 표시에만 사용.
+# 진행률 분모 = [n/total] 표시 전용
 TOTAL=0
 [[ ${DO_WORKSPACE} -eq 1 ]] && TOTAL=$(( TOTAL + 7 ))   # 7개: cobot2 확인 + m0609/onrobot + dsr + rs-sdk + rs-ros + voice-host + colcon
 [[ ${DO_CONTAINERS} -eq 1 ]] && TOTAL=$(( TOTAL + 2 ))  # 2개: toolkit + yolo image
 
-# 컨테이너만 돌 때는 워크스페이스 7단계가 빠지므로 번호를 앞으로 당긴다.
+# 컨테이너 단독 실행 = 워크스페이스 7단계 제외 → 번호 앞당김
 STEP_OFF=0
 [[ ${DO_WORKSPACE} -eq 1 ]] || STEP_OFF=-7
 
-# setup-app 은 재개 개념이 없다 — 단계 결과를 state 에 남기지 않고 배너와 로그만 쓴다.
-# 이 아래 run_step/step_begin 호출은 단계 이름 자리에 "cobot2 source (verify)" 같은 사람이 읽는
-# 문구를 쓴다 — install.sh 의 state 키(a01_docker 같은 식별자)와 달리 공백·괄호가 그대로 들어간다.
-# 이 값은 STEP_STATE=1 일 때만 state 파일 기록/조회에 쓰이는데(_state_set 의 grep -qE / sed -i),
-# 그때는 괄호가 정규식 그룹으로 해석돼 깨진다. 여길 1로 켜려면 라벨을 전부 state-safe 키로 먼저 바꿔야 한다.
+# setup-app = 재개 개념 없음 → state 미기록, 배너와 로그만 사용
 STEP_STATE=0
 STEPS_TOTAL="${TOTAL}"
 LOG_FILE="${LOG}"
 
-# cobot2 소스가 ${DSR_WORKSPACE}/src/cobot2 에 있는지 확인한다. 지금 정책은 사용자가 직접 배치하는
-# 것이라 존재만 보고, 없으면 반쪽짜리 워크스페이스를 만들어 런타임에서 깨지게 두는 대신 여기서 멈춘다.
-# 취득 방식을 git clone 등으로 바꿀 때 고칠 곳이 이 함수 하나가 되도록 격리해 두었다.
+# cobot2 소스 존재 여부 확인(부재 시 정지)
+# 취득 방식 변경 시 수정 지점 = 이 함수 하나
 obtain_cobot2() {
     local cobot2="${DSR_WORKSPACE}/src/cobot2"
     if [[ -d "${cobot2}" ]] && find "${cobot2}" -name package.xml -print -quit | grep -q .; then
@@ -110,13 +101,7 @@ obtain_cobot2() {
     exit 1
 }
 
-# 통합 bringup(m0609_rg2_bringup)과 그 외부 의존(onrobot-ros2)을 워크스페이스에 준비한다.
-#
-# M0609 레포는 없을 때만 clone 한다 — 이미 있으면 개발 중인 작업본일 수 있어 건드리지 않는다.
-# 워크스페이스에는 레포 전체가 아니라 bringup 패키지 하나만 심볼릭 링크한다. 같은 레포의
-# m0609_rg2_moveit 은 rosdep 으로 moveit 스택을 통째로 끌어오는데 이 설치에서는 쓰지 않기 때문이고,
-# colcon 이 심볼릭 링크된 패키지 디렉토리를 그대로 인식하는 것은 실측으로 확인했다.
-# onrobot-ros2 는 M0609 레포가 추적하지 않는 외부 패키지라 커밋 SHA 로 핀 고정해 따로 clone 한다.
+# 통합 bringup(m0609_rg2_bringup) + 그 외부 의존(onrobot-ros2) 워크스페이스 준비
 obtain_m0609() {
     local ws_src="${DSR_WORKSPACE}/src"
     local link="${ws_src}/m0609_rg2_bringup"
@@ -136,8 +121,7 @@ obtain_m0609() {
         exit 1
     fi
 
-    # 링크 자리에 실제 디렉토리가 있으면 ln -sfn 이 그 안쪽에 링크를 만들어 조용히 어긋난다.
-    # 사용자가 손으로 복사해 둔 경우일 수 있으니 지우지 말고 멈춘다.
+    # 링크 자리에 실제 디렉토리 존재 → 삭제 금지, 정지 처리
     if [[ -e "${link}" && ! -L "${link}" ]]; then
         echo "setup-app: ${link} exists and is not a symlink — remove it and re-run." >&2
         exit 1
@@ -150,14 +134,12 @@ obtain_m0609() {
     else
         git clone "${ONROBOT_REPO_URL}" "${onrobot}"
     fi
-    # clone 을 건너뛴 경우에도 핀을 다시 적용 — 누가 브랜치를 옮겨 놨어도 같은 커밋으로 수렴.
+    # clone skip 경로에서도 핀 재적용
     git -C "${onrobot}" checkout --quiet "${ONROBOT_COMMIT}"
     echo "setup-app: onrobot-ros2 pinned at ${ONROBOT_COMMIT}"
 }
 
-# doosan-robot2 clone 과 build/install/log 를 지워 처음부터 다시 만들 준비를 한다. 다시 받거나
-# 빌드하면 복구되는 것만 지우고, 사용자가 직접 둔 cobot2 소스는 건드리지 않는다.
-# --yes 가 없으면 먼저 확인을 받고, 물어볼 TTY 가 없으면 그냥 종료한다.
+# doosan-robot2 clone + build/install/log 삭제 → 처음부터 재생성 준비
 do_reset() {
     if [[ ${ASSUME_YES} -ne 1 ]]; then
         if [[ -t 0 ]]; then
@@ -168,8 +150,7 @@ do_reset() {
             exit 1
         fi
     fi
-    # m0609_rg2_bringup 은 심볼릭 링크라 지워도 원본(${M0609_REPO_DIR})은 그대로다.
-    # onrobot-ros2 는 핀 고정 clone 이라 다시 받으면 같은 커밋으로 복구된다.
+    # m0609_rg2_bringup = 심볼릭 링크 → 삭제해도 원본 보존
     echo "[setup-app] reset: wiping doosan-robot2 / onrobot-ros2 / m0609 link + build/install/log (cobot2 and ${M0609_REPO_DIR} kept)"
     rm -rf "${DSR_WORKSPACE}/src/doosan-robot2" \
            "${DSR_WORKSPACE}/src/onrobot-ros2" \
@@ -178,24 +159,21 @@ do_reset() {
 }
 
 do_workspace() {
-    # 앞의 두 단계는 금방 끝나는 확인이라 run_step 대신 step_begin/step_end 로 — 출력을 로그로
-    # 돌리지 않고 콘솔에 그대로 보여 준다.
+    # 앞의 두 단계 = 즉시 끝나는 확인 → run_step 아님, step_begin/step_end 사용
     step_begin 1 "${TOTAL}" "cobot2 source (verify)"; obtain_cobot2; step_end DONE
     step_begin 2 "${TOTAL}" "m0609 bringup + onrobot-ros2"; obtain_m0609; step_end DONE
     run_step 3 "doosan-robot2 driver + DSR deps" bash "${RESOURCE_DIR}/app-install.sh" dsr
     run_step 4 "RealSense SDK"                   bash "${RESOURCE_DIR}/app-install.sh" realsense-sdk
     run_step 5 "RealSense ROS2 wrapper"          bash "${RESOURCE_DIR}/app-install.sh" realsense-ros
-    # voice 는 colcon 앞에 둔다 — obtain_cobot2 뒤라 wakeword 모델이 이미 있어 import 검증이 돌고,
-    # colcon 이 voice_processing 을 system python 으로 빌드할 때 그 shebang 이 여기서 깐 의존성을 본다.
+    # voice 배치 = colcon 앞(wakeword 모델 존재 + shebang 의존성 확보)
     run_step 6 "host voice Python (direct)"      bash "${RESOURCE_DIR}/app-install.sh" voice
     run_step 7 "colcon build"                    bash "${RESOURCE_DIR}/app-install.sh" colcon
-    # OPENAI_API_KEY 는 인스톨러가 다루지 않는다 — voice_processing 노드가 자기 패키지의
-    # resource/.env 를 직접 읽으므로 사용자가 그 자리에 배치한다.
+    # OPENAI_API_KEY = 인스톨러 미취급, voice_processing 의 resource/.env 담당
 }
 
 do_containers() {
     run_step $((8 + STEP_OFF)) "NVIDIA Container Toolkit" env ASSUME_YES=1 SKIP_IF_NO_GPU=1 bash "${RESOURCE_DIR}/app-install.sh" toolkit
-    # 이미지는 yolo 하나뿐이다 — voice 는 컨테이너가 아니라 host 에서 직접 돈다.
+    # 이미지 = yolo 하나뿐(voice = 컨테이너 아님, host 직접 실행)
     run_step $((9 + STEP_OFF)) "build container image (yolo dev-builder)" bash "${SCRIPT_DIR}/containers/build-all.sh"
 }
 
@@ -203,9 +181,7 @@ echo "[setup-app] workspace=${DSR_WORKSPACE} | workspace:$([[ ${DO_WORKSPACE} -e
 
 [[ ${RESET} -eq 1 ]] && do_reset
 
-# 아래 단계는 전부 sudo(apt / docker)를 쓴다. 비밀번호는 단계 배너와 heartbeat 가 시작되기 전에
-# 한 번만 받는다 — 단계 도중에 물으면 그 프롬프트가 heartbeat 줄에 가려, 비밀번호를 다 치기도 전에
-# 진행되는 것처럼 보인다. keepalive 가 colcon build 가 끝날 때까지 sudo 를 살려 둔다.
+# 아래 단계 전부 = sudo(apt / docker) 사용 → 배너 전에 비밀번호 1회 수령
 sudo_prime setup-app
 
 [[ ${DO_WORKSPACE} -eq 1 ]] && do_workspace
