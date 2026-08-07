@@ -132,11 +132,35 @@ else
     echo "  FAIL 종료 코드 ${rc} 또는 통과 문구 없음 — 출력: ${out}" >&2; fails=$((fails + 1))
 fi
 
-echo "[10] report 는 세 관측 항목을 모두 낸다"
+echo "[10] report 는 네 관측 항목을 모두 낸다"
 out="$(bash "${PROBE}" report 2>/dev/null || true)"
-assert_contains "report NIC 절"    "${out}" "SPDP 멀티캐스트 그룹"
-assert_contains "report 소켓 절"   "${out}" "7400"
-assert_contains "report 버퍼 절"   "${out}" "수신 버퍼"
+assert_contains "report NIC 절"       "${out}" "SPDP 멀티캐스트 그룹"
+assert_contains "report 소켓 절"      "${out}" "7400"
+assert_contains "report 버퍼 절"      "${out}" "수신 버퍼"
+assert_contains "report 커널 설정 절" "${out}" "rmem_default="
+
+# 섹션 비어있음 불변식: 섹션 헤더 직후 다른 헤더가 오면 안 된다 (빈 섹션 탐지).
+# 공백 줄을 제거하고 === 로 시작하는 두 행이 연속되면 사이에 데이터가 없는 것.
+stripped="$(printf '%s\n' "${out}" | grep -v '^[[:space:]]*$')"
+prev_line=""
+invariant_passed=true
+while IFS= read -r line; do
+    if [[ "${line}" =~ ^===.*===$ ]]; then
+        if [[ -n "${prev_line}" && "${prev_line}" =~ ^===.*===$ ]]; then
+            echo "  FAIL 섹션 비어있음 — 헤더 직후 다른 헤더: '${prev_line}' 다음 '${line}'" >&2
+            fails=$((fails + 1))
+            invariant_passed=false
+            break
+        fi
+    fi
+    prev_line="${line}"
+done <<< "${stripped}"
+if ! (echo "${stripped}" | grep -q '^===.*===$'); then
+    echo "  FAIL 섹션 헤더가 없음" >&2
+    fails=$((fails + 1))
+elif [[ "${invariant_passed}" == "true" ]]; then
+    echo "  PASS 섹션 비어있음 불변식 — 모든 헤더 다음에 데이터 있음"
+fi
 
 if [[ "${fails}" -gt 0 ]]; then
     echo "FAILED: ${fails}건" >&2

@@ -132,23 +132,40 @@ probe_self_check() {
 # SPDP 주소 239.255.0.1:7400 은 RTPS 규격 기본값이라 설정 어디에도 안 적힌다 —
 # 실제로 어느 NIC 가 그 그룹에 가입했는지는 런타임에서만 보인다.
 probe_report() {
+    local nics sockets buffers rmem_max rmem_default
+
     echo "=== SPDP 멀티캐스트 그룹(239.255.0.1)에 가입한 인터페이스 ==="
-    ip maddr show | awk '/^[0-9]+:/{ifc=$2} /239\.255\.0\.1/{print ifc}' | sort -u \
-        || echo "(가입 없음 — 노드가 떠 있지 않거나 멀티캐스트가 꺼져 있다)"
+    nics="$(ip maddr show | awk '/^[0-9]+:/{ifc=$2} $2=="239.255.0.1"{print ifc}' | sort -u)"
+    if [[ -n "${nics}" ]]; then
+        printf '%s\n' "${nics}"
+    else
+        echo "(가입 없음 — 노드가 떠 있지 않거나 멀티캐스트가 꺼져 있다)"
+    fi
 
     echo
     echo "=== 7400 을 듣고 있는 소켓 ==="
-    ss -uanp 2>/dev/null | grep ':7400' | head -5 || echo "(없음)"
+    sockets="$(ss -uanp 2>/dev/null | grep ':7400' | head -5 || true)"
+    if [[ -n "${sockets}" ]]; then
+        printf '%s\n' "${sockets}"
+    else
+        echo "(없음)"
+    fi
 
     echo
     echo "=== DDS 소켓 수신 버퍼 (rb=byte) ==="
-    ss -uanm 2>/dev/null | grep -A1 ':74[0-9][0-9]' | grep -o 'rb[0-9]*' | sort -u | head -5 \
-        || echo "(측정 불가 — 노드가 떠 있어야 한다)"
+    buffers="$(ss -uanm 2>/dev/null | grep -A1 ':74[0-9][0-9]' | grep -o 'rb[0-9]*' | sort -u | head -5 || true)"
+    if [[ -n "${buffers}" ]]; then
+        printf '%s\n' "${buffers}"
+    else
+        echo "(측정 불가 — 노드가 떠 있어야 한다)"
+    fi
 
     echo
     echo "=== 커널 버퍼 설정 ==="
-    echo "rmem_max=$(sysctl -n net.core.rmem_max 2>/dev/null || echo unknown)"
-    echo "rmem_default=$(sysctl -n net.core.rmem_default 2>/dev/null || echo unknown)"
+    rmem_max="$(sysctl -n net.core.rmem_max 2>/dev/null || echo unknown)"
+    rmem_default="$(sysctl -n net.core.rmem_default 2>/dev/null || echo unknown)"
+    echo "rmem_max=${rmem_max}"
+    echo "rmem_default=${rmem_default}"
 }
 
 case "${1:-}" in
