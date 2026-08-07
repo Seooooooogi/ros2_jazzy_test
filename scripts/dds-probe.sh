@@ -19,7 +19,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
-NODES="${SCRIPT_DIR}/dds_probe_nodes.py"
+NODES="${DDS_PROBE_NODES:-${SCRIPT_DIR}/dds_probe_nodes.py}"
 
 # shellcheck source-path=SCRIPTDIR/..
 # shellcheck source=resources/config.sh
@@ -113,6 +113,14 @@ probe_self_check() {
     fi
     drop="$(sed -n 's/.*drop_pct=\([0-9.]*\).*/\1/p' <<< "${line}")"
     echo "dds-probe: self-check ${line}"
+    if ! [[ "${drop}" =~ ^[0-9]+(\.[0-9]+)?$ ]]; then
+        echo "dds-probe: self-check 실패 — drop_pct 값을 해석할 수 없다: ${line}" >&2
+        exit 1
+    fi
+    if ! command -v awk >/dev/null 2>&1; then
+        echo "dds-probe: self-check 실패 — awk 가 없어 손실률을 판정할 수 없다" >&2
+        exit 1
+    fi
     if awk "BEGIN{exit !(${drop} > 1.0)}"; then
         echo "dds-probe: self-check 실패 — loopback 손실률 ${drop}% (기준 1% 이하). 측정 도구부터 고쳐야 한다." >&2
         exit 1

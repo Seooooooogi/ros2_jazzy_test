@@ -14,6 +14,8 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 PROBE="${SCRIPT_DIR}/dds-probe.sh"
+ROOT="$(mktemp -d)"
+trap 'rm -rf "${ROOT}"' EXIT
 fails=0
 
 assert_contains() {
@@ -89,6 +91,46 @@ echo "[7] self-check 는 ROS 환경이 없으면 안내 후 종료 코드 3"
   bash "${PROBE}" self-check >/dev/null 2>&1 ) && rc=0 || rc=$?
 if [[ "${rc}" -eq 3 ]]; then echo "  PASS ROS 미source 시 종료 코드 3"; else
     echo "  FAIL 종료 코드가 ${rc} (기대 3)" >&2; fails=$((fails + 1)); fi
+
+cat > "${ROOT}/stub_bad_drop.py" <<'EOF'
+#!/usr/bin/env python3
+import sys
+import time
+
+mode = sys.argv[1] if len(sys.argv) > 1 else ""
+if mode == "talk":
+    time.sleep(3600)
+elif mode == "listen":
+    print("RESULT received=1 expected=1 drop_pct=NaN hz=1.0", flush=True)
+EOF
+
+echo "[8] self-check 는 drop_pct 를 숫자로 읽지 못하면 실패해야 한다 (통과 문구 없이)"
+out="$(AMENT_PREFIX_PATH=/fake DDS_PROBE_NODES="${ROOT}/stub_bad_drop.py" bash "${PROBE}" self-check 2>&1)" && rc=0 || rc=$?
+if [[ "${rc}" -eq 1 && "${out}" != *"통과"* ]]; then
+    echo "  PASS drop_pct 해석 불가 시 종료 코드 1, 통과 문구 없음"
+else
+    echo "  FAIL 종료 코드 ${rc} 또는 통과 문구 포함 — 출력: ${out}" >&2; fails=$((fails + 1))
+fi
+
+cat > "${ROOT}/stub_ok.py" <<'EOF'
+#!/usr/bin/env python3
+import sys
+import time
+
+mode = sys.argv[1] if len(sys.argv) > 1 else ""
+if mode == "talk":
+    time.sleep(3600)
+elif mode == "listen":
+    print("RESULT received=40 expected=40 drop_pct=0.0 hz=5.0", flush=True)
+EOF
+
+echo "[9] self-check 는 손실률이 기준 이하면 통과해야 한다"
+out="$(AMENT_PREFIX_PATH=/fake DDS_PROBE_NODES="${ROOT}/stub_ok.py" bash "${PROBE}" self-check 2>&1)" && rc=0 || rc=$?
+if [[ "${rc}" -eq 0 && "${out}" == *"통과"* ]]; then
+    echo "  PASS 정상 손실률에서 통과"
+else
+    echo "  FAIL 종료 코드 ${rc} 또는 통과 문구 없음 — 출력: ${out}" >&2; fails=$((fails + 1))
+fi
 
 if [[ "${fails}" -gt 0 ]]; then
     echo "FAILED: ${fails}건" >&2
