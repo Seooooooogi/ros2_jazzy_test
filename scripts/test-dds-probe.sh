@@ -55,12 +55,24 @@ assert_contains "m2 RANGE"      "${out}" "export ROS_AUTOMATIC_DISCOVERY_RANGE=L
 assert_contains "m2 peers"      "${out}" 'export ROS_STATIC_PEERS="192.168.1.2;192.168.1.11"'
 
 echo "[4] m2 는 peers 없이 실패해야 한다"
-if DDS_PROBE_PEERS='' bash "${PROBE}" env m2 >/dev/null 2>&1; then
-    echo "  FAIL peers 없는 m2 가 성공했다" >&2
-    fails=$((fails + 1))
-else
-    echo "  PASS peers 없는 m2 는 실패"
-fi
+DDS_PROBE_PEERS='' bash "${PROBE}" env m2 >/dev/null 2>&1 && rc=0 || rc=$?
+if [[ "${rc}" -eq 2 ]]; then echo "  PASS peers 없는 m2 는 실패"; else
+    echo "  FAIL 종료 코드가 ${rc} (기대 2)" >&2; fails=$((fails + 1)); fi
+
+echo "[4a] m2 는 peers 에 따옴표가 있으면 실패해야 한다"
+DDS_PROBE_PEERS='x";touch' bash "${PROBE}" env m2 >/dev/null 2>&1 && rc=0 || rc=$?
+if [[ "${rc}" -eq 2 ]]; then echo "  PASS 따옴표 있는 m2 는 실패"; else
+    echo "  FAIL 종료 코드가 ${rc} (기대 2)" >&2; fails=$((fails + 1)); fi
+
+echo "[4b] m2 는 peers 에 공백이 있으면 실패해야 한다"
+DDS_PROBE_PEERS='192.168.1.2 192.168.1.11' bash "${PROBE}" env m2 >/dev/null 2>&1 && rc=0 || rc=$?
+if [[ "${rc}" -eq 2 ]]; then echo "  PASS 공백 있는 m2 는 실패"; else
+    echo "  FAIL 종료 코드가 ${rc} (기대 2)" >&2; fails=$((fails + 1)); fi
+
+echo "[4c] m2 는 peers 에 빈 세그먼트가 있으면 실패해야 한다"
+DDS_PROBE_PEERS='192.168.1.2;;192.168.1.11' bash "${PROBE}" env m2 >/dev/null 2>&1 && rc=0 || rc=$?
+if [[ "${rc}" -eq 2 ]]; then echo "  PASS 빈 세그먼트 있는 m2 는 실패"; else
+    echo "  FAIL 종료 코드가 ${rc} (기대 2)" >&2; fails=$((fails + 1)); fi
 
 echo "[5] m3 = 현행 XML"
 out="$(bash "${PROBE}" env m3)"

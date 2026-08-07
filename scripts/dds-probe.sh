@@ -45,6 +45,12 @@ probe_env() {
                 echo "dds-probe: m2 는 DDS_PROBE_PEERS 가 필요하다 (세미콜론 구분, 예: '192.168.1.2;192.168.1.11')" >&2
                 exit 2
             fi
+            # Validate peer list: valid characters are a-z, A-Z, 0-9, ., :, _, -, with ; separator
+            # Pattern: one or more valid chars, optionally followed by (semicolon + valid chars)
+            if ! [[ "${DDS_PROBE_PEERS}" =~ ^[a-zA-Z0-9.:_-]+([;][a-zA-Z0-9.:_-]+)*$ ]]; then
+                echo "dds-probe: DDS_PROBE_PEERS 에 유효하지 않은 문자가 있거나 빈 세그먼트가 있다" >&2
+                exit 2
+            fi
             echo "unset CYCLONEDDS_URI"
             echo "export ROS_AUTOMATIC_DISCOVERY_RANGE=LOCALHOST"
             echo "export ROS_STATIC_PEERS=\"${DDS_PROBE_PEERS}\""
