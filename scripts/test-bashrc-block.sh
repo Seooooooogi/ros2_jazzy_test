@@ -26,6 +26,16 @@ source "${REPO_ROOT}/resources/config.sh"
 # shellcheck source=resources/lib.sh
 source "${REPO_ROOT}/resources/lib.sh"
 
+# 이 테스트는 bashrc_sync_block() 의 동작만 검증한다 — config.sh 의 기본값 해석에
+# 결과가 좌우되면 안 된다. config.sh 는 몇몇 변수를 "${VAR:-default}" 형태로 두어
+# 호출 셸의 환경변수가 이미 있으면 그 값을 그대로 쓴다(의도된 override 경로). 실행
+# 셸이 이 변수들을 이미 export 하고 있으면(예: 다른 ROS 배포판을 쓰는 개인 셸)
+# 테스트 결과가 그 환경에 따라 달라진다 — 실제로 RMW_IMPLEMENTATION 이 이 이유로
+# 실패한 적이 있다. 여기서 명시적으로 고정해 어떤 셸에서 실행해도 결과가 같게 한다.
+RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
+DSR_WORKSPACE="${FAKEHOME}/cobot2_ws"
+CYCLONEDDS_XML="${FAKEHOME}/.config/cyclonedds/cyclonedds.xml"
+
 count_of() { grep -cxF "$1" "${FAKEHOME}/.bashrc" || true; }
 
 check_count() {
