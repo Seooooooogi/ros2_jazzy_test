@@ -84,6 +84,12 @@ bash "${PROBE}" env m9 >/dev/null 2>&1 && rc=0 || rc=$?
 if [[ "${rc}" -eq 2 ]]; then echo "  PASS 종료 코드 2"; else
     echo "  FAIL 종료 코드가 ${rc} (기대 2)" >&2; fails=$((fails + 1)); fi
 
+echo "[7] self-check 는 ROS 환경이 없으면 안내 후 종료 코드 3"
+( unset AMENT_PREFIX_PATH
+  bash "${PROBE}" self-check >/dev/null 2>&1 ) && rc=0 || rc=$?
+if [[ "${rc}" -eq 3 ]]; then echo "  PASS ROS 미source 시 종료 코드 3"; else
+    echo "  FAIL 종료 코드가 ${rc} (기대 3)" >&2; fails=$((fails + 1)); fi
+
 if [[ "${fails}" -gt 0 ]]; then
     echo "FAILED: ${fails}건" >&2
     exit 1

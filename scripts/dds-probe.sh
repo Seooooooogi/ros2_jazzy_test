@@ -19,6 +19,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
+NODES="${SCRIPT_DIR}/dds_probe_nodes.py"
 
 # shellcheck source-path=SCRIPTDIR/..
 # shellcheck source=resources/config.sh
@@ -67,7 +68,62 @@ probe_env() {
     esac
 }
 
+# ROS 오버레이가 source 되어 있지 않으면 어떤 측정도 의미가 없다.
+_require_ros() {
+    if [[ -z "${AMENT_PREFIX_PATH:-}" ]]; then
+        echo "dds-probe: ROS 환경이 없다. 'source /opt/ros/${ROS_DISTRO}/setup.bash' 후 다시 실행하라." >&2
+        exit 3
+    fi
+}
+
+probe_talk() {
+    _require_ros
+    python3 "${NODES}" talk "$@"
+}
+
+probe_listen() {
+    _require_ros
+    # ros2 CLI 데몬은 이전 실행의 그래프를 캐시해 다른 구성의 결과를 보여준다.
+    # 측정 전에 반드시 죽인다.
+    ros2 daemon stop >/dev/null 2>&1 || true
+    python3 "${NODES}" listen "$@"
+}
+
+# 같은 머신 loopback 에서 손실 0% 인지 본다.
+# mesh 너머에서 0 프레임이 왔을 때 도구가 고장난 것인지 네트워크가 못 넘긴 것인지
+# 구분하는 장치다 — 여기서 통과하면 도구는 무죄다.
+probe_self_check() {
+    _require_ros
+    local hz="${DDS_PROBE_SELFCHECK_HZ:-5}"
+    local sec="${DDS_PROBE_SELFCHECK_SEC:-8}"
+    local line drop
+
+    python3 "${NODES}" talk --hz "${hz}" --width 320 --height 240 >/dev/null 2>&1 &
+    local talker=$!
+    # shellcheck disable=SC2064
+    trap "kill ${talker} 2>/dev/null || true" EXIT
+
+    line="$(python3 "${NODES}" listen --sec "${sec}" | grep '^RESULT ' || true)"
+    kill "${talker}" 2>/dev/null || true
+    trap - EXIT
+
+    if [[ -z "${line}" ]]; then
+        echo "dds-probe: self-check 실패 — 수신 결과가 없다" >&2
+        exit 1
+    fi
+    drop="$(sed -n 's/.*drop_pct=\([0-9.]*\).*/\1/p' <<< "${line}")"
+    echo "dds-probe: self-check ${line}"
+    if awk "BEGIN{exit !(${drop} > 1.0)}"; then
+        echo "dds-probe: self-check 실패 — loopback 손실률 ${drop}% (기준 1% 이하). 측정 도구부터 고쳐야 한다." >&2
+        exit 1
+    fi
+    echo "dds-probe: self-check 통과 — 도구 정상"
+}
+
 case "${1:-}" in
-    env)  shift; probe_env "${1:-}" ;;
-    *)    echo "dds-probe: 사용법은 파일 상단 주석 참조" >&2; exit 2 ;;
+    env)        shift; probe_env "${1:-}" ;;
+    talk)       shift; probe_talk "$@" ;;
+    listen)     shift; probe_listen "$@" ;;
+    self-check) shift; probe_self_check ;;
+    *)          echo "dds-probe: 사용법은 파일 상단 주석 참조" >&2; exit 2 ;;
 esac
