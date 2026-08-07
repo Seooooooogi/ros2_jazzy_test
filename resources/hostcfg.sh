@@ -13,6 +13,8 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=./config.sh
 source "${SCRIPT_DIR}/config.sh"
+# shellcheck source=./lib.sh
+source "${SCRIPT_DIR}/lib.sh"
 config_assert_set
 
 # CycloneDDS 설정 XML 렌더 + 커널 소켓 버퍼 증설
@@ -64,32 +66,10 @@ hostcfg_dds() {
     mv "${rendered_xml}" "${CYCLONEDDS_XML}"
     echo "[dds] render complete: ${CYCLONEDDS_XML} (loopback + ${#NICS[@]} external NIC)"
 
-    # --- 4. ~/.bashrc 환경변수 주입 (관리 블록 하나로) ----------------------
-    # config.sh 적용 범위 = source 된 셸뿐 → 같은 export 를 ~/.bashrc 에도 주입
-    # 기존 줄 삭제 후 마커 블록으로 재기록 → 중복 방지
-    bashrc="${HOME}/.bashrc"
-    BEGIN_MARK="# >>> ros2_jazzy_test cyclonedds env >>>"
-    END_MARK="# <<< ros2_jazzy_test cyclonedds env <<<"
-    if [[ -f "${bashrc}" ]]; then
-        # 이전 관리 블록 제거
-        sed -i "/${BEGIN_MARK}/,/${END_MARK}/d" "${bashrc}"
-        # 손으로 넣었을 수 있는 흩어진 export/주석도 함께 정리
-        sed -i \
-            -e '/CycloneDDS receive-buffer tuning for large RealSense topics/d' \
-            -e '/default RMW = CycloneDDS for all new shells/d' \
-            -e '\#^export CYCLONEDDS_URI=#d' \
-            -e '/^export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp/d' \
-            "${bashrc}"
-    fi
-    {
-        echo "${BEGIN_MARK}"
-        echo "# CycloneDDS standard + large-topic buffer/interface tuning (managed by hostcfg.sh dds, do not edit manually)"
-        echo "export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp"
-        echo "export CYCLONEDDS_URI=\"file://${CYCLONEDDS_XML}\""
-        # ROS_DOMAIN_ID = 여기서 의도적으로 미관리
-        echo "${END_MARK}"
-    } >> "${bashrc}"
-    echo "[dds] updated the ~/.bashrc managed block (CYCLONEDDS_URI / RMW_IMPLEMENTATION)"
+    # --- 4. ~/.bashrc 관리 블록 재작성 ----------------------
+    # config.sh 적용 범위 = source 된 셸뿐 → 같은 export 를 ~/.bashrc 에도 둔다
+    bashrc_sync_block
+    echo "[dds] rewrote the ~/.bashrc managed block"
 
     echo "[dds] done. cyclonedds applies after a new terminal or 'source ~/.bashrc'."
     echo "[dds] note: same-host communication (host↔container) always works via loopback."

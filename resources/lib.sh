@@ -393,3 +393,59 @@ print_copyright() {
 ============================================================
 EOF
 }
+
+# ============================================================================
+# 8) bashrc-sync · ~/.bashrc 관리 블록 재작성
+# ============================================================================
+
+# ~/.bashrc 의 이 레포 소유 영역을 마커 블록 하나로 재작성한다.
+#
+# 조건부 append(`grep || echo >>`)를 쓰지 않는 이유: 비교 문자열이 한 글자라도
+# 어긋나면 가드가 통과해 같은 줄이 계속 쌓인다. 실제로 설치된 머신에서
+# ROS setup source 가 2회씩 들어간 사례가 나왔다. 블록을 통째로 지우고 다시
+# 쓰면 그런 어긋남 자체가 생기지 않는다.
+#
+# Globals: ROS_DISTRO, DSR_WORKSPACE, RMW_IMPLEMENTATION, CYCLONEDDS_XML, HOME
+bashrc_sync_block() {
+    local bashrc="${HOME}/.bashrc"
+    local begin="# >>> ros2_jazzy_test env >>>"
+    local end="# <<< ros2_jazzy_test env <<<"
+
+    [[ -f "${bashrc}" ]] || touch "${bashrc}"
+
+    # 1) 현재 마커 블록 제거
+    #    구분자 = '@' — 마커 문구 자체가 '#'로 시작해 '#'를 구분자로 쓰면
+    #    sed 주소가 그 자리에서 끊긴다(패턴에 없는 문자만 구분자로 안전).
+    sed -i "\\@^${begin}\$@,\\@^${end}\$@d" "${bashrc}"
+
+    # 2) 예전 마커 블록 제거(이름이 두 종류였다)
+    sed -i '\@^# >>> ros2_jazzy_test cyclonedds env >>>$@,\@^# <<< ros2_jazzy_test cyclonedds env <<<$@d' "${bashrc}"
+    sed -i '\@^# >>> ros2_jazzy_test runtime env >>>$@,\@^# <<< ros2_jazzy_test runtime env <<<$@d' "${bashrc}"
+
+    # 3) 예전 방식이 흩어 놓은 줄 제거.
+    #    이 레포가 과거에 직접 써 넣은 형태만 정확히 일치할 때 지운다 —
+    #    사용자가 손으로 쓴 다른 형태는 건드리지 않는다.
+    sed -i \
+        -e "\\@^source /opt/ros/${ROS_DISTRO}/setup.bash\$@d" \
+        -e '\@^source /usr/share/colcon_argcomplete/hook/colcon-argcomplete.bash$@d' \
+        -e '\@^# export ROS_LOCALHOST_ONLY=1$@d' \
+        -e '\@^export RMW_IMPLEMENTATION=@d' \
+        -e '\@^export CYCLONEDDS_URI=@d' \
+        -e "\\@^\\[ -f ~/.*install/setup.bash \\] && source @d" \
+        -e '\@^# \[테스트 2026-08-04\] config.sh 제거 검증@d' \
+        -e '\@^# set -a; source ~/ros2_jazzy_test/resources/config.sh; set +a$@d' \
+        -e '\@^# CycloneDDS standard + large-topic buffer/interface tuning@d' \
+        "${bashrc}"
+
+    # 4) 블록 재작성
+    {
+        echo "${begin}"
+        echo "# ROS2 환경 (관리 주체 = resources/hostcfg.sh · 직접 수정하지 말 것)"
+        echo "source /opt/ros/${ROS_DISTRO}/setup.bash"
+        echo "source /usr/share/colcon_argcomplete/hook/colcon-argcomplete.bash"
+        echo "[ -f ${DSR_WORKSPACE}/install/setup.bash ] && source ${DSR_WORKSPACE}/install/setup.bash"
+        echo "export RMW_IMPLEMENTATION=${RMW_IMPLEMENTATION}"
+        echo "export CYCLONEDDS_URI=\"file://${CYCLONEDDS_XML}\""
+        echo "${end}"
+    } >> "${bashrc}"
+}

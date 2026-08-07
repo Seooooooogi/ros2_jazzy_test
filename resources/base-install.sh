@@ -218,14 +218,8 @@ ros2_desktop() {
     fi
     rosdep update
 
-    # --- ~/.bashrc 자동 source ---
-    local bashrc="${HOME}/.bashrc"
-    grep -qF "source /opt/ros/${ROS_DISTRO}/setup.bash" "${bashrc}" \
-        || echo "source /opt/ros/${ROS_DISTRO}/setup.bash" >> "${bashrc}"
-    grep -qF "source /usr/share/colcon_argcomplete/hook/colcon-argcomplete.bash" "${bashrc}" \
-        || echo "source /usr/share/colcon_argcomplete/hook/colcon-argcomplete.bash" >> "${bashrc}"
-    grep -qF "export ROS_LOCALHOST_ONLY=1" "${bashrc}" \
-        || echo "# export ROS_LOCALHOST_ONLY=1" >> "${bashrc}"
+    # --- ~/.bashrc 관리 블록 ---
+    bashrc_sync_block
 
     # --- smoke source ---
     if [[ -f "/opt/ros/${ROS_DISTRO}/setup.bash" ]]; then
