@@ -398,6 +398,20 @@ EOF
 # 8) bashrc-sync · ~/.bashrc 관리 블록 재작성
 # ============================================================================
 
+# begin/end 마커 쌍으로 감싼 블록을 지운다. `sed 'begin,end d'`는 끝 마커를 못
+# 찾으면 시작 마커부터 파일 끝까지 통째로 지운다 — 중단된 이전 실행이나 수동
+# 편집으로 끝 마커만 빠진 상태가 되면, 그 뒤에 사용자가 써 놓은 줄까지 전부
+# 사라진다. 끝 마커가 없으면 범위삭제 대신 시작 마커 줄만 지우고 경고한다.
+_bashrc_delete_marker_block() {
+    local begin="$1" end="$2" file="$3"
+    if grep -qxF "${begin}" "${file}" && ! grep -qxF "${end}" "${file}"; then
+        echo "dds: warning — bashrc marker '${begin}' has no matching end marker ('${end}'); the block looks corrupted (interrupted run or manual edit). Removing only the stray start marker, leaving the rest of the file untouched." >&2
+        sed -i "\\@^${begin}\$@d" "${file}"
+    else
+        sed -i "\\@^${begin}\$@,\\@^${end}\$@d" "${file}"
+    fi
+}
+
 # ~/.bashrc 의 이 레포 소유 영역을 마커 블록 하나로 재작성한다.
 #
 # 조건부 append(`grep || echo >>`)를 쓰지 않는 이유: 비교 문자열이 한 글자라도
@@ -410,32 +424,44 @@ bashrc_sync_block() {
     local bashrc="${HOME}/.bashrc"
     local begin="# >>> ros2_jazzy_test env >>>"
     local end="# <<< ros2_jazzy_test env <<<"
+    local tmp
 
     [[ -f "${bashrc}" ]] || touch "${bashrc}"
 
+    # symlink 로 관리되는 ~/.bashrc(stow/chezmoi 같은 dotfiles 도구나 손으로 건
+    # symlink)를 보존한다. `sed -i` 는 symlink 자리를 새 일반 파일로 갈아 치워
+    # symlink 를 끊는다(원본 dotfiles 파일은 갱신되지 않음). 대신 임시 파일에서
+    # 다 고친 뒤 `>` 리다이렉트로 원래 경로에 흘려 넣는다 — 그 경로가 symlink 면
+    # 커널이 대상 파일을 열어 그 자리에 쓴다(symlink·inode 모두 유지).
+    tmp="$(mktemp)"
+    cp "${bashrc}" "${tmp}"
+
     # 1) 현재 마커 블록 제거
-    #    구분자 = '@' — 마커 문구 자체가 '#'로 시작해 '#'를 구분자로 쓰면
-    #    sed 주소가 그 자리에서 끊긴다(패턴에 없는 문자만 구분자로 안전).
-    sed -i "\\@^${begin}\$@,\\@^${end}\$@d" "${bashrc}"
+    _bashrc_delete_marker_block "${begin}" "${end}" "${tmp}"
 
     # 2) 예전 마커 블록 제거(이름이 두 종류였다)
-    sed -i '\@^# >>> ros2_jazzy_test cyclonedds env >>>$@,\@^# <<< ros2_jazzy_test cyclonedds env <<<$@d' "${bashrc}"
-    sed -i '\@^# >>> ros2_jazzy_test runtime env >>>$@,\@^# <<< ros2_jazzy_test runtime env <<<$@d' "${bashrc}"
+    _bashrc_delete_marker_block \
+        "# >>> ros2_jazzy_test cyclonedds env >>>" "# <<< ros2_jazzy_test cyclonedds env <<<" "${tmp}"
+    _bashrc_delete_marker_block \
+        "# >>> ros2_jazzy_test runtime env >>>" "# <<< ros2_jazzy_test runtime env <<<" "${tmp}"
 
     # 3) 예전 방식이 흩어 놓은 줄 제거.
     #    이 레포가 과거에 직접 써 넣은 형태만 정확히 일치할 때 지운다 —
-    #    사용자가 손으로 쓴 다른 형태는 건드리지 않는다.
+    #    사용자가 손으로 쓴 다른 형태는 건드리지 않는다. 그래서 값 비교가
+    #    필요한 줄은 양끝을 앵커링해 그 값까지 정확히 일치할 때만 지운다 —
+    #    끝 앵커가 없으면 같은 접두사로 시작하되 값이 다른 사용자 줄까지
+    #    같이 지워진다(실제로 그렇게 지워지는 걸 리뷰에서 확인함).
     sed -i \
         -e "\\@^source /opt/ros/${ROS_DISTRO}/setup.bash\$@d" \
         -e '\@^source /usr/share/colcon_argcomplete/hook/colcon-argcomplete.bash$@d' \
         -e '\@^# export ROS_LOCALHOST_ONLY=1$@d' \
-        -e '\@^export RMW_IMPLEMENTATION=@d' \
-        -e '\@^export CYCLONEDDS_URI=@d' \
-        -e "\\@^\\[ -f ~/.*install/setup.bash \\] && source @d" \
-        -e '\@^# \[테스트 2026-08-04\] config.sh 제거 검증@d' \
+        -e '\@^export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp$@d' \
+        -e '\@^export CYCLONEDDS_URI="file://.*/cyclonedds\.xml"$@d' \
+        -e '\@^\[ -f \(~/.*install/setup\.bash\) \] && source \1$@d' \
+        -e '\@^# \[테스트 2026-08-04\] config\.sh 제거 검증 — 원복은 이 줄의 주석 해제$@d' \
         -e '\@^# set -a; source ~/ros2_jazzy_test/resources/config.sh; set +a$@d' \
-        -e '\@^# CycloneDDS standard + large-topic buffer/interface tuning@d' \
-        "${bashrc}"
+        -e '\@^# CycloneDDS standard + large-topic buffer/interface tuning (managed by hostcfg\.sh dds, do not edit manually)$@d' \
+        "${tmp}"
 
     # 4) 블록 재작성
     {
@@ -447,5 +473,8 @@ bashrc_sync_block() {
         echo "export RMW_IMPLEMENTATION=${RMW_IMPLEMENTATION}"
         echo "export CYCLONEDDS_URI=\"file://${CYCLONEDDS_XML}\""
         echo "${end}"
-    } >> "${bashrc}"
+    } >> "${tmp}"
+
+    cat "${tmp}" > "${bashrc}"
+    rm -f "${tmp}"
 }

@@ -49,10 +49,14 @@ check_count() {
     fi
 }
 
-# 예전 방식이 만들어 놓은 상태를 그대로 재현한다(.11 실측 형태)
+# 예전 방식이 만들어 놓은 상태를 그대로 재현한다(.11 실측 형태) + 관리 블록 밖에
+# 사용자가 직접 써 놓은, 이 레포의 옛 형태와 접두사만 같고 값은 다른 줄들
+# (삭제 패턴이 앵커 없이 접두사만 보면 이런 줄까지 지운다 — 리뷰에서 실측됨)
 cat > "${FAKEHOME}/.bashrc" <<EOF
 # 사용자가 직접 쓴 줄 — 반드시 살아남아야 한다
 alias ll='ls -alF'
+export RMW_IMPLEMENTATION=rmw_fastrtps_cpp   # 다른 프로젝트용으로 직접 설정 — 값이 달라 지워지면 안 된다
+export CYCLONEDDS_URI="file:///home/user/my-custom-cyclonedds.xml"   # 사용자 커스텀 설정 — 지워지면 안 된다
 source /opt/ros/${ROS_DISTRO}/setup.bash
 source /usr/share/colcon_argcomplete/hook/colcon-argcomplete.bash
 source /opt/ros/${ROS_DISTRO}/setup.bash
@@ -84,6 +88,8 @@ check_count "RMW" "export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp" 1
 
 echo "[3] 사용자 줄은 보존된다"
 check_count "사용자 alias" "alias ll='ls -alF'" 1
+check_count "사용자 RMW(다른 값)" "export RMW_IMPLEMENTATION=rmw_fastrtps_cpp   # 다른 프로젝트용으로 직접 설정 — 값이 달라 지워지면 안 된다" 1
+check_count "사용자 CYCLONEDDS_URI(다른 값)" 'export CYCLONEDDS_URI="file:///home/user/my-custom-cyclonedds.xml"   # 사용자 커스텀 설정 — 지워지면 안 된다' 1
 
 echo "[4] 옛 마커 블록과 잔재는 사라진다"
 check_count "옛 runtime 마커" "# >>> ros2_jazzy_test runtime env >>>" 0
@@ -99,6 +105,91 @@ echo "[6] bashrc 가 없어도 새로 만든다"
 rm -f "${FAKEHOME}/.bashrc"
 HOME="${FAKEHOME}" bashrc_sync_block
 check_count "새 파일에도 RMW" "export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp" 1
+
+echo "[7] symlink 로 관리되는 ~/.bashrc — symlink 는 그대로, 대상 파일만 갱신된다"
+# dotfiles 도구(stow/chezmoi) 나 손으로 건 symlink 흉내. 새 mktemp 디렉토리를 쓰지
+# 않고 FAKEHOME 하위에 만들어 기존 trap 하나로 계속 정리되게 한다.
+DOTFILES_TARGET="${FAKEHOME}/dotfiles-bashrc"
+SYMHOME="${FAKEHOME}/symlink-home"
+mkdir -p "${SYMHOME}"
+printf '# 사용자 dotfiles 저장소의 실제 bashrc\nalias gs="git status"\n' > "${DOTFILES_TARGET}"
+ln -s "${DOTFILES_TARGET}" "${SYMHOME}/.bashrc"
+before_inode="$(stat -c %i "${DOTFILES_TARGET}")"
+
+HOME="${SYMHOME}" bashrc_sync_block
+
+if [[ -L "${SYMHOME}/.bashrc" ]]; then
+    echo "  PASS symlink 유지됨 (일반 파일로 안 바뀜)"
+else
+    echo "  FAIL symlink 이 사라지고 일반 파일로 바뀜" >&2
+    fails=$((fails + 1))
+fi
+
+link_target="$(readlink "${SYMHOME}/.bashrc" 2>/dev/null || true)"
+if [[ "${link_target}" == "${DOTFILES_TARGET}" ]]; then
+    echo "  PASS symlink 대상 경로 불변 (${link_target})"
+else
+    echo "  FAIL symlink 대상이 바뀜 — now: '${link_target}' (기대 '${DOTFILES_TARGET}')" >&2
+    fails=$((fails + 1))
+fi
+
+after_inode="$(stat -c %i "${DOTFILES_TARGET}" 2>/dev/null || echo MISSING)"
+if [[ "${after_inode}" == "${before_inode}" ]]; then
+    echo "  PASS 대상 파일 inode 불변 (${before_inode}) — sed -i 였다면 여기서 바뀐다"
+else
+    echo "  FAIL 대상 파일 inode 가 바뀜 — before=${before_inode} after=${after_inode}" >&2
+    fails=$((fails + 1))
+fi
+
+if grep -qxF "export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp" "${DOTFILES_TARGET}"; then
+    echo "  PASS 대상 파일에 새 관리 블록 내용이 반영됨"
+else
+    echo "  FAIL 대상 파일에 새 관리 블록 내용이 반영되지 않음" >&2
+    fails=$((fails + 1))
+fi
+
+if grep -qxF 'alias gs="git status"' "${DOTFILES_TARGET}"; then
+    echo "  PASS 대상 파일의 기존 사용자 줄 보존"
+else
+    echo "  FAIL 대상 파일의 기존 사용자 줄이 사라짐" >&2
+    fails=$((fails + 1))
+fi
+
+echo "[8] 끝 마커 없는 깨진 시작 마커 — 뒤에 온 사용자 줄은 살아남는다"
+DANGLE_HOME="${FAKEHOME}/dangle-home"
+mkdir -p "${DANGLE_HOME}"
+cat > "${DANGLE_HOME}/.bashrc" <<'EOF'
+# 시작 마커만 있고 끝 마커가 없는 깨진 상태(중단된 이전 실행 등으로 생길 수 있음)
+# >>> ros2_jazzy_test env >>>
+export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
+# 사용자가 마커 뒤에 직접 추가한 줄 — 반드시 살아남아야 한다
+alias gd='git diff'
+EOF
+
+dangle_stderr="$(HOME="${DANGLE_HOME}" bashrc_sync_block 2>&1 >/dev/null)"
+
+if grep -qxF "alias gd='git diff'" "${DANGLE_HOME}/.bashrc"; then
+    echo "  PASS 깨진 마커 뒤 사용자 줄 생존"
+else
+    echo "  FAIL 깨진 마커 뒤 사용자 줄이 삭제됨(범위삭제가 파일 끝까지 먹었을 가능성)" >&2
+    fails=$((fails + 1))
+fi
+
+dangle_begin_count="$(grep -cxF "# >>> ros2_jazzy_test env >>>" "${DANGLE_HOME}/.bashrc" || true)"
+dangle_end_count="$(grep -cxF "# <<< ros2_jazzy_test env <<<" "${DANGLE_HOME}/.bashrc" || true)"
+if [[ "${dangle_begin_count}" -eq 1 && "${dangle_end_count}" -eq 1 ]]; then
+    echo "  PASS 재작성 후 마커 블록 정확히 한 쌍"
+else
+    echo "  FAIL 마커 블록 개수 이상 — begin=${dangle_begin_count} end=${dangle_end_count}" >&2
+    fails=$((fails + 1))
+fi
+
+if [[ "${dangle_stderr}" == *"dds: warning"* ]]; then
+    echo "  PASS 깨진 블록 발견 시 stderr 에 dds: 경고 출력"
+else
+    echo "  FAIL 깨진 블록 경고가 stderr 에 없음(got: '${dangle_stderr}')" >&2
+    fails=$((fails + 1))
+fi
 
 if [[ "${fails}" -gt 0 ]]; then
     echo "FAILED: ${fails}건" >&2
