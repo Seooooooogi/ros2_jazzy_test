@@ -132,6 +132,12 @@ else
     echo "  FAIL 종료 코드 ${rc} 또는 통과 문구 없음 — 출력: ${out}" >&2; fails=$((fails + 1))
 fi
 
+echo "[10] report 는 세 관측 항목을 모두 낸다"
+out="$(bash "${PROBE}" report 2>/dev/null || true)"
+assert_contains "report NIC 절"    "${out}" "SPDP 멀티캐스트 그룹"
+assert_contains "report 소켓 절"   "${out}" "7400"
+assert_contains "report 버퍼 절"   "${out}" "수신 버퍼"
+
 if [[ "${fails}" -gt 0 ]]; then
     echo "FAILED: ${fails}건" >&2
     exit 1
