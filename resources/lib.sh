@@ -502,9 +502,29 @@ END {
         }
     }
 
-    for (i = 1; i <= total; i++) {
-        if (!(i in drop)) print lines[i]
+    # 관리 블록이 원래 있던 자리 = 가장 앞선 begin 마커. 그 앞에 살아남는 줄이
+    # 몇 개인지 세어 anchor_out 파일로 넘긴다 — 호출자는 정확히 그 자리에 블록을
+    # 다시 끼워 넣는다. 지운 자리가 아니라 파일 끝에 다시 쓰면, 블록 뒤에
+    # 사용자가 덧붙인 override 가 블록보다 앞서게 되어 줄은 남은 채 효력만
+    # 뒤집힌다(사용자는 자기 줄을 보면서 왜 안 먹는지 알 수 없다).
+    anchor = 0
+    for (p = 1; p <= nb; p++) {
+        for (i = 1; i <= total; i++) {
+            if (lines[i] == begins[p]) {
+                if (anchor == 0 || i < anchor) anchor = i
+                break
+            }
+        }
     }
+
+    kept = 0
+    before = -1
+    for (i = 1; i <= total; i++) {
+        if (i == anchor) before = kept
+        if (!(i in drop)) { print lines[i]; kept++ }
+    }
+    if (before < 0) before = kept   # 블록이 없던 파일 → 끝에 붙인다
+    print before > anchor_out
 }
 AWKEOF
 )"
@@ -521,7 +541,7 @@ bashrc_sync_block() {
     local bashrc="${HOME}/.bashrc"
     local begin="# >>> ros2_jazzy_test env >>>"
     local end="# <<< ros2_jazzy_test env <<<"
-    local tmp_in tmp_out
+    local tmp_in tmp_out anchor_file before
 
     [[ -f "${bashrc}" ]] || touch "${bashrc}"
 
@@ -533,9 +553,11 @@ bashrc_sync_block() {
     # 그 자리에 쓴다(symlink·inode 모두 유지).
     tmp_in="$(mktemp)"
     tmp_out="$(mktemp)"
+    anchor_file="$(mktemp)"
     cp "${bashrc}" "${tmp_in}"
 
     awk \
+        -v anchor_out="${anchor_file}" \
         -v begin1="${begin}" \
         -v end1="${end}" \
         -v begin2="# >>> ros2_jazzy_test cyclonedds env >>>" \
@@ -552,8 +574,12 @@ bashrc_sync_block() {
         -v legacy_cyclonedds_comment="# CycloneDDS standard + large-topic buffer/interface tuning (managed by hostcfg.sh dds, do not edit manually)" \
         "${_BASHRC_SYNC_AWK_PROG}" "${tmp_in}" > "${tmp_out}"
 
-    # 블록 재작성
+    # 블록 재작성 — 원래 있던 자리에 도로 끼워 넣는다(없었으면 파일 끝).
+    before="$(cat "${anchor_file}")"
+    [[ "${before}" =~ ^[0-9]+$ ]] || before="$(wc -l < "${tmp_out}")"
+
     {
+        head -n "${before}" "${tmp_out}"
         echo "${begin}"
         echo "# ROS2 환경 (관리 주체 = resources/hostcfg.sh · 직접 수정하지 말 것)"
         echo "source /opt/ros/${ROS_DISTRO}/setup.bash"
@@ -569,8 +595,8 @@ bashrc_sync_block() {
         echo "    export CYCLONEDDS_URI=\"file://${CYCLONEDDS_XML}\""
         echo "fi"
         echo "${end}"
-    } >> "${tmp_out}"
+        tail -n "+$((before + 1))" "${tmp_out}"
+    } > "${bashrc}"
 
-    cat "${tmp_out}" > "${bashrc}"
-    rm -f "${tmp_in}" "${tmp_out}"
+    rm -f "${tmp_in}" "${tmp_out}" "${anchor_file}"
 }

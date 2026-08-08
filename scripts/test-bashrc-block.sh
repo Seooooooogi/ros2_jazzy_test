@@ -420,6 +420,67 @@ else
     fails=$((fails + 1))
 fi
 
+line_no_of() { grep -nxF "$2" "$1" | head -1 | cut -d: -f1; }
+
+check_order() {
+    local label="$1" earlier="$2" later="$3"
+    if [[ -n "${earlier}" && -n "${later}" && "${earlier}" -lt "${later}" ]]; then
+        echo "  PASS ${label} (${earlier}번 줄 < ${later}번 줄)"
+    else
+        echo "  FAIL ${label} — 앞: '${earlier}' 뒤: '${later}'" >&2
+        fails=$((fails + 1))
+    fi
+}
+
+echo "[16] 블록 뒤에 붙인 사용자 override 는 재실행 후에도 효력을 유지한다"
+# 설치기 설정을 덮어쓰는 가장 흔한 방법이 블록 뒤에 자기 줄을 덧붙이는 것이다.
+# 블록을 원래 자리가 아니라 파일 끝에 다시 쓰면 그 줄은 파일에 그대로 남은 채
+# 순서만 뒤집혀 효력을 잃는다 — 사용자는 자기 줄을 눈으로 보면서 왜 안 먹는지
+# 설명할 방법이 없다. 줄이 지워지는 것보다 나쁘다.
+OVERRIDE_HOME="${FAKEHOME}/override-home"
+mkdir -p "${OVERRIDE_HOME}"
+printf '%s\n' "alias top='mine'" > "${OVERRIDE_HOME}/.bashrc"
+HOME="${OVERRIDE_HOME}" bashrc_sync_block   # 설치기가 블록을 만든 상태
+{
+    echo "export RMW_IMPLEMENTATION=rmw_fastrtps_cpp"
+    echo "alias bottom='mine'"
+} >> "${OVERRIDE_HOME}/.bashrc"
+
+HOME="${OVERRIDE_HOME}" bashrc_sync_block   # 설치기 재실행
+
+override_top="$(line_no_of "${OVERRIDE_HOME}/.bashrc" "alias top='mine'")"
+override_begin="$(line_no_of "${OVERRIDE_HOME}/.bashrc" "# >>> ros2_jazzy_test env >>>")"
+override_user="$(line_no_of "${OVERRIDE_HOME}/.bashrc" "export RMW_IMPLEMENTATION=rmw_fastrtps_cpp")"
+override_bottom="$(line_no_of "${OVERRIDE_HOME}/.bashrc" "alias bottom='mine'")"
+
+check_order "블록은 앞선 사용자 줄 뒤에 그대로 있다" "${override_top}" "${override_begin}"
+check_order "블록은 뒤에 붙인 override 앞에 있다"    "${override_begin}" "${override_user}"
+check_order "override 뒤 사용자 줄도 순서 유지"      "${override_user}" "${override_bottom}"
+
+override_out="$(sourced_env_of "${OVERRIDE_HOME}/.bashrc")"
+assert_line "셸이 해석한 최종값 = 사용자 override" "${override_out}" "RMW_IMPLEMENTATION=[rmw_fastrtps_cpp]"
+
+echo "[17] 3번째 호출에도 자리와 최종값이 그대로다(수렴)"
+HOME="${OVERRIDE_HOME}" bashrc_sync_block
+again_begin="$(line_no_of "${OVERRIDE_HOME}/.bashrc" "# >>> ros2_jazzy_test env >>>")"
+again_user="$(line_no_of "${OVERRIDE_HOME}/.bashrc" "export RMW_IMPLEMENTATION=rmw_fastrtps_cpp")"
+check_order "블록이 여전히 override 앞" "${again_begin}" "${again_user}"
+if [[ "${again_begin}" == "${override_begin}" ]]; then
+    echo "  PASS 블록 시작 줄 번호 불변 (${again_begin})"
+else
+    echo "  FAIL 블록이 이동함 — ${override_begin} → ${again_begin}" >&2
+    fails=$((fails + 1))
+fi
+
+echo "[18] 블록이 없던 파일에서는 끝에 붙인다"
+APPEND_HOME="${FAKEHOME}/append-home"
+mkdir -p "${APPEND_HOME}"
+printf '%s\n' "alias only='mine'" > "${APPEND_HOME}/.bashrc"
+HOME="${APPEND_HOME}" bashrc_sync_block
+append_user="$(line_no_of "${APPEND_HOME}/.bashrc" "alias only='mine'")"
+append_begin="$(line_no_of "${APPEND_HOME}/.bashrc" "# >>> ros2_jazzy_test env >>>")"
+check_order "기존 줄 뒤에 블록이 붙는다" "${append_user}" "${append_begin}"
+
 if [[ "${fails}" -gt 0 ]]; then
     echo "FAILED: ${fails}건" >&2
     exit 1
