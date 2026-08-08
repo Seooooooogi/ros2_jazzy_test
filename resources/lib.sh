@@ -542,6 +542,7 @@ bashrc_sync_block() {
     local begin="# >>> ros2_jazzy_test env >>>"
     local end="# <<< ros2_jazzy_test env <<<"
     local tmp_in tmp_out anchor_file before
+    local _colcon_hook="/usr/share/colcon_argcomplete/hook/colcon-argcomplete.bash"
 
     [[ -f "${bashrc}" ]] || touch "${bashrc}"
 
@@ -582,8 +583,11 @@ bashrc_sync_block() {
         head -n "${before}" "${tmp_out}"
         echo "${begin}"
         echo "# ROS2 환경 (관리 주체 = resources/hostcfg.sh · 직접 수정하지 말 것)"
-        echo "source /opt/ros/${ROS_DISTRO}/setup.bash"
-        echo "source /usr/share/colcon_argcomplete/hook/colcon-argcomplete.bash"
+        # 세 줄 모두 파일이 있을 때만 source 한다. 이 블록은 ROS 나 colcon 이
+        # 아직(또는 전혀) 없는 호스트에도 쓰일 수 있고 — hostcfg.sh 는 단독
+        # 재실행이 가능하다 — 가드가 없으면 셸을 열 때마다 오류가 나온다.
+        echo "[ -f /opt/ros/${ROS_DISTRO}/setup.bash ] && source /opt/ros/${ROS_DISTRO}/setup.bash"
+        echo "[ -f ${_colcon_hook} ] && source ${_colcon_hook}"
         echo "[ -f ${DSR_WORKSPACE}/install/setup.bash ] && source ${DSR_WORKSPACE}/install/setup.bash"
         echo "export RMW_IMPLEMENTATION=${RMW_IMPLEMENTATION}"
         # 파일이 있을 때만 가리킨다. 이 블록은 ROS2 설치 단계에서 이미 쓰이는데

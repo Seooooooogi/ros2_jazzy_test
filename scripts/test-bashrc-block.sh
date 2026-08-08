@@ -79,18 +79,28 @@ export CYCLONEDDS_URI="file:///old/path/cyclonedds.xml"
 # <<< ros2_jazzy_test cyclonedds env <<<
 EOF
 
+# 블록이 쓰는 형태 = 파일이 있을 때만 source 하는 가드형. hostcfg.sh 는 이미 설치된
+# 호스트에서 단독 재실행할 수 있는데, ROS 나 colcon 이 없는 호스트에서 가드 없는
+# source 는 셸을 열 때마다 오류를 뱉는다.
+ROS_SETUP_LINE="[ -f /opt/ros/${ROS_DISTRO}/setup.bash ] && source /opt/ros/${ROS_DISTRO}/setup.bash"
+COLCON_HOOK="/usr/share/colcon_argcomplete/hook/colcon-argcomplete.bash"
+COLCON_LINE="[ -f ${COLCON_HOOK} ] && source ${COLCON_HOOK}"
+
 echo "[1] 1회 호출 — 중복이 정리된다"
 HOME="${FAKEHOME}" bashrc_sync_block
-check_count "ROS setup source" "source /opt/ros/${ROS_DISTRO}/setup.bash" 1
-check_count "colcon argcomplete" "source /usr/share/colcon_argcomplete/hook/colcon-argcomplete.bash" 1
+check_count "ROS setup source" "${ROS_SETUP_LINE}" 1
+check_count "colcon argcomplete" "${COLCON_LINE}" 1
 check_count "RMW" "export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp" 1
+# 옛 방식이 흩어 놓은 가드 없는 줄은 정리 대상으로 남아 있어야 한다
+check_count "옛 가드 없는 ROS source" "source /opt/ros/${ROS_DISTRO}/setup.bash" 0
+check_count "옛 가드 없는 colcon hook" "source ${COLCON_HOOK}" 0
 
 echo "[2] 3회 더 호출해도 그대로다"
 HOME="${FAKEHOME}" bashrc_sync_block
 HOME="${FAKEHOME}" bashrc_sync_block
 HOME="${FAKEHOME}" bashrc_sync_block
-check_count "ROS setup source" "source /opt/ros/${ROS_DISTRO}/setup.bash" 1
-check_count "colcon argcomplete" "source /usr/share/colcon_argcomplete/hook/colcon-argcomplete.bash" 1
+check_count "ROS setup source" "${ROS_SETUP_LINE}" 1
+check_count "colcon argcomplete" "${COLCON_LINE}" 1
 check_count "RMW" "export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp" 1
 
 echo "[3] 사용자 줄은 보존된다"
@@ -480,6 +490,29 @@ HOME="${APPEND_HOME}" bashrc_sync_block
 append_user="$(line_no_of "${APPEND_HOME}/.bashrc" "alias only='mine'")"
 append_begin="$(line_no_of "${APPEND_HOME}/.bashrc" "# >>> ros2_jazzy_test env >>>")"
 check_order "기존 줄 뒤에 블록이 붙는다" "${append_user}" "${append_begin}"
+
+echo "[19] ROS 가 없는 호스트에서 새 셸을 열어도 오류가 나지 않는다"
+# hostcfg.sh 는 설치된 호스트에서 단독 재실행할 수 있다고 문서화돼 있다. ROS 가
+# 없는 호스트에 블록이 쓰이면, 가드 없는 source 는 셸을 열 때마다 오류를 뱉는다.
+# 어느 머신에서 돌려도 같은 결과가 나오도록 없는 distro 를 일부러 지정한다.
+NOROS_HOME="${FAKEHOME}/no-ros-home"
+mkdir -p "${NOROS_HOME}"
+(
+    ROS_DISTRO="definitely-not-installed"
+    HOME="${NOROS_HOME}"
+    CYCLONEDDS_XML="${NOROS_HOME}/.config/cyclonedds/cyclonedds.xml"
+    DSR_WORKSPACE="${NOROS_HOME}/cobot2_ws"
+    bashrc_sync_block
+)
+
+# shellcheck disable=SC2016
+noros_err="$(bash --noprofile --norc -c 'source "$1"' _ "${NOROS_HOME}/.bashrc" 2>&1 >/dev/null)"
+if [[ -z "${noros_err}" ]]; then
+    echo "  PASS 없는 경로를 source 하지 않아 오류 없음"
+else
+    echo "  FAIL 셸 시작 시 오류 발생 — ${noros_err}" >&2
+    fails=$((fails + 1))
+fi
 
 if [[ "${fails}" -gt 0 ]]; then
     echo "FAILED: ${fails}건" >&2
