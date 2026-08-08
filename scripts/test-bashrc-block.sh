@@ -32,6 +32,13 @@ source "${REPO_ROOT}/resources/lib.sh"
 # 셸이 이 변수들을 이미 export 하고 있으면(예: 다른 ROS 배포판을 쓰는 개인 셸)
 # 테스트 결과가 그 환경에 따라 달라진다 — 실제로 RMW_IMPLEMENTATION 이 이 이유로
 # 실패한 적이 있다. 여기서 명시적으로 고정해 어떤 셸에서 실행해도 결과가 같게 한다.
+#
+# RMW_IMPLEMENTATION 은 이후 config.sh 가 `=` 로 강제 고정하도록 바뀌어(레포 전체
+# 측정이 CycloneDDS 전제) 아래 고정이 더는 hermeticity 에 필요하지 않다 — config.sh
+# 를 source 하는 순간 이미 rmw_cyclonedds_cpp 로 확정된다. 그래도 지우지 않고 남겨
+# 둔다: 이 값과 config.sh 의 강제값이 항상 같아야 한다는 사실 자체가 문서 역할을
+# 하고, 혹시 나중에 config.sh 쪽이 다시 override 가능하게 바뀌면 이 줄이 없어야
+# 비로소 테스트가 ambient 오염에 다시 노출된다(있으면 무해하게 안전망으로 남는다).
 RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
 DSR_WORKSPACE="${FAKEHOME}/cobot2_ws"
 CYCLONEDDS_XML="${FAKEHOME}/.config/cyclonedds/cyclonedds.xml"
@@ -188,6 +195,35 @@ if [[ "${dangle_stderr}" == *"dds: warning"* ]]; then
     echo "  PASS 깨진 블록 발견 시 stderr 에 dds: 경고 출력"
 else
     echo "  FAIL 깨진 블록 경고가 stderr 에 없음(got: '${dangle_stderr}')" >&2
+    fails=$((fails + 1))
+fi
+
+echo "[9] config.sh 가 RMW_IMPLEMENTATION 을 강제 고정 — ambient 값과 무관하게 블록엔 cyclonedds 만 쓰인다"
+# 이 스크립트 자신은 위쪽(35번째 줄)에서 RMW_IMPLEMENTATION 을 이미 고정해 놨으므로,
+# 그 변수를 그대로 쓰면 config.sh 의 강제 여부와 무관하게 항상 통과해 버려 아무것도
+# 증명하지 못한다. config.sh/lib.sh 를 새로 source 하는 별도 서브셸을 열어, 그
+# 서브셸의 ambient 환경에만 RMW_IMPLEMENTATION=rmw_fastrtps_cpp 를 심어서 config.sh
+# 자체가 그 값을 무시하는지를 직접 확인한다.
+RULING_HOME="${FAKEHOME}/ruling-home"
+mkdir -p "${RULING_HOME}"
+RMW_IMPLEMENTATION=rmw_fastrtps_cpp HOME="${RULING_HOME}" bash -c '
+    set -euo pipefail
+    source "$1/resources/config.sh"
+    source "$1/resources/lib.sh"
+    bashrc_sync_block
+' _ "${REPO_ROOT}"
+
+if grep -qxF "export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp" "${RULING_HOME}/.bashrc"; then
+    echo "  PASS ambient rmw_fastrtps_cpp 를 무시하고 cyclonedds 로 기록"
+else
+    echo "  FAIL 블록에 cyclonedds 값이 없음 — config.sh 가 ambient 값을 강제하지 못하는 듯" >&2
+    fails=$((fails + 1))
+fi
+
+if ! grep -qxF "export RMW_IMPLEMENTATION=rmw_fastrtps_cpp" "${RULING_HOME}/.bashrc"; then
+    echo "  PASS ambient 값(rmw_fastrtps_cpp)이 블록에 새어 들어가지 않음"
+else
+    echo "  FAIL ambient 값이 그대로 블록에 기록됨" >&2
     fails=$((fails + 1))
 fi
 

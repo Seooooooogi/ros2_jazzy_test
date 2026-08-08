@@ -6,7 +6,7 @@
 #
 # resources/config.sh · source 전용
 #   distro / 버전 핀(version pin)의 단일 진실 소스
-#   대입 방식 = distro/OS 핀은 `=` 강제 설정 / 나머지는 `:=` 로 환경변수 override 가능
+#   대입 방식 = distro/OS 핀과 RMW 구현 핀은 `=` 강제 설정 / 나머지는 `:=` 로 환경변수 override 가능
 
 # --- distro / OS (강제 설정) -----------------------------------------------
 export ROS_DISTRO=jazzy
@@ -83,7 +83,9 @@ export ROS2_JAZZY_TEST_REPO
 
 # --- ROS2 DDS / RMW -----------
 # RMW = ROS2 노드가 통신에 쓰는 미들웨어 구현
-export RMW_IMPLEMENTATION="${RMW_IMPLEMENTATION:-rmw_cyclonedds_cpp}"
+# 이 레포의 핀(강제 설정) — 레포 전체의 DDS 측정·튜닝이 CycloneDDS 를 전제하므로
+# 머신별 선호로 두지 않는다. 호출 셸에 다른 값이 이미 export 돼 있어도 무시한다.
+export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
 
 # CycloneDDS 설정 XML 경로
 # URI = XML 에서 강제 파생
