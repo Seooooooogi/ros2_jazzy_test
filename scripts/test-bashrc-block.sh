@@ -514,6 +514,67 @@ else
     fails=$((fails + 1))
 fi
 
+echo "[20] 다른 짝의 블록 안에 들어 있는 마커는 정상 — 경고를 내지 않는다"
+# 옛 이름의 블록이 새 이름의 블록 안에 통째로 들어간 모양. 각 마커 짝을 원본 줄
+# 배열에서 따로 훑기 때문에, 바깥 짝이 이미 통째로 지우는 구간인데도 안쪽 짝은
+# "짝을 못 찾았다"고 판단해 경고를 냈다. 결과 파일은 멀쩡한데 경고만 나오면
+# 사용자는 멀쩡한 파일을 손대게 된다.
+NESTED_HOME="${FAKEHOME}/nested-home"
+mkdir -p "${NESTED_HOME}"
+cat > "${NESTED_HOME}/.bashrc" <<'EOF'
+alias before='survives'
+# >>> ros2_jazzy_test env >>>
+# <<< ros2_jazzy_test cyclonedds env <<<
+export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
+# >>> ros2_jazzy_test cyclonedds env >>>
+# <<< ros2_jazzy_test env <<<
+alias after='survives too'
+EOF
+
+nested_stderr="$(HOME="${NESTED_HOME}" bashrc_sync_block 2>&1 >/dev/null)"
+
+if [[ "${nested_stderr}" != *"dds: warning"* ]]; then
+    echo "  PASS 정상적으로 겹친 마커에는 경고 없음"
+else
+    echo "  FAIL 멀쩡한 파일에 손상 경고가 나옴 — ${nested_stderr}" >&2
+    fails=$((fails + 1))
+fi
+
+nested_begin="$(grep -cxF "# >>> ros2_jazzy_test env >>>" "${NESTED_HOME}/.bashrc" || true)"
+nested_end="$(grep -cxF "# <<< ros2_jazzy_test env <<<" "${NESTED_HOME}/.bashrc" || true)"
+nested_old="$(grep -cF "ros2_jazzy_test cyclonedds env" "${NESTED_HOME}/.bashrc" || true)"
+if [[ "${nested_begin}" -eq 1 && "${nested_end}" -eq 1 && "${nested_old}" -eq 0 ]]; then
+    echo "  PASS 결과는 마커 한 쌍 + 옛 마커 제거"
+else
+    echo "  FAIL 마커 상태 이상 — begin=${nested_begin} end=${nested_end} 옛마커=${nested_old}" >&2
+    fails=$((fails + 1))
+fi
+
+if grep -qxF "alias before='survives'" "${NESTED_HOME}/.bashrc" \
+    && grep -qxF "alias after='survives too'" "${NESTED_HOME}/.bashrc"; then
+    echo "  PASS 앞뒤 사용자 줄 생존"
+else
+    echo "  FAIL 사용자 줄이 사라짐" >&2
+    fails=$((fails + 1))
+fi
+
+echo "[21] 진짜로 깨진 마커에는 여전히 경고가 나온다"
+# [8]·[11] 과 함께, 위 완화가 경고 자체를 죽이지 않았는지 확인한다.
+STRAY_HOME="${FAKEHOME}/stray-home"
+mkdir -p "${STRAY_HOME}"
+cat > "${STRAY_HOME}/.bashrc" <<'EOF'
+alias keep='me'
+# <<< ros2_jazzy_test cyclonedds env <<<
+alias keep2='me'
+EOF
+stray_stderr="$(HOME="${STRAY_HOME}" bashrc_sync_block 2>&1 >/dev/null)"
+if [[ "${stray_stderr}" == *"dds: warning"* ]]; then
+    echo "  PASS 짝 없는 마커에는 경고 유지"
+else
+    echo "  FAIL 짝 없는 마커인데 경고가 없음(got: '${stray_stderr}')" >&2
+    fails=$((fails + 1))
+fi
+
 if [[ "${fails}" -gt 0 ]]; then
     echo "FAILED: ${fails}건" >&2
     exit 1

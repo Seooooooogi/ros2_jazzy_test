@@ -413,6 +413,9 @@ EOF
 #   2) 짝이 없는 마커 — 끝이 없는 시작, 시작이 없는 끝(마커 순서가 뒤집힌
 #      경우 포함) — 는 그 한 줄만 지우고 stderr 에 경고한다. 범위삭제를
 #      하지 않으므로 짝을 못 찾아 파일 끝까지 먹는 사고가 나지 않는다.
+#      단, 다른 짝의 정상 블록 안에 들어 있어 그 블록과 함께 지워지는 마커는
+#      경고하지 않는다 — 결과 파일이 옳은데 경고하면 사용자가 멀쩡한 파일을
+#      손대게 된다.
 #   3) 옛 방식이 흩어 놓은 줄은 "이 함수가 지금 이 호출에서 쓸 정확한 값"과
 #      완전히 같을 때만 지운다(와일드카드 없음) — 값이 머신마다 달라지는
 #      RMW_IMPLEMENTATION·CYCLONEDDS_XML 은 호출 시점 값으로 리터럴을 만들어
@@ -424,6 +427,9 @@ EOF
 #      그 구조 자체를 조건으로 삼는다 — "값이 뭐든 접두사만 같으면" 식의
 #      느슨한 매칭이 아니다.
 #   4) 나머지 줄은 그대로 낸다.
+#   5) 블록이 원래 있던 자리(첫 시작 마커)를 anchor_out 파일로 알려 준다.
+#      호출자가 그 자리에 블록을 다시 끼워 넣어, 블록 뒤에 사용자가 덧붙인
+#      설정이 블록보다 앞으로 밀려 효력을 잃는 일이 없게 한다.
 # 마지막 줄에 개행이 없는 입력이 들어와도 awk 의 print 는 각 줄마다 개행을
 # 붙이므로 출력은 항상 개행으로 끝난다 — 그 뒤에 붙는 새 블록이 이전 줄에
 # 들러붙어 매 실행마다 새 블록이 누적되는 사고를 막는다.
@@ -471,7 +477,7 @@ END {
                 pending = i
             } else if (lines[i] == ends[p]) {
                 if (pending != 0) {
-                    for (j = pending; j <= i; j++) drop[j] = 1
+                    for (j = pending; j <= i; j++) { drop[j] = 1; covered[j] = 1 }
                     pending = 0
                 } else {
                     drop[i] = 1
@@ -496,8 +502,13 @@ END {
         }
     }
 
+    # 각 짝을 원본 배열에서 따로 훑기 때문에, 다른 짝의 정상 블록 안에 들어 있는
+    # 마커도 "짝을 못 찾았다"로 잡힌다(옛 이름 블록이 새 블록 안에 통째로 들어간
+    # 경우 등). 그 줄은 어차피 바깥 블록과 함께 지워지고 결과 파일도 멀쩡하므로
+    # 경고할 것이 없다 — 경고하면 사용자가 멀쩡한 파일을 손대게 된다. 정상 블록
+    # 구간(covered)에 들어 있지 않은 마커만 진짜 손상이다.
     for (i = 1; i <= total; i++) {
-        if (i in warn) {
+        if ((i in warn) && !(i in covered)) {
             print "dds: warning — bashrc marker \"" warn[i] "\" has no matching partner; the block looks corrupted (interrupted run, manual edit, or reversed marker order). Removing only this stray marker line, leaving the rest of the file untouched." > "/dev/stderr"
         }
     }
