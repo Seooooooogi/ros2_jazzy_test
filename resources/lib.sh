@@ -398,19 +398,116 @@ EOF
 # 8) bashrc-sync · ~/.bashrc 관리 블록 재작성
 # ============================================================================
 
-# begin/end 마커 쌍으로 감싼 블록을 지운다. `sed 'begin,end d'`는 끝 마커를 못
-# 찾으면 시작 마커부터 파일 끝까지 통째로 지운다 — 중단된 이전 실행이나 수동
-# 편집으로 끝 마커만 빠진 상태가 되면, 그 뒤에 사용자가 써 놓은 줄까지 전부
-# 사라진다. 끝 마커가 없으면 범위삭제 대신 시작 마커 줄만 지우고 경고한다.
-_bashrc_delete_marker_block() {
-    local begin="$1" end="$2" file="$3"
-    if grep -qxF "${begin}" "${file}" && ! grep -qxF "${end}" "${file}"; then
-        echo "dds: warning — bashrc marker '${begin}' has no matching end marker ('${end}'); the block looks corrupted (interrupted run or manual edit). Removing only the stray start marker, leaving the rest of the file untouched." >&2
-        sed -i "\\@^${begin}\$@d" "${file}"
-    else
-        sed -i "\\@^${begin}\$@,\\@^${end}\$@d" "${file}"
-    fi
+# ~/.bashrc 를 한 번에 배열로 읽어 구조를 전부 파악한 뒤, 살아남을 줄만 다시
+# 뽑아내는 awk 프로그램. 이전에는 sed pass 를 여러 개 이어 붙였는데, 각 pass 는
+# 파일 전체 구조를 모른 채 패턴 하나만 보고 판단해서 — 마커 짝이 어긋나거나
+# (시작만 있고 끝이 없거나, 순서가 뒤집히거나), 파일이 개행 없이 끝나는 것 같은
+# 흔치 않은 모양이 나올 때마다 매번 새로운 특수 케이스로 데이터가 지워졌다
+# (리뷰 3라운드 연속 재발). awk 는 파일 전체를 배열에 담아 놓고 그 구조를 보고
+# 판단하므로, "패턴 하나가 앞뒤 맥락을 모른 채 지나치며 생기는" 종류의 사고가
+# 애초에 생기지 않는다.
+#
+# 처리 규칙:
+#   1) begin 마커 뒤에 나중에 나오는 자기 짝 end 마커가 있으면(제대로 된
+#      블록) 그 사이 전체(마커 포함)를 지운다.
+#   2) 짝이 없는 마커 — 끝이 없는 시작, 시작이 없는 끝(마커 순서가 뒤집힌
+#      경우 포함) — 는 그 한 줄만 지우고 stderr 에 경고한다. 범위삭제를
+#      하지 않으므로 짝을 못 찾아 파일 끝까지 먹는 사고가 나지 않는다.
+#   3) 옛 방식이 흩어 놓은 줄은 "이 함수가 지금 이 호출에서 쓸 정확한 값"과
+#      완전히 같을 때만 지운다(와일드카드 없음) — 값이 머신마다 달라지는
+#      RMW_IMPLEMENTATION·CYCLONEDDS_XML 은 호출 시점 값으로 리터럴을 만들어
+#      비교한다(그 값은 새 블록을 쓸 때 쓰는 값과 같은 변수에서 나온다 —
+#      추측이 아니라 이미 아는 값). 워크스페이스 오버레이 줄(`[ -f X/install/
+#      setup.bash ] && source X/install/setup.bash`)은 옛 실측 값이 tilde
+#      리터럴이라 특정 변수로 못 만들지만, 이 레포가 쓰는 형태는 항상
+#      자기참조형(-f 로 검사하는 경로와 source 하는 경로가 완전히 같음)이라
+#      그 구조 자체를 조건으로 삼는다 — "값이 뭐든 접두사만 같으면" 식의
+#      느슨한 매칭이 아니다.
+#   4) 나머지 줄은 그대로 낸다.
+# 마지막 줄에 개행이 없는 입력이 들어와도 awk 의 print 는 각 줄마다 개행을
+# 붙이므로 출력은 항상 개행으로 끝난다 — 그 뒤에 붙는 새 블록이 이전 줄에
+# 들러붙어 매 실행마다 새 블록이 누적되는 사고를 막는다.
+#
+# `read -d '' VAR <<EOF` 로 이 프로그램을 담지 않는다 — 그 idiom 은 heredoc
+# 끝에서 항상 종료 코드 1 을 내는데, base-install.sh/hostcfg.sh 는 lib.sh 를
+# source 해서 쓰고 둘 다 `set -euo pipefail` 이 걸려 있어 그 자리에서 곧장
+# 죽는다(source 는 같은 셸에서 실행되므로 lib.sh 자신이 `set -e` 가 없어도
+# 호출자의 옵션이 그대로 적용된다). `$(cat <<EOF ... EOF)` 형태는 cat 이
+# 정상 종료(0)하므로 이 문제가 없다.
+_BASHRC_SYNC_AWK_PROG="$(cat <<'AWKEOF'
+function is_self_ref_overlay(line,    prefix, rest, mid, midpos, path1, path2, suffix) {
+    prefix = "[ -f "
+    if (substr(line, 1, length(prefix)) != prefix) return 0
+    rest = substr(line, length(prefix) + 1)
+    mid = " ] && source "
+    midpos = index(rest, mid)
+    if (midpos == 0) return 0
+    path1 = substr(rest, 1, midpos - 1)
+    path2 = substr(rest, midpos + length(mid))
+    suffix = "/install/setup.bash"
+    if (length(path1) <= length(suffix)) return 0
+    if (substr(path1, length(path1) - length(suffix) + 1) != suffix) return 0
+    if (substr(path1, 1, 2) != "~/") return 0
+    return (path1 == path2)
 }
+{
+    lines[NR] = $0
+}
+END {
+    total = NR
+    nb = 0
+    begins[++nb] = begin1; ends[nb] = end1
+    begins[++nb] = begin2; ends[nb] = end2
+    begins[++nb] = begin3; ends[nb] = end3
+
+    for (p = 1; p <= nb; p++) {
+        pending = 0
+        for (i = 1; i <= total; i++) {
+            if (lines[i] == begins[p]) {
+                if (pending != 0) {
+                    drop[pending] = 1
+                    warn[pending] = begins[p]
+                }
+                pending = i
+            } else if (lines[i] == ends[p]) {
+                if (pending != 0) {
+                    for (j = pending; j <= i; j++) drop[j] = 1
+                    pending = 0
+                } else {
+                    drop[i] = 1
+                    warn[i] = ends[p]
+                }
+            }
+        }
+        if (pending != 0) {
+            drop[pending] = 1
+            warn[pending] = begins[p]
+        }
+    }
+
+    for (i = 1; i <= total; i++) {
+        l = lines[i]
+        if (l == legacy_ros_source || l == legacy_colcon || l == legacy_localhost || \
+            l == legacy_rmw || l == legacy_cyclonedds_uri || l == legacy_test_comment || \
+            l == legacy_config_source || l == legacy_cyclonedds_comment) {
+            drop[i] = 1
+        } else if (is_self_ref_overlay(l)) {
+            drop[i] = 1
+        }
+    }
+
+    for (i = 1; i <= total; i++) {
+        if (i in warn) {
+            print "dds: warning — bashrc marker \"" warn[i] "\" has no matching partner; the block looks corrupted (interrupted run, manual edit, or reversed marker order). Removing only this stray marker line, leaving the rest of the file untouched." > "/dev/stderr"
+        }
+    }
+
+    for (i = 1; i <= total; i++) {
+        if (!(i in drop)) print lines[i]
+    }
+}
+AWKEOF
+)"
 
 # ~/.bashrc 의 이 레포 소유 영역을 마커 블록 하나로 재작성한다.
 #
@@ -424,46 +521,38 @@ bashrc_sync_block() {
     local bashrc="${HOME}/.bashrc"
     local begin="# >>> ros2_jazzy_test env >>>"
     local end="# <<< ros2_jazzy_test env <<<"
-    local tmp
+    local tmp_in tmp_out
 
     [[ -f "${bashrc}" ]] || touch "${bashrc}"
 
     # symlink 로 관리되는 ~/.bashrc(stow/chezmoi 같은 dotfiles 도구나 손으로 건
-    # symlink)를 보존한다. `sed -i` 는 symlink 자리를 새 일반 파일로 갈아 치워
-    # symlink 를 끊는다(원본 dotfiles 파일은 갱신되지 않음). 대신 임시 파일에서
-    # 다 고친 뒤 `>` 리다이렉트로 원래 경로에 흘려 넣는다 — 그 경로가 symlink 면
-    # 커널이 대상 파일을 열어 그 자리에 쓴다(symlink·inode 모두 유지).
-    tmp="$(mktemp)"
-    cp "${bashrc}" "${tmp}"
+    # symlink)를 보존한다. `sed -i`/`awk -i inplace` 는 symlink 자리를 새 일반
+    # 파일로 갈아 치워 symlink 를 끊는다(원본 dotfiles 파일은 갱신되지 않음).
+    # 대신 원본을 임시 파일로 복사해 그 사본만 고치고, 마지막에 `>` 리다이렉트로
+    # 원래 경로에 흘려 넣는다 — 그 경로가 symlink 면 커널이 대상 파일을 열어
+    # 그 자리에 쓴다(symlink·inode 모두 유지).
+    tmp_in="$(mktemp)"
+    tmp_out="$(mktemp)"
+    cp "${bashrc}" "${tmp_in}"
 
-    # 1) 현재 마커 블록 제거
-    _bashrc_delete_marker_block "${begin}" "${end}" "${tmp}"
+    awk \
+        -v begin1="${begin}" \
+        -v end1="${end}" \
+        -v begin2="# >>> ros2_jazzy_test cyclonedds env >>>" \
+        -v end2="# <<< ros2_jazzy_test cyclonedds env <<<" \
+        -v begin3="# >>> ros2_jazzy_test runtime env >>>" \
+        -v end3="# <<< ros2_jazzy_test runtime env <<<" \
+        -v legacy_ros_source="source /opt/ros/${ROS_DISTRO}/setup.bash" \
+        -v legacy_colcon="source /usr/share/colcon_argcomplete/hook/colcon-argcomplete.bash" \
+        -v legacy_localhost="# export ROS_LOCALHOST_ONLY=1" \
+        -v legacy_rmw="export RMW_IMPLEMENTATION=${RMW_IMPLEMENTATION}" \
+        -v legacy_cyclonedds_uri="export CYCLONEDDS_URI=\"file://${CYCLONEDDS_XML}\"" \
+        -v legacy_test_comment="# [테스트 2026-08-04] config.sh 제거 검증 — 원복은 이 줄의 주석 해제" \
+        -v legacy_config_source="# set -a; source ~/ros2_jazzy_test/resources/config.sh; set +a" \
+        -v legacy_cyclonedds_comment="# CycloneDDS standard + large-topic buffer/interface tuning (managed by hostcfg.sh dds, do not edit manually)" \
+        "${_BASHRC_SYNC_AWK_PROG}" "${tmp_in}" > "${tmp_out}"
 
-    # 2) 예전 마커 블록 제거(이름이 두 종류였다)
-    _bashrc_delete_marker_block \
-        "# >>> ros2_jazzy_test cyclonedds env >>>" "# <<< ros2_jazzy_test cyclonedds env <<<" "${tmp}"
-    _bashrc_delete_marker_block \
-        "# >>> ros2_jazzy_test runtime env >>>" "# <<< ros2_jazzy_test runtime env <<<" "${tmp}"
-
-    # 3) 예전 방식이 흩어 놓은 줄 제거.
-    #    이 레포가 과거에 직접 써 넣은 형태만 정확히 일치할 때 지운다 —
-    #    사용자가 손으로 쓴 다른 형태는 건드리지 않는다. 그래서 값 비교가
-    #    필요한 줄은 양끝을 앵커링해 그 값까지 정확히 일치할 때만 지운다 —
-    #    끝 앵커가 없으면 같은 접두사로 시작하되 값이 다른 사용자 줄까지
-    #    같이 지워진다(실제로 그렇게 지워지는 걸 리뷰에서 확인함).
-    sed -i \
-        -e "\\@^source /opt/ros/${ROS_DISTRO}/setup.bash\$@d" \
-        -e '\@^source /usr/share/colcon_argcomplete/hook/colcon-argcomplete.bash$@d' \
-        -e '\@^# export ROS_LOCALHOST_ONLY=1$@d' \
-        -e '\@^export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp$@d' \
-        -e '\@^export CYCLONEDDS_URI="file://.*/cyclonedds\.xml"$@d' \
-        -e '\@^\[ -f \(~/.*install/setup\.bash\) \] && source \1$@d' \
-        -e '\@^# \[테스트 2026-08-04\] config\.sh 제거 검증 — 원복은 이 줄의 주석 해제$@d' \
-        -e '\@^# set -a; source ~/ros2_jazzy_test/resources/config.sh; set +a$@d' \
-        -e '\@^# CycloneDDS standard + large-topic buffer/interface tuning (managed by hostcfg\.sh dds, do not edit manually)$@d' \
-        "${tmp}"
-
-    # 4) 블록 재작성
+    # 블록 재작성
     {
         echo "${begin}"
         echo "# ROS2 환경 (관리 주체 = resources/hostcfg.sh · 직접 수정하지 말 것)"
@@ -473,8 +562,8 @@ bashrc_sync_block() {
         echo "export RMW_IMPLEMENTATION=${RMW_IMPLEMENTATION}"
         echo "export CYCLONEDDS_URI=\"file://${CYCLONEDDS_XML}\""
         echo "${end}"
-    } >> "${tmp}"
+    } >> "${tmp_out}"
 
-    cat "${tmp}" > "${bashrc}"
-    rm -f "${tmp}"
+    cat "${tmp_out}" > "${bashrc}"
+    rm -f "${tmp_in}" "${tmp_out}"
 }
