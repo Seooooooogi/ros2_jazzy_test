@@ -216,6 +216,21 @@ assert_contains "m3 노드 URI = env 출력값" "${out}" "NODE_ENV CYCLONEDDS_UR
 assert_contains "m3 노드 RANGE unset"      "${out}" "NODE_ENV ROS_AUTOMATIC_DISCOVERY_RANGE=[<unset>]"
 assert_contains "m3 노드 peers unset"      "${out}" "NODE_ENV ROS_STATIC_PEERS=[<unset>]"
 
+echo "[12] 노드의 손실률 계산 자체 검증"
+# drop_stats 는 이 측정 도구 전체에서 유일한 산술이고, 채택 판단이 읽는 숫자를
+# 바로 그것이 만든다. 사람이 --self-test 를 기억해서 치는 것에 맡기지 않는다.
+if selftest_out="$(python3 "${SCRIPT_DIR}/dds_probe_nodes.py" --self-test 2>&1)"; then
+    if [[ "${selftest_out}" == *"self-test OK"* ]]; then
+        echo "  PASS 드롭률 계산 self-test 통과"
+    else
+        echo "  FAIL self-test 출력이 예상과 다름 — ${selftest_out}" >&2
+        fails=$((fails + 1))
+    fi
+else
+    echo "  FAIL self-test 실패 — ${selftest_out}" >&2
+    fails=$((fails + 1))
+fi
+
 if [[ "${fails}" -gt 0 ]]; then
     echo "FAILED: ${fails}건" >&2
     exit 1
