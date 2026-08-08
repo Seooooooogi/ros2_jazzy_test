@@ -162,6 +162,60 @@ elif [[ "${invariant_passed}" == "true" ]]; then
     echo "  PASS 섹션 비어있음 불변식 — 모든 헤더 다음에 데이터 있음"
 fi
 
+# 측정 노드(자식 프로세스)가 실제로 받은 환경을 그대로 찍는 스텁.
+# env 출력은 오퍼레이터의 셸만 바꾼다. 노드는 talk/listen 이 새로 띄우는 별도
+# 프로세스이므로, 그 사이에서 환경이 덧칠되면 결과표에는 고른 적 없는 구성의
+# 숫자가 들어간다 — 실제로 그런 적이 있어서(모든 구성이 XML 을 물고 측정됨)
+# 이 검사를 상시 assertion 으로 남긴다. 다른 스텁들은 노드가 무엇을 상속받는지
+# 전혀 보지 않기 때문에 그 사고를 잡지 못했다.
+cat > "${ROOT}/stub_env.py" <<'EOF'
+#!/usr/bin/env python3
+import os
+
+for key in ("CYCLONEDDS_URI", "ROS_AUTOMATIC_DISCOVERY_RANGE",
+            "ROS_STATIC_PEERS", "RMW_IMPLEMENTATION"):
+    print("NODE_ENV %s=[%s]" % (key, os.environ.get(key, "<unset>")))
+EOF
+
+# 오퍼레이터와 똑같은 순서(eval → 별도 프로세스 기동)로 구성을 적용하고,
+# 노드가 본 환경을 stdout 으로 돌려준다.
+node_env_for() {
+    local cfg="$1"
+    (
+        set -eu
+        export DDS_PROBE_PEERS='192.168.1.2;192.168.1.11'
+        # 로그인 셸에 이미 URI 가 있는 상태 — m0~m2 는 이 값을 지워야 한다.
+        export CYCLONEDDS_URI='file:///pre-existing/from-login-shell.xml'
+        eval "$(bash "${PROBE}" env "${cfg}")"
+        AMENT_PREFIX_PATH=/fake DDS_PROBE_NODES="${ROOT}/stub_env.py" bash "${PROBE}" talk
+    )
+}
+
+echo "[11] 측정 노드가 실제로 받는 환경 = 오퍼레이터가 고른 구성"
+
+out="$(node_env_for m0)"
+assert_contains "m0 노드 URI unset"    "${out}" "NODE_ENV CYCLONEDDS_URI=[<unset>]"
+assert_contains "m0 노드 RANGE unset"  "${out}" "NODE_ENV ROS_AUTOMATIC_DISCOVERY_RANGE=[<unset>]"
+assert_contains "m0 노드 peers unset"  "${out}" "NODE_ENV ROS_STATIC_PEERS=[<unset>]"
+assert_contains "m0 노드 RMW"          "${out}" "NODE_ENV RMW_IMPLEMENTATION=[rmw_cyclonedds_cpp]"
+
+out="$(node_env_for m1)"
+assert_contains "m1 노드 URI unset"    "${out}" "NODE_ENV CYCLONEDDS_URI=[<unset>]"
+assert_contains "m1 노드 RANGE"        "${out}" "NODE_ENV ROS_AUTOMATIC_DISCOVERY_RANGE=[SUBNET]"
+assert_contains "m1 노드 peers unset"  "${out}" "NODE_ENV ROS_STATIC_PEERS=[<unset>]"
+
+out="$(node_env_for m2)"
+assert_contains "m2 노드 URI unset"    "${out}" "NODE_ENV CYCLONEDDS_URI=[<unset>]"
+assert_contains "m2 노드 RANGE"        "${out}" "NODE_ENV ROS_AUTOMATIC_DISCOVERY_RANGE=[LOCALHOST]"
+assert_contains "m2 노드 peers"        "${out}" "NODE_ENV ROS_STATIC_PEERS=[192.168.1.2;192.168.1.11]"
+
+# m3 만 URI 가 있어야 하고, 그 값은 env 가 낸 문자열과 정확히 같아야 한다.
+m3_uri="$(bash "${PROBE}" env m3 | sed -n 's/^export CYCLONEDDS_URI="\(.*\)"$/\1/p')"
+out="$(node_env_for m3)"
+assert_contains "m3 노드 URI = env 출력값" "${out}" "NODE_ENV CYCLONEDDS_URI=[${m3_uri}]"
+assert_contains "m3 노드 RANGE unset"      "${out}" "NODE_ENV ROS_AUTOMATIC_DISCOVERY_RANGE=[<unset>]"
+assert_contains "m3 노드 peers unset"      "${out}" "NODE_ENV ROS_STATIC_PEERS=[<unset>]"
+
 if [[ "${fails}" -gt 0 ]]; then
     echo "FAILED: ${fails}건" >&2
     exit 1

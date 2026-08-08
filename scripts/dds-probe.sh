@@ -21,9 +21,28 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
 NODES="${DDS_PROBE_NODES:-${SCRIPT_DIR}/dds_probe_nodes.py}"
 
-# shellcheck source-path=SCRIPTDIR/..
-# shellcheck source=resources/config.sh
-source "${REPO_ROOT}/resources/config.sh"
+# config.sh 를 이 셸에 그대로 source 하지 않는다.
+#
+# config.sh 는 설치기용 파일이라 CYCLONEDDS_URI 를 무조건 export 한다. 이 스크립트가
+# 그것을 상속하면, 오퍼레이터가 `eval "$(... env m0)"` 로 URI 를 지워 놓아도 talk/
+# listen/self-check 이 띄우는 노드는 다시 XML 을 물고 뜬다 — DDS 설정 단계를 마친
+# 머신에서는 XML 이 실제로 있으므로 조용히 읽히고, XML 없이 도는지 보려던 세 구성이
+# 전부 XML 과 함께 측정된다. 결과표는 한 구성을 네 번 잰 숫자로 채워지고, 아무도
+# 측정하지 않은 구성이 채택된다. 컨테이너 안에서 노드를 직접 실행하는 경로는
+# config.sh 를 아예 거치지 않으므로 host 쪽과 다른 것을 재게 된다.
+#
+# 그래서 필요한 두 값만 서브셸에서 뽑아 온다. 이 프로세스의 환경은 호출 셸 그대로
+# 유지되고, 노드가 보는 구성 = 오퍼레이터가 고른 구성이 된다.
+_probe_config_get() {
+    (
+        # shellcheck source-path=SCRIPTDIR/..
+        # shellcheck source=resources/config.sh
+        source "${REPO_ROOT}/resources/config.sh" >/dev/null 2>&1
+        printf '%s\n' "${!1-}"
+    )
+}
+PROBE_CYCLONEDDS_XML="$(_probe_config_get CYCLONEDDS_XML)"
+PROBE_ROS_DISTRO="$(_probe_config_get ROS_DISTRO)"
 
 # 측정 구성별 환경변수 문장을 stdout 으로. 호출자가 eval 한다.
 # 네 구성 모두 RMW 는 CycloneDDS 로 고정 — 비교 대상은 discovery 설정뿐이다.
@@ -59,7 +78,7 @@ probe_env() {
         m3)
             echo "unset ROS_AUTOMATIC_DISCOVERY_RANGE"
             echo "unset ROS_STATIC_PEERS"
-            echo "export CYCLONEDDS_URI=\"file://${CYCLONEDDS_XML}\""
+            echo "export CYCLONEDDS_URI=\"file://${PROBE_CYCLONEDDS_XML}\""
             ;;
         *)
             echo "dds-probe: 알 수 없는 구성 '${cfg}' (m0|m1|m2|m3)" >&2
@@ -71,7 +90,7 @@ probe_env() {
 # ROS 오버레이가 source 되어 있지 않으면 어떤 측정도 의미가 없다.
 _require_ros() {
     if [[ -z "${AMENT_PREFIX_PATH:-}" ]]; then
-        echo "dds-probe: ROS 환경이 없다. 'source /opt/ros/${ROS_DISTRO}/setup.bash' 후 다시 실행하라." >&2
+        echo "dds-probe: ROS 환경이 없다. 'source /opt/ros/${PROBE_ROS_DISTRO}/setup.bash' 후 다시 실행하라." >&2
         exit 3
     fi
 }
