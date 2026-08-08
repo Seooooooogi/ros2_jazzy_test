@@ -15,6 +15,22 @@
 #   bash scripts/dds-probe.sh listen             # 수신 + 손실률 (머신 B)
 #   bash scripts/dds-probe.sh report             # 인터페이스·소켓 버퍼 관측
 #   bash scripts/dds-probe.sh self-check         # 같은 머신 loopback 무결성
+#
+# listen 의 마지막 줄:
+#   RESULT received=<개> expected=<개> drop_pct=<%> hz=<Hz>
+#
+#   drop_pct 는 백분율(%)이다 — 0.5 는 0.5% 이지 50% 가 아니다. 결과표와 판정
+#   기준도 같은 단위로 읽는다: 통과 = 기준선 구성 대비 +1 퍼센트포인트(%p) 이내.
+#   self-check 의 통과선 1.0 역시 1% 를 뜻한다. 이 단위를 분수로 오해하면
+#   100배 차이로 판정이 뒤집혀 다른 구성이 채택된다.
+#
+# 환경변수:
+#   DDS_PROBE_PEERS          m2 구성이 요구하는 상대 주소 목록. 세미콜론 구분
+#                            (예: '192.168.1.2;192.168.1.11'). 콤마·공백 불가.
+#   DDS_PROBE_NODES          발행/수신 노드 파이썬 파일 경로.
+#                            기본값 = 이 스크립트 옆의 dds_probe_nodes.py
+#   DDS_PROBE_SELFCHECK_HZ   self-check 발행 주기(Hz). 기본 5
+#   DDS_PROBE_SELFCHECK_SEC  self-check 수신 시간(초). 기본 8
 set -euo pipefail
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
