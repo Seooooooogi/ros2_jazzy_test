@@ -560,7 +560,14 @@ bashrc_sync_block() {
         echo "source /usr/share/colcon_argcomplete/hook/colcon-argcomplete.bash"
         echo "[ -f ${DSR_WORKSPACE}/install/setup.bash ] && source ${DSR_WORKSPACE}/install/setup.bash"
         echo "export RMW_IMPLEMENTATION=${RMW_IMPLEMENTATION}"
-        echo "export CYCLONEDDS_URI=\"file://${CYCLONEDDS_XML}\""
+        # 파일이 있을 때만 가리킨다. 이 블록은 ROS2 설치 단계에서 이미 쓰이는데
+        # cyclonedds.xml 은 재부팅 뒤 DDS 설정 단계에서야 만들어진다 — 그 사이에
+        # 새 셸을 열거나(중간 단계 실패·autostart 미등록·설치 초기화·서브커맨드
+        # 단독 실행) 사용자가 XML 을 지우면, 없는 파일을 가리키는 URI 때문에 모든
+        # ROS 노드가 "rmw handle is invalid" 로 기동에 실패한다.
+        echo "if [ -f ${CYCLONEDDS_XML} ]; then"
+        echo "    export CYCLONEDDS_URI=\"file://${CYCLONEDDS_XML}\""
+        echo "fi"
         echo "${end}"
     } >> "${tmp_out}"
 

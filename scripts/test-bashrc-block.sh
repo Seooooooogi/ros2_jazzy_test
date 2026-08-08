@@ -344,10 +344,79 @@ else
 fi
 
 empty_line_count="$(wc -l < "${EMPTY_HOME}/.bashrc")"
-if [[ "${empty_line_count}" -eq 8 ]]; then
+if [[ "${empty_line_count}" -eq 10 ]]; then
     echo "  PASS 블록 외에 다른 내용 없음 (총 ${empty_line_count}줄)"
 else
-    echo "  FAIL 블록 외에 다른 줄이 섞임 — 총 ${empty_line_count}줄 (기대 8줄)" >&2
+    echo "  FAIL 블록 외에 다른 줄이 섞임 — 총 ${empty_line_count}줄 (기대 10줄)" >&2
+    fails=$((fails + 1))
+fi
+
+# 만들어진 .bashrc 를 실제 셸에서 source 해 보고, 그 셸에 남은 값을 돌려준다.
+# 줄이 파일에 있는지가 아니라 셸이 최종적으로 무엇으로 해석하는지를 본다 —
+# 줄은 멀쩡한데 효과가 뒤집히는 종류의 사고는 grep 으로는 보이지 않는다.
+# 이 레포가 심어 놓은 값만 보이도록 관련 변수는 지운 환경에서 연다.
+sourced_env_of() {
+    local rc="$1"
+    # 홑따옴표 유지 — $1·$? 는 이 셸이 아니라 새로 여는 셸이 풀어야 한다.
+    # shellcheck disable=SC2016
+    env -u CYCLONEDDS_URI -u CYCLONEDDS_XML -u RMW_IMPLEMENTATION \
+        bash --noprofile --norc -c '
+            source "$1" >/dev/null 2>&1
+            printf "SOURCE_STATUS=[%s]\n" "$?"
+            printf "CYCLONEDDS_URI=[%s]\n" "${CYCLONEDDS_URI-<unset>}"
+            printf "RMW_IMPLEMENTATION=[%s]\n" "${RMW_IMPLEMENTATION-<unset>}"
+        ' _ "${rc}"
+}
+
+assert_line() {
+    local label="$1" haystack="$2" needle="$3"
+    if [[ "${haystack}" == *"${needle}"* ]]; then
+        echo "  PASS ${label}"
+    else
+        echo "  FAIL ${label} — '${needle}' 없음. 실제: $(printf '%s' "${haystack}" | tr '\n' ' ')" >&2
+        fails=$((fails + 1))
+    fi
+}
+
+echo "[14] XML 이 아직 없는 시점에 블록을 써도 ROS 가 멀쩡히 뜬다"
+# 관리 블록은 ROS2 설치 단계에서 이미 쓰이는데 cyclonedds.xml 은 그보다 뒤(재부팅
+# 이후 DDS 설정 단계)에 만들어진다. 그 사이에 새 셸을 열면 — 또는 사용자가 XML 을
+# 지우면 — 없는 파일을 가리키는 CYCLONEDDS_URI 때문에 모든 ROS 노드가 기동에
+# 실패한다("can't open configuration file ..." → rmw handle is invalid). 학생은
+# 들어본 적도 없는 파일 이름을 보게 된다.
+NOXML_HOME="${FAKEHOME}/no-xml-home"
+mkdir -p "${NOXML_HOME}"
+NOXML_XML="${NOXML_HOME}/.config/cyclonedds/cyclonedds.xml"
+(
+    CYCLONEDDS_XML="${NOXML_XML}"
+    HOME="${NOXML_HOME}"
+    bashrc_sync_block
+)
+
+noxml_out="$(sourced_env_of "${NOXML_HOME}/.bashrc")"
+assert_line "XML 없으면 URI 도 없다"   "${noxml_out}" "CYCLONEDDS_URI=[<unset>]"
+assert_line "source 종료 코드 0"       "${noxml_out}" "SOURCE_STATUS=[0]"
+assert_line "ROS 통신 설정은 살아 있다" "${noxml_out}" "RMW_IMPLEMENTATION=[rmw_cyclonedds_cpp]"
+
+echo "[15] XML 이 생긴 뒤에는 그 파일을 가리킨다"
+mkdir -p "$(dirname "${NOXML_XML}")"
+printf '<CycloneDDS/>\n' > "${NOXML_XML}"
+(
+    CYCLONEDDS_XML="${NOXML_XML}"
+    HOME="${NOXML_HOME}"
+    bashrc_sync_block
+)
+
+xml_out="$(sourced_env_of "${NOXML_HOME}/.bashrc")"
+assert_line "URI 가 그 XML 을 가리킨다" "${xml_out}" "CYCLONEDDS_URI=[file://${NOXML_XML}]"
+assert_line "source 종료 코드 0"        "${xml_out}" "SOURCE_STATUS=[0]"
+
+# 두 경우를 관통하는 불변식: URI 가 있으면 그 파일이 반드시 존재해야 한다.
+sourced_uri="$(printf '%s\n' "${xml_out}" | sed -n 's/^CYCLONEDDS_URI=\[file:\/\/\(.*\)\]$/\1/p')"
+if [[ -n "${sourced_uri}" && -f "${sourced_uri}" ]]; then
+    echo "  PASS URI 가 가리키는 파일이 실제로 존재"
+else
+    echo "  FAIL URI 가 없는 파일을 가리킴 — '${sourced_uri}'" >&2
     fails=$((fails + 1))
 fi
 
