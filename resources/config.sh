@@ -37,7 +37,10 @@ export ROS2_JAZZY_TEST_REPO
 # 기본 브랜치(main) = humble 용 → jazzy 브랜치 필수
 : "${M0609_REPO_URL:=https://github.com/ROKEY-SPARK/m0609_rg2_integration}"
 : "${M0609_REF:=jazzy}"
-: "${M0609_REPO_DIR:=${HOME}/M0609_RG2_Integration}"
+: "${M0609_REPO_DIR:=${HOME}/m0609_rg2_integration}"
+# 레포 이름이 소문자로 바뀌기 전에 clone 한 머신의 경로. setup-app.sh 의 obtain_m0609 가
+# 신규 경로가 아직 없을 때만 1회 옮긴다 — 안 옮기면 같은 레포를 두 벌 받는다.
+: "${M0609_REPO_DIR_LEGACY:=${HOME}/M0609_RG2_Integration}"
 
 # OnRobot RG2 그리퍼 ROS2 패키지 = description + msgs + Modbus 드라이버
 : "${ONROBOT_REPO_URL:=https://github.com/ABC-iRobotics/onrobot-ros2}"
