@@ -35,7 +35,7 @@ export ROS2_JAZZY_TEST_REPO
 # --- M0609 + RG2 통합 bringup ------------------------------------------
 # 로봇 드라이버 · 그리퍼 · RealSense 브라켓 = 한 URDF / 한 launch 로 기동하는 패키지
 # 기본 브랜치(main) = humble 용 → jazzy 브랜치 필수
-: "${M0609_REPO_URL:=https://github.com/Seooooooogi/M0609_RG2_Integration}"
+: "${M0609_REPO_URL:=https://github.com/ROKEY-SPARK/m0609_rg2_integration}"
 : "${M0609_REF:=jazzy}"
 : "${M0609_REPO_DIR:=${HOME}/M0609_RG2_Integration}"
 
@@ -69,8 +69,11 @@ export ROS2_JAZZY_TEST_REPO
 : "${DOCKER_VERSION_STRING:=}"
 
 # --- state 파일 (설치가 끊긴 지점부터 이어서 진행) ----
-: "${STATE_DIR:=${HOME}/.ros2_jazzy_test}"
+: "${STATE_DIR:=${HOME}/.cobot2_jazzy_installer}"
 : "${STATE_FILE:=${STATE_DIR}/state}"
+# 레포 이름이 바뀌기 전에 설치한 머신의 상태 디렉토리. lib.sh 의 _state_migrate_legacy 가
+# 신규 경로가 아직 없을 때만 1회 옮긴다 — 안 옮기면 완료한 단계를 처음부터 다시 깐다.
+: "${STATE_DIR_LEGACY:=${HOME}/.ros2_jazzy_test}"
 
 # --- 상세 설치 로그 (append-only, 덮어쓰기 금지) ------------------------
 # 각 단계 명령의 stdout+stderr 전체 = 여기 축적

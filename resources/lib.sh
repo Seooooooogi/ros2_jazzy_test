@@ -20,7 +20,24 @@ __current_step=""
 : "${STEP_STATE:=1}"
 
 # state 파일 없으면 생성
+# 레포 이름이 바뀌기 전(~/.ros2_jazzy_test)에 설치한 머신의 상태 디렉토리를 새 경로로 옮긴다.
+# 안 옮기면 끝난 단계를 못 읽어 첫 단계부터 다시 깔린다(드라이버 재설치·재부팅 포함).
+# 신규 경로가 이미 있으면 그쪽이 진실이므로 손대지 않는다 — 몇 번을 호출해도 결과가 같다.
+_state_migrate_legacy() {
+    local legacy="${STATE_DIR_LEGACY:-}" current="${STATE_DIR:-}"
+    [[ -n "${legacy}" && -n "${current}" && "${legacy}" != "${current}" ]] || return 0
+    [[ -d "${legacy}" && ! -e "${current}" ]] || return 0
+
+    if mv "${legacy}" "${current}"; then
+        echo "[install] moved install state: ${legacy} -> ${current} (repo renamed)" >&2
+    else
+        echo "[install] warning — could not move ${legacy} to ${current};" >&2
+        echo "             install will restart from the first step." >&2
+    fi
+}
+
 _state_ensure_file() {
+    _state_migrate_legacy
     mkdir -p "$(dirname "$STATE_FILE")"
     [[ -f "$STATE_FILE" ]] || : > "$STATE_FILE"
 }
@@ -261,7 +278,7 @@ register_resume_autostart() {
     cat > "${RESUME_AUTOSTART_FILE}" <<EOF
 [Desktop Entry]
 Type=Application
-Name=ros2_jazzy_test install resume
+Name=cobot2_jazzy_installer install resume
 Comment=Auto-resume install.sh after a clean-install reboot (one-shot)
 Exec=${exec_line}
 Terminal=false

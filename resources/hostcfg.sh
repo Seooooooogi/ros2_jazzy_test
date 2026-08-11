@@ -68,11 +68,16 @@ hostcfg_dds() {
     # config.sh 적용 범위 = source 된 셸뿐 → 같은 export 를 ~/.bashrc 에도 주입
     # 기존 줄 삭제 후 마커 블록으로 재기록 → 중복 방지
     bashrc="${HOME}/.bashrc"
-    BEGIN_MARK="# >>> ros2_jazzy_test cyclonedds env >>>"
-    END_MARK="# <<< ros2_jazzy_test cyclonedds env <<<"
+    BEGIN_MARK="# >>> cobot2_jazzy_installer cyclonedds env >>>"
+    END_MARK="# <<< cobot2_jazzy_installer cyclonedds env <<<"
+    # 레포 이름이 바뀌기 전 마커. 이 블록도 같이 지워야 한다 — 안 지우면 같은
+    # export 가 옛 블록과 새 블록에 하나씩 남아 두 벌 실행된다.
+    LEGACY_BEGIN_MARK="# >>> ros2_jazzy_test cyclonedds env >>>"
+    LEGACY_END_MARK="# <<< ros2_jazzy_test cyclonedds env <<<"
     if [[ -f "${bashrc}" ]]; then
-        # 이전 관리 블록 제거
+        # 이전 관리 블록 제거(현재 이름 + 옛 이름)
         sed -i "/${BEGIN_MARK}/,/${END_MARK}/d" "${bashrc}"
+        sed -i "/${LEGACY_BEGIN_MARK}/,/${LEGACY_END_MARK}/d" "${bashrc}"
         # 손으로 넣었을 수 있는 흩어진 export/주석도 함께 정리
         sed -i \
             -e '/CycloneDDS receive-buffer tuning for large RealSense topics/d' \

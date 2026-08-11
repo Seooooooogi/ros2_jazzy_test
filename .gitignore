@@ -93,3 +93,7 @@ backup/llm_wiki/
 # 설치 중 손으로 만든 단계별 메모 스크립트(레포 루트 a01.sh ~ a11.sh) — 머신별 임시 작업물이라
 # 추적 대상 아님. 정식 설치 절차는 install.sh / setup-app.sh / resources/ 가 담당.
 /a[0-9][0-9].sh
+
+# 설치 단계 측정 산출물 — 머신마다 다르고 재생성 가능
+.trace-baseline/
+.trace-after/
