@@ -20,13 +20,10 @@ mkdir -p ~/cobot2_ws/src ~/cobot_venv_ws/src
 cp -a ~/Downloads/cobot2 ~/cobot2_ws/src/cobot2
 
 # 3-1) pick & place 실습 패키지는 별도 워크스페이스로 분리
-#      (~/cobot_venv_ws 는 venv 실습 전용 — 아래 setup-app.sh 가 건드리지 않는다.
-#       venv 생성·pip 설치·colcon 빌드 절차는 별도 실습 안내를 따른다.)
 mv ~/cobot2_ws/src/cobot2/pick_and_place_{text,voice} ~/cobot_venv_ws/src/
 rm -f ~/cobot_venv_ws/src/pick_and_place_*/COLCON_IGNORE
 
-# 3-2) voice OPENAI 키 배치 — 키를 명령줄에 직접 치면 ~/.bash_history 에 평문으로 남는다.
-#      아래는 입력이 stdin 이라 history 에도, 화면에도 남지 않는다.
+# 3-2) voice OPENAI 키 배치 (stdin 입력 — history 에 안 남는다)
 read -rsp 'OPENAI API key: ' K \
   && printf 'OPENAI_API_KEY=%s\n' "$K" > ~/cobot2_ws/src/cobot2/voice_processing/resource/.env \
   && unset K && echo
@@ -55,7 +52,6 @@ bash setup-app.sh                    # 기본: :dev-builder 컨테이너 이미�
 bash setup-app.sh --workspace-only   # 워크스페이스만
 bash setup-app.sh --containers-only  # 컨테이너만
 bash setup-app.sh --reset            # doosan-robot2 · onrobot-ros2 · m0609 링크 + build/install/log 삭제 후 풀 빌드
-                                     #   (cobot2 소스와 ~/m0609_rg2_integration 원본은 보존)
 bash setup-app.sh --help
 ```
 
@@ -85,22 +81,24 @@ set -a; source ~/cobot2_jazzy_installer/resources/config.sh; set +a
 
 ### 기동
 
-**로봇 드라이버 + 그리퍼** (`m0609_rg2_bringup`)
+**로봇 드라이버 + 그리퍼**
 
 ```bash
-# 에뮬레이터 (기본값)
+# 에뮬레이터
 ros2 launch m0609_rg2_bringup bringup.launch.py mode:=virtual
 # 실기
 ros2 launch m0609_rg2_bringup bringup.launch.py mode:=real host:=192.168.1.100
+# 카메라까지 함께 (기본 false)
+ros2 launch m0609_rg2_bringup bringup.launch.py mode:=real host:=192.168.1.100 camera:=true
+# 그리퍼 없이 드라이버만
+ros2 launch dsr_bringup2 dsr_bringup2_rviz.launch.py \
+  mode:=real host:=192.168.1.100 port:=12345 model:=m0609 name:=dsr01
 ```
 
-- 인자: `mode`(virtual|real) / `host` / `port` / `rt_host` / `camera` / `rviz`
-- `camera` 기본값은 **false** — 카메라는 아래 블록으로 따로 띄우거나 `camera:=true` 로 함께 띄운다
-- 그리퍼·브라켓 없이 로봇 드라이버만 필요하면 `ros2 launch dsr_bringup2 dsr_bringup2_rviz.launch.py mode:=real host:=192.168.1.100 port:=12345 model:=m0609 name:=dsr01`
-
-**RealSense 카메라** (따로 띄울 때)
+**RealSense 카메라**
 
 ```bash
+# -r 두 개 필수 — 없으면 토픽이 /camera/camera/* 로 나와 소비자가 못 받는다
 ros2 run realsense2_camera realsense2_camera_node --ros-args \
   -r __ns:=/ -r __node:=camera \
   -p enable_color:=true -p enable_depth:=true \
@@ -108,12 +106,6 @@ ros2 run realsense2_camera realsense2_camera_node --ros-args \
   -p align_depth.enable:=true -p enable_rgbd:=true -p enable_sync:=true \
   -p pointcloud.enable:=true -p pointcloud.stream_filter:=2 -p initial_reset:=true
 ```
-
-- `-r __ns:=/ -r __node:=camera` 두 remap 이 **필수**다. 안 주면 드라이버 기본 네임스페이스(`/camera`)와
-  노드 이름(`camera`)이 겹쳐 토픽이 `/camera/camera/*` 로 나온다.
-- 소비자(`object_detection`, `pick_and_place_*` 의 `ImgNode`)는 `/camera/color/image_raw` 등을
-  **절대 경로**로 구독하므로, 경로가 어긋나면 에러 없이 토픽만 빈 채로 대기한다.
-- 타 자료의 `ros2 launch realsense2_camera rs_align_depth_launch.py ...` 는 `/camera/camera/*` 를 낸다 — 위 명령으로 대체.
 
 **통합 실행 (권장)**
 
@@ -140,10 +132,6 @@ docker run -d --name yolo-detection \
   docker.io/local/ros2-jazzy-yolo:dev-builder \
   bash -c 'set +u; source /opt/ros/$ROS_DISTRO/setup.bash; find /ws/build /ws/install -mindepth 1 -delete 2>/dev/null || true; colcon build --symlink-install --merge-install; sleep infinity'
 ```
-
-- `--shm-size=8g` / `-v ~/yolo_train:/train` 은 컨테이너 안에서 YOLO 학습을 돌릴 때 필요하다
-  (DataLoader 공유메모리 · 데이터셋과 `runs/` 산출물을 host 에 보존).
-- 인자를 바꾸려면 `docker rm -f yolo-detection` 후 재생성 1회. 평소에는 `start` / `stop` 만 쓴다.
 
 컨테이너 시작
 
