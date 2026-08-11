@@ -28,8 +28,8 @@ git clone --depth 1 https://github.com/ROKEY-SPARK/doosan-robot2_jazzy.git \
   ~/cobot_venv_ws/src/doosan-robot2
 
 # 2) 통합 bringup — 레포는 바깥에 두고 패키지 하나만 심볼릭 링크 (moveit 스택 제외)
-git clone -b jazzy https://github.com/ROKEY-SPARK/m0609_rg2_integration ~/M0609_RG2_Integration
-ln -sfn ~/M0609_RG2_Integration/src/m0609_rg2_bringup ~/cobot_venv_ws/src/m0609_rg2_bringup
+git clone -b jazzy https://github.com/ROKEY-SPARK/m0609_rg2_integration ~/m0609_rg2_integration
+ln -sfn ~/m0609_rg2_integration/src/m0609_rg2_bringup ~/cobot_venv_ws/src/m0609_rg2_bringup
 
 # 3) OnRobot RG2 그리퍼 드라이버 — 커밋 고정
 git clone https://github.com/ABC-iRobotics/onrobot-ros2 ~/cobot_venv_ws/src/onrobot-ros2
@@ -364,5 +364,5 @@ ros2 run pick_and_place_voice robot_control
 
 ```bash
 docker rm -f dsr01_emulator 2>/dev/null || true
-rm -rf ~/cobot_venv_ws ~/M0609_RG2_Integration
+rm -rf ~/cobot_venv_ws ~/m0609_rg2_integration
 ```

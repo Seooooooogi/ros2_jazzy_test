@@ -110,6 +110,18 @@ obtain_m0609() {
 
     mkdir -p "${ws_src}"
 
+    # 레포 이름이 소문자로 바뀌기 전(~/M0609_RG2_Integration)에 clone 한 머신을 옮긴다.
+    # 안 옮기면 같은 레포를 두 벌 받고, 옛 경로에 있던 작업본이 워크스페이스에서 떨어진다.
+    # 신규 경로가 이미 있으면 그쪽이 진실이라 손대지 않는다. 옮긴 뒤 아래 ln -sfn 이
+    # 워크스페이스 심볼릭 링크를 새 경로로 다시 걸어 준다(옛 경로를 가리키던 링크가 끊기지 않는다).
+    if [[ -n "${M0609_REPO_DIR_LEGACY:-}" && -d "${M0609_REPO_DIR_LEGACY}" && ! -e "${M0609_REPO_DIR}" ]]; then
+        if mv "${M0609_REPO_DIR_LEGACY}" "${M0609_REPO_DIR}"; then
+            echo "setup-app: moved m0609 repo ${M0609_REPO_DIR_LEGACY} -> ${M0609_REPO_DIR} (repo renamed)"
+        else
+            echo "setup-app: warning — could not move ${M0609_REPO_DIR_LEGACY}; cloning fresh into ${M0609_REPO_DIR}" >&2
+        fi
+    fi
+
     if [[ -d "${M0609_REPO_DIR}/.git" ]]; then
         echo "setup-app: m0609 repo already at ${M0609_REPO_DIR} (skip clone, M0609_REF ignored)"
     else
