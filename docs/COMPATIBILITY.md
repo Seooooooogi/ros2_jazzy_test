@@ -109,9 +109,14 @@
 
 ## Transitive dependency 함정 (Hard Rule #8 보강)
 
-- **numpy<2 강제**: YOLO `ultralytics` 가 numpy<2 를 요구. 대부분 최신 ML 라이브러리는 numpy>=2 를 끌어옴 → `pip install` 순서에 따라 silent 업그레이드 발생, ultralytics import 시 런타임 실패.
-- **핀 위치**: 모든 `pip install` 단계의 **마지막**에 `pip install "numpy<2" --upgrade --force-reinstall`. 그 후 `python -c "import numpy, ultralytics"` import 검증.
+- **numpy<2 핀**: 근거는 ADR-002(ultralytics 호환). 단 **현행 버전 메타데이터엔 상한이 없다** — 2026-08-11 실측: ultralytics 8.4.102/8.4.117 = `numpy>=1.23.0`, opencv-python 4.9.0.80 = `numpy>=1.26.0`, torchvision = 무제약, torch = numpy 요구 없음. 핀의 런타임 근거는 현행 스택에서 재검증되지 않았다.
+- **실제 상승 벡터 = opencv-python**: 상한을 빼면 opencv-python 5.0.0.93 이 numpy 2.5.2 를 끌어온다(실측). `<4.10` 핀이 이 경로를 이미 막고 있어 **마지막 `numpy<2` 재핀은 현재 조합에서 no-op** — 상한 없는 의존의 미래 drift 대비 보험으로 유지한다.
+- **핀 위치와 플래그** (둘 다 실측 근거):
+  - 모든 pip 앞에 `pip install --ignore-installed "numpy<2"` 로 pip 소유 사본을 `/usr/local` 에 만든다. 없으면 numpy 버전 변경이 필요해지는 순간 `Cannot uninstall numpy 1.26.4, RECORD file not found` 로 **설치 자체가 실패**한다(apt numpy 는 pip RECORD 가 없어 제거 불가).
+  - 마지막 재핀은 **플래그 없는 일반 install**. `--force-reinstall` 은 apt 사본을 지우려다 같은 에러로 실패하고, `--ignore-installed` 는 uninstall 없이 덮어써 `numpy-2.x.dist-info` 가 남는다 → 이후 재핀이 "이미 만족" 으로 skip 되어 런타임 numpy 가 2.x 인 채 남는 조용한 실패가 생긴다.
+  - 그 후 `python3 -c "import numpy, ultralytics"` + `numpy.__version__` / `numpy.__file__` 단언으로 검증.
 - **install 순서 원칙**: ultralytics 먼저 → langchain/openai 다음 → numpy 마지막 재핀. langchain 의존성이 numpy>=2 끌어오는지 catch.
+- 위 실측 환경: `ros:jazzy-ros-base-noble` 일회용 컨테이너 / pip 24.0 / 192.168.1.11 (2026-08-11). 구현 대응부 = `containers/yolo-detection/Dockerfile:43-61`.
 - 자세한 결정 근거: `docs/decisions/README.md` ADR-002.
 
 ### 실측 검증된 선언적 의존성 충돌 (노션 2026-05-22, `pip check`)
@@ -140,7 +145,7 @@ voice 설치 검증 = `resources/app-install.sh voice` 마지막의 `Model(.tfli
 | torchvision | 0.26.0+cu128 | cu128 index | |
 | ultralytics | 8.4.102 | `<9` | 메이저 상한 (2026-07-20 재빌드 실측 — 이전 8.4.56) |
 | opencv-python | 4.9.0.80 | `<4.10` | 4.10+ 은 numpy>=2 메타 요구 → numpy<2 와 충돌. `<4.10` 으로 회피 (위 충돌표 1행 해소) |
-| numpy | 1.26.4 | `<2` (선행 `--ignore-installed` + 마지막 재핀) | ultralytics 호환. apt numpy 는 pip RECORD 가 없어 제거 불가 → pip 소유 사본을 먼저 만들고 그 사본만 재핀 (ADR-034) |
+| numpy | 1.26.4 | `<2` (선행 `--ignore-installed` + 마지막 재핀) | ultralytics 호환. apt numpy 는 pip RECORD 가 없어 제거 불가 → pip 소유 사본을 먼저 만들고 그 사본만 재핀 (ADR-034). 선행 줄은 필수(없으면 numpy 상향 요구 시 설치 실패), 마지막 재핀은 `opencv-python<4.10` 이 상승 벡터를 이미 막아 **현재 조합 no-op = drift 보험**(2026-08-11 실측 — 위 함정 절) |
 | polars | 1.41.2 | (ultralytics 의존) | |
 
 > 카메라는 **host 소유**(ADR-015, 2026-06-02): 이 컨테이너엔 realsense2_camera 드라이버를 두지 않는다. apt 런타임 ROS 의존은 `cv-bridge`/`sensor-msgs` 만(이미지 슬림화). host 가 카메라 토픽을 publish 하고 `object_detection` 노드는 subscribe — host 카메라 패키지는 위 시스템 표의 `ros-jazzy-realsense2-camera`(4.57.7) 행. host 측 카메라 노드를 띄우는 launch 는 `cobot2_bringup` 에서 `m0609_rg2_bringup` 으로 바뀌었고 스트림 프로파일도 그쪽으로 이관됐다(위 "RealSense 스트림 프로파일 (통합 bringup)" 행).
