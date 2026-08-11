@@ -11,7 +11,7 @@ mv ~/Downloads/cobot2/pick_and_place_text ~/Downloads/cobot2/pick_and_place_voic
 
 # 2) 사전 점검
 command -v ros2                                  # → /opt/ros/jazzy/bin/ros2
-ls ~/ros2_jazzy_test/resources/config.sh
+ls ~/cobot2_jazzy_installer/resources/config.sh
 ls ~/cobot_venv_ws/src/                          # → pick_and_place_text  pick_and_place_voice
 ```
 
@@ -28,7 +28,7 @@ git clone --depth 1 https://github.com/ROKEY-SPARK/doosan-robot2_jazzy.git \
   ~/cobot_venv_ws/src/doosan-robot2
 
 # 2) 통합 bringup — 레포는 바깥에 두고 패키지 하나만 심볼릭 링크 (moveit 스택 제외)
-git clone -b jazzy https://github.com/Seooooooogi/M0609_RG2_Integration ~/M0609_RG2_Integration
+git clone -b jazzy https://github.com/ROKEY-SPARK/m0609_rg2_integration ~/M0609_RG2_Integration
 ln -sfn ~/M0609_RG2_Integration/src/m0609_rg2_bringup ~/cobot_venv_ws/src/m0609_rg2_bringup
 
 # 3) OnRobot RG2 그리퍼 드라이버 — 커밋 고정
@@ -109,7 +109,7 @@ open(os.path.join(d, 'interpreter.py'), 'w').write('from ai_edge_litert.interpre
 
 # 8) openwakeword feature 모델 복사
 OWW_DIR="$(python3 -c 'import os,openwakeword;print(os.path.join(os.path.dirname(openwakeword.__file__),"resources","models"))')"
-mkdir -p "$OWW_DIR" && cp ~/ros2_jazzy_test/resources/oww_models/* "$OWW_DIR"/
+mkdir -p "$OWW_DIR" && cp ~/cobot2_jazzy_installer/resources/oww_models/* "$OWW_DIR"/
 python3 -c "
 import os
 d = '$OWW_DIR'
@@ -196,7 +196,7 @@ ls ~/cobot_venv_ws/src/pick_and_place_voice/resource/yolov8n_tools_0122.pt \
 
 ```bash
 deactivate 2>/dev/null || true
-set -a; source ~/ros2_jazzy_test/resources/config.sh; set +a
+set -a; source ~/cobot2_jazzy_installer/resources/config.sh; set +a
 source /opt/ros/jazzy/setup.bash
 
 # DSR 전용 apt 의존 + CycloneDDS RMW.
@@ -240,7 +240,7 @@ print('interface imports OK')
 
 ```bash
 # 터미널 1 — 드라이버 (bringup · 카메라 없이 — 카메라는 다음 블록에서 따로)
-set -a; source ~/ros2_jazzy_test/resources/config.sh; set +a
+set -a; source ~/cobot2_jazzy_installer/resources/config.sh; set +a
 source /opt/ros/jazzy/setup.bash
 source ~/cobot_venv_ws/install/setup.bash
 ros2 launch m0609_rg2_bringup bringup.launch.py mode:=virtual
@@ -251,7 +251,7 @@ ros2 launch m0609_rg2_bringup bringup.launch.py mode:=virtual
 # 터미널 1-카메라 — RealSense 직접 기동 (bringup 이 camera:=false 라 카메라는 이걸로 따로)
 # -r __ns:=/ -r __node:=camera 가 /camera/camera/* 를 /camera/* 로 맞추는 인자.
 # pointcloud.stream_filter 2 = color 텍스처 — 미지정 시 0(ANY)이라 cloud 에 rgb 가 없어 RViz RGB8 표시가 error.
-set -a; source ~/ros2_jazzy_test/resources/config.sh; set +a
+set -a; source ~/cobot2_jazzy_installer/resources/config.sh; set +a
 source /opt/ros/jazzy/setup.bash
 ros2 run realsense2_camera realsense2_camera_node --ros-args \
   -r __ns:=/ -r __node:=camera \
@@ -263,7 +263,7 @@ ros2 run realsense2_camera realsense2_camera_node --ros-args \
 
 ```bash
 # 터미널 2 — YOLO depth 서비스 노드 (detection, venv)
-set -a; source ~/ros2_jazzy_test/resources/config.sh; set +a
+set -a; source ~/cobot2_jazzy_installer/resources/config.sh; set +a
 source /opt/ros/jazzy/setup.bash
 source ~/cobot_venv_ws/install/setup.bash
 source ~/cobot_venv_ws/.venv/bin/activate
@@ -282,7 +282,7 @@ ros2 run pick_and_place_text detection
 
 ```bash
 # 터미널 3 — 오케스트레이터 (robot_move, venv)
-set -a; source ~/ros2_jazzy_test/resources/config.sh; set +a
+set -a; source ~/cobot2_jazzy_installer/resources/config.sh; set +a
 source /opt/ros/jazzy/setup.bash
 source ~/cobot_venv_ws/install/setup.bash
 source ~/cobot_venv_ws/.venv/bin/activate
@@ -298,7 +298,7 @@ ros2 run pick_and_place_text robot_move
 
 ```bash
 # 터미널 1 — 드라이버 (bringup · 카메라 없이 — 카메라는 다음 블록에서 따로)
-set -a; source ~/ros2_jazzy_test/resources/config.sh; set +a
+set -a; source ~/cobot2_jazzy_installer/resources/config.sh; set +a
 source /opt/ros/jazzy/setup.bash
 source ~/cobot_venv_ws/install/setup.bash
 ros2 launch m0609_rg2_bringup bringup.launch.py mode:=virtual
@@ -308,7 +308,7 @@ ros2 launch m0609_rg2_bringup bringup.launch.py mode:=virtual
 # 터미널 1-카메라 — RealSense 직접 기동 (bringup 이 camera:=false 라 카메라는 이걸로 따로)
 # -r __ns:=/ -r __node:=camera 가 /camera/camera/* 를 /camera/* 로 맞추는 인자.
 # pointcloud.stream_filter 2 = color 텍스처 — 미지정 시 0(ANY)이라 cloud 에 rgb 가 없어 RViz RGB8 표시가 error.
-set -a; source ~/ros2_jazzy_test/resources/config.sh; set +a
+set -a; source ~/cobot2_jazzy_installer/resources/config.sh; set +a
 source /opt/ros/jazzy/setup.bash
 ros2 run realsense2_camera realsense2_camera_node --ros-args \
   -r __ns:=/ -r __node:=camera \
@@ -320,7 +320,7 @@ ros2 run realsense2_camera realsense2_camera_node --ros-args \
 
 ```bash
 # 터미널 2 — YOLO depth 서비스 노드 (object_detection, venv)
-set -a; source ~/ros2_jazzy_test/resources/config.sh; set +a
+set -a; source ~/cobot2_jazzy_installer/resources/config.sh; set +a
 source /opt/ros/jazzy/setup.bash
 source ~/cobot_venv_ws/install/setup.bash
 source ~/cobot_venv_ws/.venv/bin/activate
@@ -337,7 +337,7 @@ ros2 run pick_and_place_voice object_detection
 ```bash
 # 터미널 3 — 음성 명령 처리 (get_keyword, venv)
 # OpenAI 소비처는 이 노드뿐(ChatOpenAI + Whisper STT) — 키는 §6 의 .env 가 빌드에 내장돼 있어 export 불요
-set -a; source ~/ros2_jazzy_test/resources/config.sh; set +a
+set -a; source ~/cobot2_jazzy_installer/resources/config.sh; set +a
 source /opt/ros/jazzy/setup.bash
 source ~/cobot_venv_ws/install/setup.bash
 source ~/cobot_venv_ws/.venv/bin/activate
@@ -350,7 +350,7 @@ ros2 run pick_and_place_voice get_keyword
 
 ```bash
 # 터미널 4 — 로봇 동작 (robot_control, venv)
-set -a; source ~/ros2_jazzy_test/resources/config.sh; set +a
+set -a; source ~/cobot2_jazzy_installer/resources/config.sh; set +a
 source /opt/ros/jazzy/setup.bash
 source ~/cobot_venv_ws/install/setup.bash
 source ~/cobot_venv_ws/.venv/bin/activate

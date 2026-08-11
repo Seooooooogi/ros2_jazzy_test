@@ -1,4 +1,4 @@
-# ROS2_Jazzy_Test
+# Cobot2 Jazzy Installer
 
 - Ubuntu 워크스테이션을 **ROS2 Jazzy 로봇 개발 환경**으로 일관되게 셋업하는 bash 설치 스크립트 모음
 - 대상: Ubuntu 24.04 (noble) + NVIDIA GPU 워크스테이션
@@ -7,8 +7,8 @@
 
 ```bash
 # 1) 저장소 클론 후 디렉토리 진입
-git clone https://github.com/Seooooooogi/ros2_jazzy_test.git
-cd ros2_jazzy_test
+git clone https://github.com/ROKEY-SPARK/cobot2_jazzy_installer.git
+cd cobot2_jazzy_installer
 
 # 2) base 환경 설치 (kernel/NVIDIA/Docker/ROS2 + reboot + VS Code + DDS + 정적 IP, 9 step)
 bash install.sh
@@ -63,16 +63,20 @@ bash setup-app.sh --help
 ```bash
 source /opt/ros/jazzy/setup.bash
 source ~/cobot2_ws/install/setup.bash
-set -a; source ~/ros2_jazzy_test/resources/config.sh; set +a
+set -a; source ~/cobot2_jazzy_installer/resources/config.sh; set +a
 ```
 
 > 💡 **매번 치기 싫으면 `~/.bashrc` 에 1회 등록**
 > ```bash
-> # >>> ros2_jazzy_test runtime env >>>
+> # >>> cobot2_jazzy_installer env >>>
 > [ -f ~/cobot2_ws/install/setup.bash ] && source ~/cobot2_ws/install/setup.bash
-> set -a; source ~/ros2_jazzy_test/resources/config.sh; set +a
-> # <<< ros2_jazzy_test runtime env <<<
+> set -a; source ~/cobot2_jazzy_installer/resources/config.sh; set +a
+> # <<< cobot2_jazzy_installer env <<<
 > ```
+>
+> 마커 이름은 설치 스크립트가 쓰는 것과 같아야 한다 — 다르면 `hostcfg.sh` 가 자기 블록을
+> 못 찾아 같은 줄이 두 벌 쌓인다. 레포 이름이 바뀌기 전에 깔린 `ros2_jazzy_test` 마커
+> 블록은 설치 스크립트가 다음 실행에서 알아서 지운다.
 
 ### 기동
 
@@ -115,7 +119,7 @@ docker run -d --name yolo-detection \
   -v ~/.config/cyclonedds/cyclonedds.xml:/cyclonedds.xml:ro \
   -v ~/cobot2_ws/src/cobot2/yolo_container:/ws/src \
   -v yolo_build:/ws/build -v yolo_install:/ws/install \
-  -v ~/ros2_jazzy_test/containers/dev/bashrc:/root/.bashrc:ro \
+  -v ~/cobot2_jazzy_installer/containers/dev/bashrc:/root/.bashrc:ro \
   local/ros2-jazzy-yolo:dev-builder \
   bash -c 'set +u; source /opt/ros/$ROS_DISTRO/setup.bash; find /ws/build /ws/install -mindepth 1 -delete 2>/dev/null || true; colcon build --symlink-install --merge-install; sleep infinity'
 ```

@@ -151,7 +151,7 @@ ros2 service call /get_keyword std_srvs/srv/Trigger "{}"
   - **개념**: `docker compose` base+dev override, `network_mode: host` + DDS(도메인·RMW·cyclonedds 일치), ENTRYPOINT vs `docker exec` 환경.
 
 ```bash
-DEV="-f ~/ros2_jazzy_test/containers/docker-compose.yml -f ~/ros2_jazzy_test/containers/docker-compose.dev.yml"
+DEV="-f ~/cobot2_jazzy_installer/containers/docker-compose.yml -f ~/cobot2_jazzy_installer/containers/docker-compose.dev.yml"
 docker compose $DEV up -d yolo-detection
 docker logs -f yolo-detection            # "Summary: N package finished" 대기
 docker exec -it yolo-detection bash

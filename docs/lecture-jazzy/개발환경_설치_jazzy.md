@@ -19,8 +19,8 @@ bash install.sh      →   (자동 reboot·복귀)   →   bash setup-app.sh
 ## Step 1. 레포 취득
 
 ```bash
-git clone <repo-url> ~/ros2_jazzy_test
-cd ~/ros2_jazzy_test
+git clone <repo-url> ~/cobot2_jazzy_installer
+cd ~/cobot2_jazzy_installer
 ```
 
 ## Step 2. base 환경 설치 — `install.sh`

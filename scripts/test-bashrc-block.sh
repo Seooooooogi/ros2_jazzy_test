@@ -77,6 +77,12 @@ source /usr/share/colcon_argcomplete/hook/colcon-argcomplete.bash
 export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
 export CYCLONEDDS_URI="file:///old/path/cyclonedds.xml"
 # <<< ros2_jazzy_test cyclonedds env <<<
+# >>> ros2_jazzy_test env >>>
+# 레포명이 cobot2_jazzy_installer 로 바뀌기 전 이름으로 깔린 블록.
+# 안 지우면 새 블록과 나란히 남아 같은 export 가 두 번 실행된다.
+export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
+export CYCLONEDDS_URI="file:///renamed/path/cyclonedds.xml"
+# <<< ros2_jazzy_test env <<<
 EOF
 
 # 블록이 쓰는 형태 = 파일이 있을 때만 source 하는 가드형. hostcfg.sh 는 이미 설치된
@@ -113,10 +119,14 @@ check_count "옛 runtime 마커" "# >>> ros2_jazzy_test runtime env >>>" 0
 check_count "옛 테스트 주석" "# [테스트 2026-08-04] config.sh 제거 검증 — 원복은 이 줄의 주석 해제" 0
 check_count "옛 XML 경로" 'export CYCLONEDDS_URI="file:///old/path/cyclonedds.xml"' 0
 check_count "옛 LOCALHOST 주석" "# export ROS_LOCALHOST_ONLY=1" 0
+# 레포 rename 이전 이름의 관리 블록 — 시작/끝 마커와 내용이 통째로 사라져야 한다
+check_count "옛 레포명 마커 시작" "# >>> ros2_jazzy_test env >>>" 0
+check_count "옛 레포명 마커 끝" "# <<< ros2_jazzy_test env <<<" 0
+check_count "옛 레포명 블록 XML 경로" 'export CYCLONEDDS_URI="file:///renamed/path/cyclonedds.xml"' 0
 
 echo "[5] 마커 블록은 정확히 한 쌍이다"
-check_count "블록 시작" "# >>> ros2_jazzy_test env >>>" 1
-check_count "블록 끝" "# <<< ros2_jazzy_test env <<<" 1
+check_count "블록 시작" "# >>> cobot2_jazzy_installer env >>>" 1
+check_count "블록 끝" "# <<< cobot2_jazzy_installer env <<<" 1
 
 echo "[6] bashrc 가 없어도 새로 만든다"
 rm -f "${FAKEHOME}/.bashrc"
@@ -177,7 +187,7 @@ DANGLE_HOME="${FAKEHOME}/dangle-home"
 mkdir -p "${DANGLE_HOME}"
 cat > "${DANGLE_HOME}/.bashrc" <<'EOF'
 # 시작 마커만 있고 끝 마커가 없는 깨진 상태(중단된 이전 실행 등으로 생길 수 있음)
-# >>> ros2_jazzy_test env >>>
+# >>> cobot2_jazzy_installer env >>>
 export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
 # 사용자가 마커 뒤에 직접 추가한 줄 — 반드시 살아남아야 한다
 alias gd='git diff'
@@ -192,8 +202,8 @@ else
     fails=$((fails + 1))
 fi
 
-dangle_begin_count="$(grep -cxF "# >>> ros2_jazzy_test env >>>" "${DANGLE_HOME}/.bashrc" || true)"
-dangle_end_count="$(grep -cxF "# <<< ros2_jazzy_test env <<<" "${DANGLE_HOME}/.bashrc" || true)"
+dangle_begin_count="$(grep -cxF "# >>> cobot2_jazzy_installer env >>>" "${DANGLE_HOME}/.bashrc" || true)"
+dangle_end_count="$(grep -cxF "# <<< cobot2_jazzy_installer env <<<" "${DANGLE_HOME}/.bashrc" || true)"
 if [[ "${dangle_begin_count}" -eq 1 && "${dangle_end_count}" -eq 1 ]]; then
     echo "  PASS 재작성 후 마커 블록 정확히 한 쌍"
 else
@@ -260,8 +270,8 @@ else
     fails=$((fails + 1))
 fi
 
-custom_uri_begin="$(grep -cxF "# >>> ros2_jazzy_test env >>>" "${CUSTOM_URI_HOME}/.bashrc" || true)"
-custom_uri_end="$(grep -cxF "# <<< ros2_jazzy_test env <<<" "${CUSTOM_URI_HOME}/.bashrc" || true)"
+custom_uri_begin="$(grep -cxF "# >>> cobot2_jazzy_installer env >>>" "${CUSTOM_URI_HOME}/.bashrc" || true)"
+custom_uri_end="$(grep -cxF "# <<< cobot2_jazzy_installer env <<<" "${CUSTOM_URI_HOME}/.bashrc" || true)"
 if [[ "${custom_uri_begin}" -eq 1 && "${custom_uri_end}" -eq 1 ]]; then
     echo "  PASS 2회 호출 후 마커 블록 정확히 한 쌍(수렴)"
 else
@@ -274,9 +284,9 @@ REVERSED_HOME="${FAKEHOME}/reversed-home"
 mkdir -p "${REVERSED_HOME}"
 cat > "${REVERSED_HOME}/.bashrc" <<'EOF'
 alias before='survives'
-# <<< ros2_jazzy_test env <<<
+# <<< cobot2_jazzy_installer env <<<
 alias middle='survives too'
-# >>> ros2_jazzy_test env >>>
+# >>> cobot2_jazzy_installer env >>>
 alias after='also survives'
 EOF
 
@@ -299,8 +309,8 @@ else
     fails=$((fails + 1))
 fi
 
-reversed_begin="$(grep -cxF "# >>> ros2_jazzy_test env >>>" "${REVERSED_HOME}/.bashrc" || true)"
-reversed_end="$(grep -cxF "# <<< ros2_jazzy_test env <<<" "${REVERSED_HOME}/.bashrc" || true)"
+reversed_begin="$(grep -cxF "# >>> cobot2_jazzy_installer env >>>" "${REVERSED_HOME}/.bashrc" || true)"
+reversed_end="$(grep -cxF "# <<< cobot2_jazzy_installer env <<<" "${REVERSED_HOME}/.bashrc" || true)"
 if [[ "${reversed_begin}" -eq 1 && "${reversed_end}" -eq 1 ]]; then
     echo "  PASS 2회 호출 후 마커 블록 정확히 한 쌍(수렴)"
 else
@@ -319,8 +329,8 @@ fi
 HOME="${NONEWLINE_HOME}" bashrc_sync_block
 HOME="${NONEWLINE_HOME}" bashrc_sync_block
 
-nonewline_begin="$(grep -cxF "# >>> ros2_jazzy_test env >>>" "${NONEWLINE_HOME}/.bashrc" || true)"
-nonewline_end="$(grep -cxF "# <<< ros2_jazzy_test env <<<" "${NONEWLINE_HOME}/.bashrc" || true)"
+nonewline_begin="$(grep -cxF "# >>> cobot2_jazzy_installer env >>>" "${NONEWLINE_HOME}/.bashrc" || true)"
+nonewline_end="$(grep -cxF "# <<< cobot2_jazzy_installer env <<<" "${NONEWLINE_HOME}/.bashrc" || true)"
 if [[ "${nonewline_begin}" -eq 1 && "${nonewline_end}" -eq 1 ]]; then
     echo "  PASS 2회 호출 후 마커 블록 정확히 한 쌍(수렴) — 이 태스크가 없애려던 중복 재발 안 함"
 else
@@ -344,8 +354,8 @@ mkdir -p "${EMPTY_HOME}"
 HOME="${EMPTY_HOME}" bashrc_sync_block
 HOME="${EMPTY_HOME}" bashrc_sync_block
 
-empty_begin="$(grep -cxF "# >>> ros2_jazzy_test env >>>" "${EMPTY_HOME}/.bashrc" || true)"
-empty_end="$(grep -cxF "# <<< ros2_jazzy_test env <<<" "${EMPTY_HOME}/.bashrc" || true)"
+empty_begin="$(grep -cxF "# >>> cobot2_jazzy_installer env >>>" "${EMPTY_HOME}/.bashrc" || true)"
+empty_end="$(grep -cxF "# <<< cobot2_jazzy_installer env <<<" "${EMPTY_HOME}/.bashrc" || true)"
 if [[ "${empty_begin}" -eq 1 && "${empty_end}" -eq 1 ]]; then
     echo "  PASS 2회 호출 후 마커 블록 정확히 한 쌍(수렴)"
 else
@@ -459,7 +469,7 @@ HOME="${OVERRIDE_HOME}" bashrc_sync_block   # 설치기가 블록을 만든 상�
 HOME="${OVERRIDE_HOME}" bashrc_sync_block   # 설치기 재실행
 
 override_top="$(line_no_of "${OVERRIDE_HOME}/.bashrc" "alias top='mine'")"
-override_begin="$(line_no_of "${OVERRIDE_HOME}/.bashrc" "# >>> ros2_jazzy_test env >>>")"
+override_begin="$(line_no_of "${OVERRIDE_HOME}/.bashrc" "# >>> cobot2_jazzy_installer env >>>")"
 override_user="$(line_no_of "${OVERRIDE_HOME}/.bashrc" "export RMW_IMPLEMENTATION=rmw_fastrtps_cpp")"
 override_bottom="$(line_no_of "${OVERRIDE_HOME}/.bashrc" "alias bottom='mine'")"
 
@@ -472,7 +482,7 @@ assert_line "셸이 해석한 최종값 = 사용자 override" "${override_out}" 
 
 echo "[17] 3번째 호출에도 자리와 최종값이 그대로다(수렴)"
 HOME="${OVERRIDE_HOME}" bashrc_sync_block
-again_begin="$(line_no_of "${OVERRIDE_HOME}/.bashrc" "# >>> ros2_jazzy_test env >>>")"
+again_begin="$(line_no_of "${OVERRIDE_HOME}/.bashrc" "# >>> cobot2_jazzy_installer env >>>")"
 again_user="$(line_no_of "${OVERRIDE_HOME}/.bashrc" "export RMW_IMPLEMENTATION=rmw_fastrtps_cpp")"
 check_order "블록이 여전히 override 앞" "${again_begin}" "${again_user}"
 if [[ "${again_begin}" == "${override_begin}" ]]; then
@@ -488,7 +498,7 @@ mkdir -p "${APPEND_HOME}"
 printf '%s\n' "alias only='mine'" > "${APPEND_HOME}/.bashrc"
 HOME="${APPEND_HOME}" bashrc_sync_block
 append_user="$(line_no_of "${APPEND_HOME}/.bashrc" "alias only='mine'")"
-append_begin="$(line_no_of "${APPEND_HOME}/.bashrc" "# >>> ros2_jazzy_test env >>>")"
+append_begin="$(line_no_of "${APPEND_HOME}/.bashrc" "# >>> cobot2_jazzy_installer env >>>")"
 check_order "기존 줄 뒤에 블록이 붙는다" "${append_user}" "${append_begin}"
 
 echo "[19] ROS 가 없는 호스트에서 새 셸을 열어도 오류가 나지 않는다"
@@ -523,11 +533,11 @@ NESTED_HOME="${FAKEHOME}/nested-home"
 mkdir -p "${NESTED_HOME}"
 cat > "${NESTED_HOME}/.bashrc" <<'EOF'
 alias before='survives'
-# >>> ros2_jazzy_test env >>>
+# >>> cobot2_jazzy_installer env >>>
 # <<< ros2_jazzy_test cyclonedds env <<<
 export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
 # >>> ros2_jazzy_test cyclonedds env >>>
-# <<< ros2_jazzy_test env <<<
+# <<< cobot2_jazzy_installer env <<<
 alias after='survives too'
 EOF
 
@@ -540,8 +550,8 @@ else
     fails=$((fails + 1))
 fi
 
-nested_begin="$(grep -cxF "# >>> ros2_jazzy_test env >>>" "${NESTED_HOME}/.bashrc" || true)"
-nested_end="$(grep -cxF "# <<< ros2_jazzy_test env <<<" "${NESTED_HOME}/.bashrc" || true)"
+nested_begin="$(grep -cxF "# >>> cobot2_jazzy_installer env >>>" "${NESTED_HOME}/.bashrc" || true)"
+nested_end="$(grep -cxF "# <<< cobot2_jazzy_installer env <<<" "${NESTED_HOME}/.bashrc" || true)"
 nested_old="$(grep -cF "ros2_jazzy_test cyclonedds env" "${NESTED_HOME}/.bashrc" || true)"
 if [[ "${nested_begin}" -eq 1 && "${nested_end}" -eq 1 && "${nested_old}" -eq 0 ]]; then
     echo "  PASS 결과는 마커 한 쌍 + 옛 마커 제거"

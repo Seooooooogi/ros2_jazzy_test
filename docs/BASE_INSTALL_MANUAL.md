@@ -7,7 +7,7 @@
 > **전제**
 > 1. Ubuntu 24.04 (noble) 클린 설치
 > 2. sudo 권한 + 인터넷 연결
-> 3. 레포 배치: `~/ros2_jazzy_test`
+> 3. 레포 배치: `~/cobot2_jazzy_installer`
 
 ---
 

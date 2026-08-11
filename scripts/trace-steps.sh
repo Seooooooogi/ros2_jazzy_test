@@ -8,7 +8,7 @@
 # 리팩토링 전후 트레이스가 같으면 명령·순서·조건 분기를 안 건드렸다는 뜻이다.
 #
 # 사용법: bash scripts/trace-steps.sh <repo-dir> <out-dir>
-#   예:   bash scripts/trace-steps.sh ~/ros2_jazzy_test .trace-baseline
+#   예:   bash scripts/trace-steps.sh ~/cobot2_jazzy_installer .trace-baseline
 #         bash scripts/trace-steps.sh ~/rjt-refactor   .trace-after
 #         diff -ru .trace-baseline .trace-after
 #

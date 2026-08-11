@@ -142,6 +142,8 @@
 
 ### ADR-005: 본 레포는 GitHub publish 의도 없음 — git artifact 관련 결정 비활성화
 
+> **Superseded by ADR-041 (2026-08-11)** — 배포처를 `ROKEY-SPARK/cobot2_jazzy_installer` 로 옮기고 public 공개. 아래는 그 이전 시점의 기록.
+
 **Date**: 2026-05-26
 
 **Context**:
@@ -394,6 +396,8 @@
 ---
 
 ### ADR-012: private 원격 저장소 1개 허용 — 타 머신 설치 검증 (2026-05-29, 외부 publish 금지 결정 부분 변경)
+
+> **Superseded by ADR-041 (2026-08-11)** — public 전환 금지 조항이 폐기됐다. 아래는 그 이전 시점의 기록.
 
 **Context**:
 - 기존 결정은 "외부 publish 의도 없음 + remote 추가 금지" 로 원격 저장소 자체를 차단했다(로컬 git 만 운영).
@@ -1342,3 +1346,29 @@
 
 **Reopen 조건**:
 - cobot2 가 git 추적/패키지 배포되면 → 정규화 복사 대신 공유 모듈로 리팩터(중복 제거) 재검토.
+
+### ADR-041: 배포처를 ROKEY-SPARK 로 이관 + public 공개 — ADR-005 / ADR-012 supersede (2026-08-11)
+
+**Date**: 2026-08-11
+
+**Context**:
+- ADR-005 는 "GitHub publish 의도 없음", ADR-012 는 "private 1개만, public 전환 금지" 였다. 두 결정 모두 독자가 작성자 1명이라는 전제 위에 있었다.
+- 부트캠프 수강생이 각자 워크스테이션에 이 인스톨러를 깔아야 한다. private 레포는 1인씩 collaborator 초대가 필요해 설치 첫 단계부터 막힌다.
+- 이미 `ROKEY-SPARK` 아래에 `doosan-robot2_jazzy` 가 있고 `resources/config.sh` 가 그것을 참조한다 — 관련 레포가 한곳에 모이는 편이 찾기 쉽다.
+
+**Decision**:
+- 배포처 = **`ROKEY-SPARK/cobot2_jazzy_installer`** (public). 짝이 되는 bringup 레포는 `ROKEY-SPARK/m0609_rg2_integration`.
+- 개인 레포 `Seooooooogi/ros2_jazzy_test` 는 `origin` 으로 유지 — 작업 사본 겸 백업.
+- **공개 범위는 `main` 브랜치의 내용으로 한정한다.** `.claude-main-exclude` 매니페스트(`docs/`·`CLAUDE.md`·`.claude/`·`scripts/`·`tasks/`·`backup/`·`containers/template/`)는 그대로 유지 — 공개 대상이 넓어진 것이 아니라 같은 범위의 독자가 늘어난 것이다.
+- push 전 secret 스캔은 계속 필수. 공개는 비가역이라 사후 회수가 불가능하다.
+- 레포 이름이 바뀌므로 clone 디렉토리(`~/cobot2_jazzy_installer`)·상태 디렉토리(`~/.cobot2_jazzy_installer`)·bashrc 마커(`cobot2_jazzy_installer env`)를 함께 개명한다. `M0609_REPO_DIR`(`~/M0609_RG2_Integration`)은 **개명하지 않는다** — 바꾸면 기설치 머신이 그 레포를 통째로 다시 clone 한다.
+
+**Consequences**:
+- 수강생은 초대 없이 `git clone` 한 줄로 시작한다.
+- 기설치 머신이 깨지지 않도록 두 개의 1회성 이행 경로가 필요하다: (1) `_state_migrate_legacy()` 가 `~/.ros2_jazzy_test` 를 새 경로로 옮긴다 — 없으면 끝난 단계를 못 읽어 드라이버 재설치·재부팅부터 다시 돈다. (2) `bashrc_sync_block()` 이 구 `ros2_jazzy_test env` 마커 블록을 legacy 짝으로 인식해 지운다 — 없으면 같은 export 가 두 벌 실행된다.
+- dev 브랜치는 fork 를 통해 이미 공개돼 있었다(`docs/`·`.claude/` 포함). main 만 공개한다는 방침을 지키려면 원격 dev 브랜치 정리가 별도로 필요하다.
+- 브랜치 보호(`guard-internal-paths-on-main` required check)는 레포별 설정이라 신규 레포에서 다시 지정해야 한다. admin 권한 보유자만 가능.
+
+**Reopen 조건**:
+- 레포에 secret 이 실제로 유입되면 → 공개 범위와 히스토리 처리(재작성/레포 재생성)를 즉시 재검토.
+- `ROKEY-SPARK` 가 Organization 으로 전환되면 → 팀 권한 기반 접근 제어를 다시 설계.

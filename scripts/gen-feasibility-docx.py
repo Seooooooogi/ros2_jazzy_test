@@ -14,8 +14,8 @@ import sys
 
 from docx import Document
 
-SRC = "/home/rokey/ros2_jazzy_test/docs/specs/2026-07-06-foundation-model-vision-feasibility.md"
-OUT = "/home/rokey/ros2_jazzy_test/docs/specs/2026-07-06-foundation-model-vision-feasibility.docx"
+SRC = "/home/rokey/cobot2_jazzy_installer/docs/specs/2026-07-06-foundation-model-vision-feasibility.md"
+OUT = "/home/rokey/cobot2_jazzy_installer/docs/specs/2026-07-06-foundation-model-vision-feasibility.docx"
 
 
 def add_runs(par, text):
